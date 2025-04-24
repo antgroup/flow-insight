@@ -1,5 +1,4 @@
-import DownloadIcon from "@mui/icons-material/Download.js";
-import RefreshIcon from "@mui/icons-material/Refresh.js";
+import { Download, RefreshCw, ArrowDown, ArrowUp, Bug, Circle, Pause, Play, SkipForward } from 'lucide-react';
 import {
   Box,
   IconButton,
@@ -7,8 +6,6 @@ import {
   ToggleButtonGroup,
   Tooltip,
 } from "@mui/material";
-import FormControlLabel from "@mui/material/FormControlLabel/index.js";
-import Switch from "@mui/material/Switch/index.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import DebugPanel from "./DebugPanel";
@@ -309,21 +306,20 @@ const GraphPage: React.FC<GraphPageProps> = ({
                       backgroundColor: "grey.100",
                     },
                     mt: "4px",
+                    "& svg": {
+                      animation: updating ? "spin 1s linear infinite" : "none",
+                    },
+                    "@keyframes spin": {
+                      "0%": {
+                        transform: "rotate(0deg)",
+                      },
+                      "100%": {
+                        transform: "rotate(360deg)",
+                      },
+                    },
                   }}
                 >
-                  <RefreshIcon
-                    sx={{
-                      animation: updating ? "spin 1s linear infinite" : "none",
-                      "@keyframes spin": {
-                        "0%": {
-                          transform: "rotate(0deg)",
-                        },
-                        "100%": {
-                          transform: "rotate(360deg)",
-                        },
-                      },
-                    }}
-                  />
+                  <RefreshCw />
                 </IconButton>
               </Tooltip>
             )}
@@ -360,18 +356,17 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 </ToggleButton>
               </ToggleButtonGroup>
 
-              <FormControlLabel
-                control={
-                  <Switch
+              <div style={{ marginLeft: '16px', display: 'flex', alignItems: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
                     checked={autoRefresh}
                     onChange={(e) => handleAutoRefreshChange(e.target.checked)}
-                    name="autoRefresh"
-                    color="primary"
+                    style={{ marginRight: '8px' }}
                   />
-                }
-                label="Auto Refresh"
-                sx={{ ml: 2 }}
-              />
+                  Auto Refresh
+                </label>
+              </div>
 
               {(currentViewType === "logical" ||
                 currentViewType === "call_stack" ||
@@ -390,7 +385,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                       },
                     }}
                   >
-                    <DownloadIcon />
+                    <Download />
                   </IconButton>
                 </Tooltip>
               )}

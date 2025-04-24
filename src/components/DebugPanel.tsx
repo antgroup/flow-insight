@@ -1,10 +1,4 @@
-import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward.js";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward.js";
-import BugReportIcon from "@mui/icons-material/BugReport.js";
-import BreakpointIcon from "@mui/icons-material/FiberManualRecord.js";
-import PauseIcon from "@mui/icons-material/Pause.js";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow.js";
-import SkipNextIcon from "@mui/icons-material/SkipNext.js";
+import { ArrowDown, ArrowUp, Bug, Circle, Pause, Play, SkipForward } from 'lucide-react';
 import {
   Box,
   Button,
@@ -23,8 +17,6 @@ import {
 } from "@mui/material";
 import React, { useEffect, useRef, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-// @ts-ignore
-import atomDark from "react-syntax-highlighter/dist/esm/styles/prism/atom-dark.js";
 import { removeSlashes } from "slashes";
 import { Breakpoint, DebugSession } from "../types";
 import {
@@ -272,10 +264,9 @@ const SourceCodeView: React.FC<{
         }}
       >
         {breakpoints.includes(lineNumber) && (
-          <BreakpointIcon
-            fontSize="small"
+          <Circle
+            size={16}
             style={{
-              fontSize: "1rem",
               color: "#ff1744",
               position: "absolute",
               left: "0px",
@@ -306,7 +297,6 @@ const SourceCodeView: React.FC<{
         }}
       >
         <SyntaxHighlighter
-          style={atomDark}
           {...codeWithLineNumbers}
           wrapLongLines={false}
           showLineNumbers={true}
@@ -1109,7 +1099,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
           color="primary"
           disabled={!canContinue}
         >
-          <PlayArrowIcon fontSize="small" />
+          <Play size={16} />
         </IconButton>
       </span>
       <span>
@@ -1119,7 +1109,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
           color="primary"
           disabled={!canPause}
         >
-          <PauseIcon fontSize="small" />
+          <Pause size={16} />
         </IconButton>
       </span>
       <span>
@@ -1129,7 +1119,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
           color="primary"
           disabled={!canStep}
         >
-          <SkipNextIcon fontSize="small" />
+          <SkipForward size={16} />
         </IconButton>
       </span>
       <span>
@@ -1139,7 +1129,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
           color="primary"
           disabled={!canStep}
         >
-          <ArrowDownwardIcon fontSize="small" />
+          <ArrowDown size={16} />
         </IconButton>
       </span>
       <span>
@@ -1149,7 +1139,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
           color="primary"
           disabled={!canStep}
         >
-          <ArrowUpwardIcon fontSize="small" />
+          <ArrowUp size={16} />
         </IconButton>
       </span>
     </Stack>
@@ -1168,7 +1158,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
         variant="contained"
         color="primary"
         size="small"
-        startIcon={<BugReportIcon />}
+        startIcon={<Bug size={16} />}
         onClick={toggleExpanded}
         sx={{ mb: 1, borderRadius: 2 }}
       >

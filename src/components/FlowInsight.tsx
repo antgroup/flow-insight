@@ -176,24 +176,24 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
   return (
     <ThemeProvider theme={defaultTheme}>
       <CssBaseline />
-      <Box sx={{ height: "100%", width: "100%" }}>
-        {graphData && (
-          <GraphPage
-            graphData={graphData}
-            stackGraphData={stackGraphData}
-            physicalViewData={physicalViewData}
-            flameData={flameData}
-            jobId={jobId}
-            initialViewType={initialViewType}
-            autoRefresh={autoRefresh}
-            onElementClick={handleElementClick}
-            selectedElementId={selectedElementId}
-            onUpdate={fetchAllData}
-            colorScheme={colorScheme}
-            apiService={apiService!}
-          />
-        )}
-      </Box>
+        <Box sx={{ height: "100%", width: "100%" }}>
+          {graphData && (
+            <GraphPage
+              graphData={graphData}
+              stackGraphData={stackGraphData}
+              physicalViewData={physicalViewData}
+              flameData={flameData}
+              jobId={jobId}
+              initialViewType={initialViewType}
+              autoRefresh={autoRefresh}
+              onElementClick={handleElementClick}
+              selectedElementId={selectedElementId}
+              onUpdate={fetchAllData}
+              colorScheme={colorScheme}
+              apiService={apiService!}
+            />
+          )}
+        </Box>
     </ThemeProvider>
   );
 };

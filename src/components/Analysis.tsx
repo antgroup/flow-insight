@@ -1,6 +1,4 @@
-import DownloadIcon from "@mui/icons-material/Download.js";
-import RefreshIcon from "@mui/icons-material/Refresh.js";
-import SettingsIcon from "@mui/icons-material/Settings.js";
+import { Download, RefreshCw, Settings } from 'lucide-react';
 import {
   Alert,
   Box,
@@ -13,8 +11,6 @@ import mermaid from "mermaid";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-// @ts-ignore
-import material from "react-syntax-highlighter/dist/esm/styles/prism/material-light.js";
 import remarkGfm from "remark-gfm";
 import {
     ApiService,
@@ -51,7 +47,6 @@ const MarkdownComponents = {
 
     return !inline && language ? (
       <SyntaxHighlighter
-        style={material}
         language={language}
         PreTag="div"
         {...props}
@@ -570,7 +565,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
             variant="outlined"
             onClick={exportReport}
             size="small"
-            startIcon={<DownloadIcon />}
+            startIcon={<Download size={16} />}
             disabled={!displayContent}
           >
             Export
@@ -581,7 +576,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
             size="small"
             disabled={loading}
             startIcon={
-              loading ? <CircularProgress size={16} /> : <RefreshIcon />
+              loading ? <CircularProgress size={16} /> : <RefreshCw size={16} />
             }
           >
             {loading
@@ -602,7 +597,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
             variant="text"
             onClick={() => setShowSettings(true)}
             size="small"
-            startIcon={<SettingsIcon />}
+            startIcon={<Settings size={16} />}
           >
             Settings
           </Button>
