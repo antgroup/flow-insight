@@ -71,57 +71,215 @@ Flow Insight includes an AI-powered analysis tool that:
 
 #### Core Types
 
-| Type | Fields | Description |
-|------|--------|-------------|
-| Service | `id: string`<br>`name: string`<br>`type: "service"`<br>`state?: string`<br>`pid?: number`<br>`nodeId?: string`<br>`gpuDevices?: Array<{index: number, name: string, uuid: string, memoryUsed: number, memoryTotal: number, utilization?: number}>`<br>`requiredResources?: Record<string, number>`<br>`placementGroup?: {id: string}`<br>`contextInfo?: Record<string, any>`<br>`processStats?: {cpuPercent: number, memoryInfo: {rss: number, vms?: number, shared?: number, text?: number, lib?: number, data?: number, dirty?: number}}`<br>`nodeCpuPercent?: number`<br>`nodeMem?: number[]`<br>`mem?: number[]`<br>`resourceUsage?: Record<string, {used: number, base: string}>` | Core service component with resource information |
-| Method | `id: string`<br>`instanceId: string`<br>`name: string`<br>`serviceName?: string`<br>`type?: "method"` | RPC method belonging to a service |
-| Function | `id: string`<br>`name: string`<br>`type?: "function"` | Stateless function component |
+**Service**
+- `id`: string - Unique identifier for the service
+- `name`: string - Name of the service
+- `type`: "service" - Type identifier
+- `state?`: string - Optional service state
+- `pid?`: number - Optional process ID
+- `nodeId?`: string - Optional node identifier where service runs
+- `gpuDevices?`: Array of GPU devices with:
+  - `index`: number - Device index
+  - `name`: string - Device name
+  - `uuid`: string - Device UUID
+  - `memoryUsed`: number - Used memory
+  - `memoryTotal`: number - Total memory
+  - `utilization?`: number - Optional utilization percentage
+- `processStats?`: Process statistics including:
+  - `cpuPercent`: number - CPU usage percentage
+  - `memoryInfo`: Memory information with:
+    - `rss`: number - Resident set size
+    - Various optional memory metrics (vms, shared, text, lib, data, dirty)
+- `requiredResources?`: Record mapping resource names to values
+- `placementGroup?`: Optional placement group with ID
+- `contextInfo?`: Optional context information
+- `nodeCpuPercent?`: Optional node CPU percentage
+- `nodeMem?` and `mem?`: Optional memory arrays
+- `resourceUsage?`: Record mapping resource names to usage objects with:
+  - `used`: number - Amount used
+  - `base`: string - Base unit
+
+**Method**
+- `id`: string - Unique identifier for the method
+- `instanceId`: string - Instance ID
+- `name`: string - Method name
+- `serviceName?`: string - Optional service name
+- `type?`: "method" - Type identifier
+
+**Function**
+- `id`: string - Unique identifier for the function
+- `name`: string - Function name
+- `type?`: "function" - Type identifier
 
 #### View Types
 
-| Type | Fields | Description |
-|------|--------|-------------|
-| PhysicalViewData | `physicalView: Record<string, NodeData>`<br>where `NodeData` contains:<br>`resources: Record<string, {total: number, available: number}>`<br>`services: Record<string, Service>`<br>`gpus?: Array<{index: number, name: string, uuid: string, utilizationGpu: number, memoryUsed: number, memoryTotal: number, processesPids: Array<{pid: number, gpuMemoryUsage: number}>}>` | Physical deployment information |
-| FlameGraphData | `nodes: Array<{id: string, nodeId: string, startTime: number, endTime: number, duration: number, callerService: string \| null, callerFunc: string, serviceName: string \| null, serviceState?: string, parentId?: string}>`<br>`aggregated: Array<{name: string[], value: number, count?: number, totalInParent?: Array<{callerNodeId: string[], duration: number, count: number, startTime: number}>, serviceName?: string}>`<br>`parentStartTimes: Array<{calleeId: string[], startTimes: Array<{callerId: string[], startTime: number}>}>` | Hierarchical call data |
+**PhysicalViewData**
+- `physicalView`: Record mapping node names to NodeData objects
+
+**NodeData**
+- `resources`: Record mapping resource names to:
+  - `total`: number - Total resource amount
+  - `available`: number - Available resource amount
+- `services`: Record mapping service IDs to Service objects
+- `gpus?`: Optional array of GPU information with:
+  - `index`: number - GPU index
+  - `name`: string - GPU name
+  - `uuid`: string - GPU UUID
+  - `utilizationGpu`: number - GPU utilization
+  - `memoryUsed`: number - Used memory
+  - `memoryTotal`: number - Total memory
+  - `processesPids`: Array of process information with:
+    - `pid`: number - Process ID
+    - `gpuMemoryUsage`: number - GPU memory used by process
+
+**FlameGraphData**
+- `nodes`: Array of flame graph nodes with:
+  - `id`: string - Node ID
+  - `nodeId`: string - Graph node ID
+  - `startTime`: number - Start time
+  - `endTime`: number - End time
+  - `duration`: number - Duration
+  - `callerService`: string or null - Caller service
+  - `callerFunc`: string - Caller function
+  - `serviceName`: string or null - Service name
+  - `serviceState?`: string - Optional service state
+  - `parentId?`: string - Optional parent ID
+- `aggregated`: Array of aggregated data with:
+  - `name`: string[] - Path of names
+  - `value`: number - Value (typically duration)
+  - `count?`: number - Optional count
+  - `totalInParent?`: Optional array of parent data
+  - `serviceName?`: Optional service name
+- `parentStartTimes`: Array of parent timing information
+
+**GraphData**
+- `services`: Array of Service objects
+- `methods`: Array of Method objects
+- `functions`: Array of Function objects
+- `callFlows`: Array of call flow information with:
+  - `source`: string - Source ID
+  - `target`: string - Target ID
+  - `count`: number - Call count
+  - `startTime`: number - Start time
+- `dataFlows`: Array of data flow information with:
+  - `source`: string - Source ID
+  - `target`: string - Target ID
+  - `speed`: string - Transfer speed
+  - `timestamp`: number - Time of flow
+  - `argpos?`: number - Optional argument position
+  - `duration?`: number - Optional duration
+  - `size?`: number - Optional data size
+
+**Debug Types**
+- **DebugSession**
+  - `serviceName`: string - Service name
+  - `funcName`: string - Function name
+  - `taskId`: string - Task ID
+
+- **Breakpoint**
+  - `sourceFile`: string - Source file path
+  - `line`: number - Line number
 
 ### API Endpoints
 
+#### Response Format
+
+All API endpoints return responses in this standard format:
+
+**ApiResponse<T>**
+- `result`: boolean - Success status
+- `msg`: string - Status message
+- `data`: T - Response data
+
 #### Graph Operations
 
-| Endpoint | Method | Parameters | Returns | Description |
-|----------|--------|------------|---------|-------------|
-| `/call_graph` | GET | `job_id?: string`<br>`stack_mode?: boolean` | `{ result: boolean, msg: string, data: { graphData: GraphData } }` | Get call graph data |
+**GET /call_graph**
+- Parameters:
+  - `job_id?`: string - Optional job ID
+  - `stack_mode?`: boolean - Whether to return stack mode data
+- Returns: ApiResponse with graphData field containing GraphData
+- Description: Get call graph data
 
 #### Physical View Operations
 
-| Endpoint | Method | Parameters | Returns | Description |
-|----------|--------|------------|---------|-------------|
-| `/physical_view` | GET | `job_id: string` | `{ result: boolean, msg: string, data: PhysicalViewData }` | Get physical deployment data |
+**GET /physical_view**
+- Parameters:
+  - `job_id`: string - Job ID
+- Returns: ApiResponse with PhysicalViewData
+- Description: Get physical deployment data
 
 #### Flame Graph Operations
 
-| Endpoint | Method | Parameters | Returns | Description |
-|----------|--------|------------|---------|-------------|
-| `/flame_graph` | GET | `job_id: string` | `{ result: boolean, msg: string, data: { flameData: FlameGraphData } }` | Get flame graph data |
+**GET /flame_graph**
+- Parameters:
+  - `job_id`: string - Job ID
+- Returns: ApiResponse with flameData field containing FlameGraphData
+- Description: Get flame graph data
 
 #### Debug Operations
 
-| Endpoint | Method | Parameters | Returns | Description |
-|----------|--------|------------|---------|-------------|
-| `/get_debug_sessions` | GET | `job_id: string`<br>`service_name?: string`<br>`func_name?: string`<br>`filter_active?: boolean` | `{ result: boolean, msg: string, data: { result: DebugSession[] } }` | Get debug sessions |
-| `/get_active_debug_sessions` | GET | `job_id: string` | `{ result: boolean, msg: string, data: { result: string[] } }` | Get active debug sessions |
-| `/get_breakpoints` | GET | `job_id: string`<br>`task_id: string` | `{ result: boolean, msg: string, data: { result: Breakpoint[] } }` | Get breakpoints |
-| `/set_breakpoints` | GET | `job_id: string`<br>`task_id: string`<br>`breakpoints: string` | `{ result: boolean, msg: string }` | Set breakpoints |
-| `/debug_cmd` | GET | `job_id: string`<br>`task_id: string`<br>`command: string`<br>`args: string` | `{ result: boolean, msg: string, data: { result: any } }` | Execute debug command |
-| `/activate_debug_session` | GET | `job_id: string`<br>`service_name: string`<br>`func_name: string`<br>`task_id: string` | `{ result: boolean, msg: string }` | Activate debug session |
-| `/deactivate_debug_session` | GET | `job_id: string`<br>`task_id: string` | `{ result: boolean, msg: string }` | Deactivate debug session |
+**GET /get_debug_sessions**
+- Parameters:
+  - `job_id`: string - Job ID
+  - `service_name?`: string - Optional service name
+  - `func_name?`: string - Optional function name
+  - `filter_active?`: boolean - Whether to filter active sessions
+- Returns: ApiResponse with result field containing array of DebugSession objects
+- Description: Get debug sessions
+
+**GET /get_active_debug_sessions**
+- Parameters:
+  - `job_id`: string - Job ID
+- Returns: ApiResponse with result field containing array of session IDs
+- Description: Get active debug sessions
+
+**GET /get_breakpoints**
+- Parameters:
+  - `job_id`: string - Job ID
+  - `task_id`: string - Task ID
+- Returns: ApiResponse with result field containing array of Breakpoint objects
+- Description: Get breakpoints
+
+**GET /set_breakpoints**
+- Parameters:
+  - `job_id`: string - Job ID
+  - `task_id`: string - Task ID
+  - `breakpoints`: string - Base64 encoded JSON of breakpoints
+- Returns: ApiResponse with boolean result
+- Description: Set breakpoints
+
+**GET /debug_cmd**
+- Parameters:
+  - `job_id`: string - Job ID
+  - `task_id`: string - Task ID
+  - `command`: string - Debug command to execute
+  - `args`: string - Base64 encoded JSON of command arguments
+- Returns: ApiResponse with result field containing command result
+- Description: Execute debug command
+
+**GET /activate_debug_session**
+- Parameters:
+  - `job_id`: string - Job ID
+  - `service_name`: string - Service name
+  - `func_name`: string - Function name
+  - `task_id`: string - Task ID
+- Returns: ApiResponse with boolean result
+- Description: Activate debug session
+
+**GET /deactivate_debug_session**
+- Parameters:
+  - `job_id`: string - Job ID
+  - `task_id`: string - Task ID
+- Returns: ApiResponse with boolean result
+- Description: Deactivate debug session
 
 #### Analysis Operations
 
-| Endpoint | Method | Parameters | Returns | Description |
-|----------|--------|------------|---------|-------------|
-| `/get_insight_analyze_prompt` | GET | `job_id: string` | `{ result: boolean, msg: string, data: { prompt: string } }` | Get analysis prompt |
-
+**GET /get_insight_analyze_prompt**
+- Parameters:
+  - `job_id`: string - Job ID
+- Returns: ApiResponse with prompt field containing analysis prompt
+- Description: Get analysis prompt
 
 ## Getting Started
 
@@ -148,53 +306,71 @@ yarn add flow-insight
 import { FlowInsight } from 'flow-insight';
 ```
 
-### Basic Usage
-
-```jsx
-import React from 'react';
-import { FlowInsight } from 'flow-insight';
-
-const MyComponent = () => {
-  return (
-    <FlowInsight 
-      baseUrl="https://your-api-endpoint.com"
-      jobId="job-12345"
-    />
-  );
-};
-
-export default MyComponent;
-```
-
 ### Props
 
-| Prop | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| baseUrl | string | Yes | - | API endpoint base URL |
-| jobId | string | No | - | ID of the job to visualize |
-| initialViewType | "logical" \| "physical" \| "flame" \| "call_stack" \| "analysis" | No | "logical" | Initial view to display |
-| autoRefresh | boolean | No | false | Whether to automatically refresh data |
-| refreshInterval | number | No | 2000 | Refresh interval in milliseconds |
-| authToken | string | No | - | Authentication token for API requests |
-| onElementClick | function | No | - | Callback when a graph element is clicked |
-| showInfoCard | boolean | No | false | Whether to show the info card |
-| selectedElementId | string | No | - | ID of the selected element |
-| searchTerm | string | No | - | Search term for filtering elements |
-| onAutoRefreshChange | function | No | - | Callback when auto-refresh setting changes |
-| setViewType | function | Yes | - | Function to change the current view type |
-| apiService | ApiService | Yes | - | Instance of the API service |
+**FlowInsight Component Props**
+
+- **Required Props**
+  - `baseUrl`: string - API endpoint base URL
+
+- **Optional Props**
+  - `jobId`: string - ID of the job to visualize
+  - `initialViewType`: string - Initial view to display, one of:
+    - "logical" (default)
+    - "call_stack"
+    - "physical"
+    - "flame"
+    - "analysis"
+  - `autoRefresh`: boolean - Whether to automatically refresh data (default: false)
+  - `refreshInterval`: number - Refresh interval in milliseconds (default: 2000)
+  - `authToken`: string - Authentication token for API requests
+  - `onElementClick`: function - Callback when a graph element is clicked
+  - `colorScheme`: object - Custom color mapping for graph elements
+
+### Basic Usage
+
+To use the FlowInsight component in your React application:
+
+1. **Import the FlowInsight component**:
+   ```jsx
+   import { FlowInsight } from 'flow-insight';
+   ```
+
+2. **Basic component usage**:
+   ```jsx
+   <FlowInsight 
+     baseUrl="https://your-api-endpoint.com"
+     jobId="job-12345"
+   />
+   ```
+
+3. **With additional options**:
+   ```jsx
+   <FlowInsight 
+     baseUrl="https://your-api-endpoint.com"
+     jobId="job-12345"
+     initialViewType="physical"
+     autoRefresh={true}
+     refreshInterval={5000}
+   />
+   ```
 
 ### Advanced Usage
 
+**React component with full options**
+
 ```jsx
-import React from 'react';
+import React, { useCallback } from 'react';
 import { FlowInsight } from 'flow-insight';
 
-const MyAdvancedComponent = () => {
-  const handleElementClick = (data) => {
+function MyMonitoringComponent() {
+  // Handle element click event
+  const handleElementClick = useCallback((data) => {
     console.log('Element clicked:', data);
-  };
+    // Access properties like data.id, data.name, etc.
+  }, []);
 
+  // Custom color scheme
   const customColors = {
     service: '#4CAF50',
     method: '#2196F3',
@@ -202,18 +378,79 @@ const MyAdvancedComponent = () => {
   };
 
   return (
-    <FlowInsight 
-      baseUrl="https://your-api-endpoint.com"
-      jobId="job-12345"
-      initialViewType="physical"
-      autoRefresh={true}
-      refreshInterval={5000}
-      authToken="your-auth-token"
-      onElementClick={handleElementClick}
-      colorScheme={customColors}
-    />
+    <div style={{ height: "100vh", width: "100%" }}>
+      <FlowInsight 
+        baseUrl="https://your-api-endpoint.com"
+        jobId="job-12345"
+        initialViewType="logical"
+        autoRefresh={true}
+        refreshInterval={5000}
+        authToken="your-auth-token"
+        onElementClick={handleElementClick}
+        colorScheme={customColors}
+      />
+    </div>
   );
-};
+}
 
-export default MyAdvancedComponent;
+export default MyMonitoringComponent;
+```
+
+**Setting up in a data dashboard**
+
+```jsx
+import React, { useState, useEffect } from 'react';
+import { FlowInsight } from 'flow-insight';
+
+function SystemDashboard() {
+  const [jobId, setJobId] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  
+  // Fetch active jobs and select the first one
+  useEffect(() => {
+    async function fetchJobs() {
+      try {
+        const response = await fetch('https://your-api-endpoint.com/jobs');
+        const jobs = await response.json();
+        if (jobs.length > 0) {
+          setJobId(jobs[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to fetch jobs:', error);
+      }
+    }
+    
+    fetchJobs();
+  }, []);
+  
+  return (
+    <div>
+      <div className="controls">
+        <select onChange={(e) => setJobId(e.target.value)}>
+          {/* Job selection options */}
+        </select>
+        <label>
+          <input 
+            type="checkbox" 
+            checked={autoRefresh} 
+            onChange={(e) => setAutoRefresh(e.target.checked)} 
+          />
+          Auto-refresh
+        </label>
+      </div>
+      
+      {jobId && (
+        <div style={{ height: "calc(100vh - 60px)" }}>
+          <FlowInsight 
+            baseUrl="https://your-api-endpoint.com"
+            jobId={jobId}
+            autoRefresh={autoRefresh}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default SystemDashboard;
 ```
