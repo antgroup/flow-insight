@@ -1,6 +1,6 @@
-import DownloadIcon from "@mui/icons-material/Download";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import SettingsIcon from "@mui/icons-material/Settings";
+import DownloadIcon from "@mui/icons-material/Download.js";
+import RefreshIcon from "@mui/icons-material/Refresh.js";
+import SettingsIcon from "@mui/icons-material/Settings.js";
 import {
   Alert,
   Box,
@@ -13,7 +13,8 @@ import mermaid from "mermaid";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { materialLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+// @ts-ignore
+import material from "react-syntax-highlighter/dist/esm/styles/prism/material-light.js";
 import remarkGfm from "remark-gfm";
 import {
     ApiService,
@@ -50,7 +51,7 @@ const MarkdownComponents = {
 
     return !inline && language ? (
       <SyntaxHighlighter
-        style={materialLight}
+        style={material}
         language={language}
         PreTag="div"
         {...props}

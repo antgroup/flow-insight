@@ -1,2 +1,4 @@
 // Components
-export { default as FlowInsight } from './components/FlowInsight';
+import FlowInsight from './components/FlowInsight';
+
+export { FlowInsight };

@@ -408,20 +408,20 @@
     margin: 0;
   }
   
-  .resource-selector .MuiFormControl-root {
-    min-height: 40px;
+  .resource-selector .chakra-form-control {
+    width: 100%;
   }
   
-  .resource-selector .MuiInputLabel-root {
-    transform: translate(14px, 8px) scale(1);
+  .resource-selector .chakra-form__label {
+    font-size: 14px;
   }
   
-  .resource-selector .MuiInputLabel-shrink {
-    transform: translate(14px, -6px) scale(0.75);
+  .resource-selector .chakra-form__label-indicator {
+    transform: translate(0, -6px) scale(0.75);
   }
   
-  .resource-selector .MuiSelect-select {
-    padding: 8px 14px;
+  .resource-selector .chakra-select__wrapper {
+    padding: 10px 12px;
   }
   
   /* Resource usage bar styles */

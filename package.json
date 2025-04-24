@@ -1,6 +1,6 @@
 {
   "name": "@aeonsule/flow-insight",
-  "version": "0.1.5",
+  "version": "0.1.32",
   "type": "module",
   "description": "A React component library for Flow visualization and insights",
   "main": "dist/index.js",
@@ -11,10 +11,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js",
-      "default": "./dist/index.js"
+      "default": "./dist/index.mjs"
     },
     "./dist/index.css": "./dist/index.css"
   },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
@@ -40,10 +41,11 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@emotion/react": "^11.11.3",
-    "@emotion/styled": "^11.11.0",
+    "@babel/runtime": "7.12",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^5.15.5",
-    "@mui/material": "^5.15.5",
+    "@mui/material": "^5.17.1",
     "@types/d3": "^7.4.3",
     "@types/dagre": "^0.7.52",
     "@types/dagre-d3": "^0.6.6",
@@ -51,6 +53,7 @@
     "d3": "^7.9.0",
     "dagre": "^0.8.5",
     "dagre-d3": "^0.6.4",
+    "framer-motion": "^12.8.2",
     "js-tiktoken": "^1.0.19",
     "mermaid": "^11.6.0",
     "react-icons": "^4.7.1",

@@ -1,10 +1,10 @@
-import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
-import BugReportIcon from "@mui/icons-material/BugReport";
-import BreakpointIcon from "@mui/icons-material/FiberManualRecord";
-import PauseIcon from "@mui/icons-material/Pause";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import SkipNextIcon from "@mui/icons-material/SkipNext";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward.js";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward.js";
+import BugReportIcon from "@mui/icons-material/BugReport.js";
+import BreakpointIcon from "@mui/icons-material/FiberManualRecord.js";
+import PauseIcon from "@mui/icons-material/Pause.js";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow.js";
+import SkipNextIcon from "@mui/icons-material/SkipNext.js";
 import {
   Box,
   Button,
@@ -23,7 +23,8 @@ import {
 } from "@mui/material";
 import React, { useEffect, useRef, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+// @ts-ignore
+import atomDark from "react-syntax-highlighter/dist/esm/styles/prism/atom-dark.js";
 import { removeSlashes } from "slashes";
 import { Breakpoint, DebugSession } from "../types";
 import {

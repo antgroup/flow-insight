@@ -222,3 +222,19 @@
   .methods-table tr.selected:hover {
     background-color: #e6f7ff;
   }
+
+.resource-selector .chakra-form-control {
+  width: 100%;
+}
+
+.resource-selector .chakra-form__label {
+  font-size: 14px;
+}
+
+.resource-selector .chakra-form__label-indicator {
+  transform: translate(0, -6px) scale(0.75);
+}
+
+.resource-selector .chakra-select__wrapper {
+  padding: 10px 12px;
+}

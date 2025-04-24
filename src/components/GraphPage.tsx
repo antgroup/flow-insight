@@ -1,5 +1,5 @@
-import DownloadIcon from "@mui/icons-material/Download";
-import RefreshIcon from "@mui/icons-material/Refresh";
+import DownloadIcon from "@mui/icons-material/Download.js";
+import RefreshIcon from "@mui/icons-material/Refresh.js";
 import {
   Box,
   IconButton,
@@ -7,8 +7,8 @@ import {
   ToggleButtonGroup,
   Tooltip,
 } from "@mui/material";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import Switch from "@mui/material/Switch";
+import FormControlLabel from "@mui/material/FormControlLabel/index.js";
+import Switch from "@mui/material/Switch/index.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import DebugPanel from "./DebugPanel";

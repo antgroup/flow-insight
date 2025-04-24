@@ -1,26 +1,22 @@
 {
   "compilerOptions": {
-    "target": "es2020",
-    "module": "esnext",
-    "lib": ["dom", "esnext"],
-    "jsx": "react",
-    "declaration": true,
-    "declarationDir": "dist/types",
-    "sourceMap": true,
-    "outDir": "dist",
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["react", "node"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "jsx": "react-jsx",
     "strict": true,
-    "moduleResolution": "node",
-    "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "noImplicitAny": false,
-    "baseUrl": ".",
-    "paths": {
-      "@mui/material/*": ["node_modules/@mui/material/*"]
-    }
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": false,
+    "skipLibCheck": true,
+    "sourceMap": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
-} 
+}
