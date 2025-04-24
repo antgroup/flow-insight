@@ -78,7 +78,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const visualizationRef = useRef<VisualizationHandle>(null);
   const physicalVisualizationRef = useRef<PhysicalVisualizationHandle>(null);
   const flameVisualizationRef = useRef<FlameVisualizationHandle>(null);
-  const autoRefreshIntervalRef = useRef<number | null>(null);
+  const autoRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [updating, setUpdating] = useState(false);
   
   // Use the provided API service or the local one
@@ -450,6 +450,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             searchTerm={searchTerm}
             autoRefresh={autoRefresh}
             setViewType={setCurrentViewType}
+            apiService={activeApiService}
           />
         )}
         {currentViewType === "call_stack" && (
@@ -467,6 +468,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             searchTerm={searchTerm}
             autoRefresh={autoRefresh}
             setViewType={setCurrentViewType}
+            apiService={activeApiService}
           />
         )}
         {graphData && currentViewType === "physical" && (

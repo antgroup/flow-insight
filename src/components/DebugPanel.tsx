@@ -416,15 +416,15 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     }
 
     try {
-      let serviceName = "";
+      let serviceInfo: string[] = [];
       const funcName = selectedElement.name;
 
       // If it's a method, get the service name and instance id
       if (selectedElement.type === "method" && selectedElement.instanceId) {
-        serviceName = selectedElement.serviceName + ":" + selectedElement.instanceId;
+        serviceInfo = [selectedElement.serviceName, selectedElement.instanceId];
       }
 
-      const sessions = await apiService.getDebugSessions(jobId, serviceName, funcName);
+      const sessions = await apiService.getDebugSessions(jobId, serviceInfo, funcName);
       setSessions(sessions);
     } catch (error) {
       console.error("Failed to fetch debug sessions:", error);
@@ -440,14 +440,15 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     try {
       const activeSessions = await apiService.getActiveDebugSessions(jobId);
       setActiveSessions(activeSessions);
-      const serviceName = selectedElement?.instanceId
-        ? selectedElement?.serviceName + ":" + selectedElement?.instanceId
-        : "";
+      const serviceInfo = selectedElement?.instanceId
+        ? [selectedElement?.serviceName, selectedElement?.instanceId]
+        : [];
       const funcName = selectedElement?.name;
       const currentActiveSessions = sessions.find(
         (session) =>
           session.taskId === selectedSession &&
-          session.serviceName === serviceName &&
+          session.serviceInfo[0] === serviceInfo[0] &&
+          session.serviceInfo[1] === serviceInfo[1] &&
           session.funcName === funcName,
       );
       if (!currentActiveSessions) {
@@ -552,7 +553,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     try {
       const result = await apiService.activateDebugSession(
         jobId,
-        session.serviceName,
+        session.serviceInfo,
         session.funcName,
         session.taskId,
       );

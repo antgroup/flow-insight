@@ -487,7 +487,7 @@ const Visualization = forwardRef<
         }
 
         const searchTermLower = searchTerm.toLowerCase();
-        const nodeType = node.type;
+        const nodeType = node.instanceId ? "method" : (node.nodeId ? "service" : "function");
 
         // Check node ID
         if (node.id && node.id.toLowerCase().includes(searchTermLower)) {
@@ -521,12 +521,12 @@ const Visualization = forwardRef<
           return false;
         }
 
-        const nodeType = node.type;
+        const nodeType = node.instanceId ? "method" : (node.nodeId ? "service" : "function");
 
         return activeDebugSessions.some((session) => {
-          if (nodeType === "method") {
+          if (nodeType === "method" && session.serviceInfo && session.serviceInfo.length > 0) {
             return (
-              node.serviceName + ":" + node.instanceId === session.serviceName &&
+              node.instanceId === session.serviceInfo[1] &&
               node.name === session.funcName
             );
           } else if (nodeType === "function") {

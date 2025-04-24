@@ -100,14 +100,14 @@ export class ApiService {
   // Debug Sessions
   public async getDebugSessions(
     jobId: string,
-    serviceName?: string | null,
+    serviceInfo?: string[] | null,
     funcName?: string | null,
     filterActive = false
   ): Promise<DebugSession[]> {
     let path = `get_debug_sessions?job_id=${jobId}&filter_active=${filterActive}`;
     
-    if (serviceName !== null && serviceName !== undefined && serviceName !== "") {
-      path += `&service_name=${serviceName}`;
+    if (serviceInfo !== null && serviceInfo !== undefined && serviceInfo.length > 0) {
+      path += `&service_name=${serviceInfo[0]}&instance_id=${serviceInfo[1]}`;
     }
     
     if (funcName !== null) {
@@ -160,11 +160,17 @@ export class ApiService {
   // Activate Debug Session
   public async activateDebugSession(
     jobId: string, 
-    serviceName: string, 
+    serviceInfo: string[], 
     funcName: string,
     taskId: string
   ): Promise<boolean> {
-    const path = `activate_debug_session?job_id=${jobId}&service_name=${serviceName}&func_name=${funcName}&task_id=${taskId}`;
+    let path = `activate_debug_session?job_id=${jobId}&task_id=${taskId}`;
+    if (serviceInfo !== null){
+      path += `&service_name=${serviceInfo[0]}&instance_id=${serviceInfo[1]}`;
+    }
+    if (funcName !== null){
+      path += `&func_name=${funcName}`;
+    }
     const response = await this.request<ApiResponse<boolean>>(path);
     return response.result;
   }

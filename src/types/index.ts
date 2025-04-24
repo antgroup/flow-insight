@@ -83,7 +83,7 @@ export type GraphData = {
 
 // Debug Types
 export type DebugSession = {
-  serviceName: string;
+  serviceInfo: string[];
   funcName: string;
   taskId: string;
 };
@@ -130,11 +130,11 @@ export type PhysicalViewData = {
 };
 
 export type FlameGraphNode = {
-  name: string[];
+  name: string;
   value: number;
   count?: number;
   totalInParent?: Array<{
-    callerNodeId: string[];
+    callerNodeId: string;
     duration: number;
     count: number;
     startTime: number;
@@ -157,9 +157,9 @@ export type FlameGraphData = {
   }>;
   aggregated: FlameGraphNode[];
   parentStartTimes: Array<{
-    calleeId: string[];
+    calleeId: string;
     startTimes: Array<{
-      callerId: string[];
+      callerId: string;
       startTime: number;
     }>;
   }>;
