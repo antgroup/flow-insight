@@ -1,0 +1,66 @@
+{
+  "name": "flow-insight",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A React component library for Flow visualization and insights",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --external react,react-dom",
+    "dev": "tsup src/index.ts --format esm,cjs --dts --external react,react-dom --watch",
+    "test": "jest",
+    "clean": "rimraf dist",
+    "prepare": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "flow",
+    "visualization",
+    "insight",
+    "debug",
+    "react",
+    "component"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@mui/icons-material": "^5.0.0",
+    "@mui/material": "^5.0.0",
+    "react": "^17.0.0 || ^18.0.0",
+    "react-dom": "^17.0.0 || ^18.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.8.4",
+    "d3": "^7.0.0",
+    "dagre": "^0.8.5",
+    "dagre-d3": "^0.6.4",
+    "js-tiktoken": "^1.0.0",
+    "mermaid": "^11.6.0",
+    "react-markdown": "^8.0.0",
+    "react-router-dom": "^6.0.0",
+    "react-syntax-highlighter": "^15.0.0",
+    "remark-gfm": "^3.0.0",
+    "slashes": "^3.0.12"
+  },
+  "devDependencies": {
+    "@types/d3": "^7.0.0",
+    "@types/dagre": "^0.7.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@types/react-syntax-highlighter": "^15.0.0",
+    "tslib": "^2.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^4.9.0"
+  }
+}

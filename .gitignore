@@ -1,0 +1,33 @@
+node_modules/
+package-lock.json
+yarn.lock
+dist/
+
+# Logs and temporary files
+*.log
+*.temp
+tmp/
+temp/
+
+# Editor and IDE Files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmproj
+
+# OS-specific files
+.DS_Store
+
+# TypeScript output
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+
+# Coverage reports
+coverage/
+
