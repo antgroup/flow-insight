@@ -19,11 +19,15 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --external react,react-dom --minify",
-    "dev": "tsup src/index.ts --format esm,cjs --dts --external react,react-dom --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "test": "jest",
     "clean": "rimraf dist",
     "prepare": "npm run clean && npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "react-dom": ">=16.8.0"
   },
   "keywords": [
     "flow",
@@ -49,8 +53,6 @@
     "dagre-d3": "^0.6.4",
     "js-tiktoken": "^1.0.19",
     "mermaid": "^11.6.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0",
     "react-icons": "^4.7.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.0.0",
@@ -67,6 +69,8 @@
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "@types/react-syntax-highlighter": "^15.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
     "tslib": "^2.0.0",
     "tsup": "^8.0.0",
     "typescript": "^4.9.0"
