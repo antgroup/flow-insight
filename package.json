@@ -1,6 +1,6 @@
 {
-  "name": "flow-insight",
-  "version": "0.1.0",
+  "name": "@aeonsule/flow-insight",
+  "version": "0.1.3",
   "type": "module",
   "description": "A React component library for Flow visualization and insights",
   "main": "dist/index.js",
@@ -12,13 +12,14 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./dist/index.css": "./dist/index.css"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --external react,react-dom",
+    "build": "tsup src/index.ts --format esm,cjs --dts --external react,react-dom --minify",
     "dev": "tsup src/index.ts --format esm,cjs --dts --external react,react-dom --watch",
     "test": "jest",
     "clean": "rimraf dist",
@@ -34,28 +35,35 @@
   ],
   "author": "",
   "license": "Apache-2.0",
-  "peerDependencies": {
-    "@mui/icons-material": "^5.0.0",
-    "@mui/material": "^5.0.0",
-    "react": "^17.0.0 || ^18.0.0",
-    "react-dom": "^17.0.0 || ^18.0.0"
-  },
   "dependencies": {
-    "axios": "^1.8.4",
-    "d3": "^7.0.0",
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.5",
+    "@mui/material": "^5.15.5",
+    "@types/d3": "^7.4.3",
+    "@types/dagre": "^0.7.52",
+    "@types/dagre-d3": "^0.6.6",
+    "axios": "^0.21.1",
+    "d3": "^7.9.0",
     "dagre": "^0.8.5",
     "dagre-d3": "^0.6.4",
-    "js-tiktoken": "^1.0.0",
+    "js-tiktoken": "^1.0.19",
     "mermaid": "^11.6.0",
-    "react-markdown": "^8.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-icons": "^4.7.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.0.0",
-    "react-syntax-highlighter": "^15.0.0",
-    "remark-gfm": "^3.0.0",
+    "react-syntax-highlighter": "^15.6.1",
+    "react-window": "^1.8.5",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
     "slashes": "^3.0.12"
   },
   "devDependencies": {
     "@types/d3": "^7.0.0",
     "@types/dagre": "^0.7.0",
+    "@types/node": "^22.14.1",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "@types/react-syntax-highlighter": "^15.0.0",
