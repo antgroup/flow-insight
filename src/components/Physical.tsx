@@ -15,8 +15,7 @@ import {
     useRef,
     useState,
   } from "react";
-  import { PhysicalViewData } from "../types";
-  import { Actor, NodeData } from "../types";
+  import { PhysicalViewData, Service, NodeData } from "../types";
   
   // Type for resource values
   type ResourceValue = {
@@ -57,22 +56,22 @@ import {
   
     if (matchingKey) {
       // For GPU resources, calculate memory usage from gpuDevices
-      if (resourceType.toLowerCase() === "gpu" && nodeData?.actors) {
-        // Find all actors in this placement group
+      if (resourceType.toLowerCase() === "gpu" && nodeData?.services) {
+        // Find all services in this placement group
         let totalMemoryUsed = 0;
         let totalMemoryAvailable = 0;
   
-        // Sum up memory usage from all actors in this placement group
-        Object.values(nodeData.actors).forEach((actor: Actor) => {
-          if (actor?.placementGroup?.id?.toLowerCase() === pgIdLower) {
-            // Check if actor has resource_usage field for GPU
-            const resourceUsage = getResourceUsageFromField(actor, resourceType);
+        // Sum up memory usage from all services in this placement group
+        Object.values(nodeData.services).forEach((service: Service) => {
+          if (service?.placementGroup?.id?.toLowerCase() === pgIdLower) {
+            // Check if service has resource_usage field for GPU
+            const resourceUsage = getResourceUsageFromField(service, resourceType);
             if (resourceUsage) {
               totalMemoryUsed += resourceUsage.used;
               totalMemoryAvailable += resourceUsage.total;
             } else {
-              // Sum up memory from all GPU devices assigned to this actor
-              actor.gpuDevices?.forEach((gpu) => {
+              // Sum up memory from all GPU devices assigned to this service
+              service.gpuDevices?.forEach((gpu) => {
                 totalMemoryUsed += gpu.memoryUsed;
                 totalMemoryAvailable += gpu.memoryTotal;
               });
@@ -94,48 +93,48 @@ import {
         }
       }
       // For CPU resources, calculate CPU usage from processStats or nodeCpuPercent or resource_usage
-      else if (resourceType.toLowerCase() === "cpu" && nodeData?.actors) {
-        // Find all actors in this placement group
+      else if (resourceType.toLowerCase() === "cpu" && nodeData?.services) {
+        // Find all services in this placement group
         let totalCpuPercent = 0;
-        let actorCount = 0;
+        let serviceCount = 0;
         let hasNodeCpuInfo = false;
         let hasResourceUsageInfo = false;
         let totalFromResourceUsage = 0;
   
-        // Sum up CPU usage from all actors in this placement group
-        Object.values(nodeData.actors).forEach((actor: Actor) => {
-          if (actor?.placementGroup?.id?.toLowerCase() === pgIdLower) {
-            // First check if actor has resource_usage field for CPU
-            const resourceUsage = getResourceUsageFromField(actor, resourceType);
+        // Sum up CPU usage from all services in this placement group
+        Object.values(nodeData.services).forEach((service: Service) => {
+          if (service?.placementGroup?.id?.toLowerCase() === pgIdLower) {
+            // First check if service has resource_usage field for CPU
+            const resourceUsage = getResourceUsageFromField(service, resourceType);
             if (resourceUsage) {
               totalCpuPercent += resourceUsage.used;
               totalFromResourceUsage += resourceUsage.total;
               hasResourceUsageInfo = true;
-              actorCount++;
+              serviceCount++;
             }
-            // If any actor has nodeCpuPercent, use that instead
+            // If any service has nodeCpuPercent, use that instead
             else if (
-              actor.nodeCpuPercent !== undefined &&
+              service.nodeCpuPercent !== undefined &&
               !hasResourceUsageInfo
             ) {
-              totalCpuPercent = actor.nodeCpuPercent;
+              totalCpuPercent = service.nodeCpuPercent;
               hasNodeCpuInfo = true;
               return; // Exit the loop early once we find node CPU info
             }
             // Otherwise use processStats
             else if (
               !hasResourceUsageInfo &&
-              actor.processStats &&
-              actor.processStats.cpuPercent !== undefined
+              service.processStats &&
+              service.processStats.cpuPercent !== undefined
             ) {
-              totalCpuPercent += actor.processStats.cpuPercent;
-              actorCount++;
+              totalCpuPercent += service.processStats.cpuPercent;
+              serviceCount++;
             }
           }
         });
   
         // If we found any CPU usage
-        if (hasResourceUsageInfo || hasNodeCpuInfo || actorCount > 0) {
+        if (hasResourceUsageInfo || hasNodeCpuInfo || serviceCount > 0) {
           // Cap at 100% for visualization purposes if not using resource_usage
           if (!hasResourceUsageInfo) {
             const cappedUsage = Math.min(totalCpuPercent, 100);
@@ -158,44 +157,44 @@ import {
         }
       }
       // For Memory resources, calculate memory usage from processStats or resource_usage
-      else if (resourceType.toLowerCase() === "memory" && nodeData?.actors) {
-        // Find all actors in this placement group
+      else if (resourceType.toLowerCase() === "memory" && nodeData?.services) {
+        // Find all services in this placement group
         let totalMemoryUsed = 0;
         let memoryTotal = 0;
         let memoryAvailable = 0;
         let hasNodeMemInfo = false;
-        let actorCount = 0;
+        let serviceCount = 0;
   
-        // First try to get node memory info from any actor
-        Object.values(nodeData.actors).forEach((actor: Actor) => {
-          if (actor.nodeMem && actor.nodeMem.length >= 4 && !hasNodeMemInfo) {
-            memoryTotal = actor.nodeMem[0]; // Total memory
-            memoryAvailable = actor.nodeMem[1]; // Available memory
+        // First try to get node memory info from any service
+        Object.values(nodeData.services).forEach((service: Service) => {
+          if (service.nodeMem && service.nodeMem.length >= 4 && !hasNodeMemInfo) {
+            memoryTotal = service.nodeMem[0]; // Total memory
+            memoryAvailable = service.nodeMem[1]; // Available memory
             hasNodeMemInfo = true;
           }
         });
   
-        // If we have node memory info, sum up memory usage from actors in this placement group
+        // If we have node memory info, sum up memory usage from services in this placement group
         if (hasNodeMemInfo) {
-          Object.values(nodeData.actors).forEach((actor: Actor) => {
-            if (actor?.placementGroup?.id?.toLowerCase() === pgIdLower) {
-              // First check if actor has resource_usage field for Memory
+          Object.values(nodeData.services).forEach((service: Service) => {
+            if (service?.placementGroup?.id?.toLowerCase() === pgIdLower) {
+              // First check if service has resource_usage field for Memory
               const resourceUsage = getResourceUsageFromField(
-                actor,
+                service,
                 resourceType,
               );
               if (resourceUsage) {
                 totalMemoryUsed += resourceUsage.used;
-                actorCount++;
-              } else if (actor.processStats && actor.processStats.memoryInfo) {
-                totalMemoryUsed += actor.processStats.memoryInfo.rss;
-                actorCount++;
+                serviceCount++;
+              } else if (service.processStats && service.processStats.memoryInfo) {
+                totalMemoryUsed += service.processStats.memoryInfo.rss;
+                serviceCount++;
               }
             }
           });
   
-          // If we found at least one actor with memory usage
-          if (actorCount > 0) {
+          // If we found at least one service with memory usage
+          if (serviceCount > 0) {
             // Cap usage at 100%
             const usage = Math.min(totalMemoryUsed / memoryTotal, 1);
   
@@ -208,29 +207,29 @@ import {
           }
         }
   
-        // If no node memory info or no actors with memory usage, don't show memory usage
+        // If no node memory info or no services with memory usage, don't show memory usage
         return null;
       }
       // For custom resources from resource_usage field
-      else if (nodeData?.actors) {
+      else if (nodeData?.services) {
         let totalUsed = 0;
         let totalAvailable = 0;
-        let actorCount = 0;
+        let serviceCount = 0;
   
-        // Sum up resource usage from all actors in this placement group
-        Object.values(nodeData.actors).forEach((actor: Actor) => {
-          if (actor?.placementGroup?.id?.toLowerCase() === pgIdLower) {
-            const resourceUsage = getResourceUsageFromField(actor, resourceType);
+        // Sum up resource usage from all services in this placement group
+        Object.values(nodeData.services).forEach((service: Service) => {
+          if (service?.placementGroup?.id?.toLowerCase() === pgIdLower) {
+            const resourceUsage = getResourceUsageFromField(service, resourceType);
             if (resourceUsage) {
               totalUsed += resourceUsage.used;
               totalAvailable += resourceUsage.total;
-              actorCount++;
+              serviceCount++;
             }
           }
         });
   
         // If we found any resource usage
-        if (actorCount > 0) {
+        if (serviceCount > 0) {
           // Cap usage at 100%
           const usage = Math.min(totalUsed / totalAvailable, 1);
   
@@ -291,11 +290,11 @@ import {
   
     if (physicalViewData?.physicalView) {
       Object.values(physicalViewData.physicalView).forEach((nodeData) => {
-        if (nodeData?.actors) {
-          Object.values(nodeData.actors).forEach((actor: any) => {
-            if (actor?.resourceUsage) {
+        if (nodeData?.services) {
+          Object.values(nodeData.services).forEach((service: any) => {
+            if (service?.resourceUsage) {
               // Add all resource keys from resource_usage
-              Object.keys(actor.resourceUsage).forEach((key) => {
+              Object.keys(service.resourceUsage).forEach((key) => {
                 customResources.add(key);
               });
             }
@@ -323,15 +322,15 @@ import {
   // Utility function to get unique context keys
   const getAvailableContextKeys = (physicalViewData: PhysicalViewData) => {
     const contextKeys = new Set<string>();
-    contextKeys.add("actor_id"); // Always add actor_id as an option
-    contextKeys.add("actor_name"); // Always add actor_name as an option
+    contextKeys.add("instance_id"); // Always add instance_id as an option
+    contextKeys.add("service_name"); // Always add service_name as an option
   
     if (physicalViewData?.physicalView) {
       Object.values(physicalViewData.physicalView).forEach((nodeData) => {
-        if (nodeData?.actors) {
-          Object.values(nodeData.actors).forEach((actor: any) => {
-            if (actor?.contextInfo) {
-              Object.keys(actor.contextInfo).forEach((key) =>
+        if (nodeData?.services) {
+          Object.values(nodeData.services).forEach((service: any) => {
+            if (service?.contextInfo) {
+              Object.keys(service.contextInfo).forEach((key) =>
                 contextKeys.add(key),
               );
             }
@@ -345,10 +344,10 @@ import {
       .map((key) => ({
         key,
         label:
-          key === "actor_id"
-            ? "Actor ID"
-            : key === "actor_name"
-            ? "Actor Name"
+          key === "instance_id"
+            ? "Instance ID"
+            : key === "service_name"
+            ? "Service Name"
             : key,
       }));
   };
@@ -362,20 +361,20 @@ import {
   
     if (physicalViewData?.physicalView) {
       Object.values(physicalViewData.physicalView).forEach((nodeData) => {
-        if (nodeData?.actors) {
-          Object.values(nodeData.actors).forEach((actor: any) => {
-            if (contextKey === "actor_id") {
-              if (actor?.actorId) {
-                values.add(actor.actorId);
+        if (nodeData?.services) {
+          Object.values(nodeData.services).forEach((service: any) => {
+            if (contextKey === "instance_id") {
+              if (service?.instanceId) {
+                values.add(service.instanceId);
               }
-            } else if (contextKey === "actor_name") {
-              if (actor?.name) {
-                values.add(actor.name);
+            } else if (contextKey === "service_name") {
+              if (service?.name) {
+                values.add(service.name);
               } else {
                 values.add("Unknown");
               }
-            } else if (actor?.contextInfo?.[contextKey] !== undefined) {
-              values.add(actor.contextInfo[contextKey].toString());
+            } else if (service?.contextInfo?.[contextKey] !== undefined) {
+              values.add(service.contextInfo[contextKey].toString());
             }
           });
         }
@@ -406,16 +405,16 @@ import {
   };
   
   // Add helper functions at the top level, before the PhysicalVisualization component
-  // Helper function to calculate GPU usage for a single actor
-  const getActorGpuUsage = (actor: Actor) => {
-    if (!actor.gpuDevices || actor.gpuDevices.length === 0) {
+  // Helper function to calculate GPU usage for a single service
+  const getServiceGpuUsage = (service: Service) => {
+    if (!service.gpuDevices || service.gpuDevices.length === 0) {
       return null;
     }
   
     let totalMemoryUsed = 0;
     let totalMemoryAvailable = 0;
   
-    actor.gpuDevices.forEach((gpu) => {
+    service.gpuDevices.forEach((gpu) => {
       totalMemoryUsed += gpu.memoryUsed;
       if (totalMemoryAvailable === 0) {
         totalMemoryAvailable = gpu.memoryTotal;
@@ -437,16 +436,16 @@ import {
     };
   };
   
-  // Helper function to calculate GPU utilization for a single actor
-  const getActorGpuUtilization = (actor: Actor) => {
-    if (!actor.gpuDevices || actor.gpuDevices.length === 0) {
+  // Helper function to calculate GPU utilization for a single service
+  const getServiceGpuUtilization = (service: Service) => {
+    if (!service.gpuDevices || service.gpuDevices.length === 0) {
       return null;
     }
   
     let totalUtilization = 0;
     let deviceCount = 0;
   
-    actor.gpuDevices.forEach((gpu) => {
+    service.gpuDevices.forEach((gpu) => {
       if (gpu.utilization !== undefined) {
         totalUtilization += gpu.utilization;
         deviceCount++;
@@ -471,11 +470,11 @@ import {
     };
   };
   
-  // Helper function to calculate CPU usage for a single actor
-  const getActorCpuUsage = (actor: Actor) => {
+  // Helper function to calculate CPU usage for a single service
+  const getServiceCpuUsage = (service: Service) => {
     // Use nodeCpuPercent if available
-    if (actor.nodeCpuPercent !== undefined) {
-      const cpuPercent = actor.nodeCpuPercent;
+    if (service.nodeCpuPercent !== undefined) {
+      const cpuPercent = service.nodeCpuPercent;
   
       // Cap usage at 100%
       const cappedPercent = Math.min(cpuPercent, 100);
@@ -488,11 +487,11 @@ import {
       };
     }
   
-    if (!actor.processStats || actor.processStats.cpuPercent === undefined) {
+    if (!service.processStats || service.processStats.cpuPercent === undefined) {
       return null;
     }
   
-    const cpuPercent = actor.processStats.cpuPercent;
+    const cpuPercent = service.processStats.cpuPercent;
   
     // Cap usage at 100%
     const cappedPercent = Math.min(cpuPercent, 100);
@@ -505,17 +504,17 @@ import {
     };
   };
   
-  // Helper function to calculate memory usage for a single actor
-  const getActorMemoryUsage = (actor: Actor) => {
-    if (!actor.processStats || !actor.processStats.memoryInfo) {
+  // Helper function to calculate memory usage for a single service
+  const getServiceMemoryUsage = (service: Service) => {
+    if (!service.processStats || !service.processStats.memoryInfo) {
       return null;
     }
   
     // Only use nodeMem if available - no estimation
-    if (actor.nodeMem && actor.nodeMem.length >= 4) {
-      const memoryUsed = actor.processStats.memoryInfo.rss;
-      const memoryTotal = actor.nodeMem[0]; // Total memory
-      const memoryAvailable = actor.nodeMem[1]; // Available memory
+    if (service.nodeMem && service.nodeMem.length >= 4) {
+      const memoryUsed = service.processStats.memoryInfo.rss;
+      const memoryTotal = service.nodeMem[0]; // Total memory
+      const memoryAvailable = service.nodeMem[1]; // Available memory
   
       // Cap usage at 100%
       const usage = Math.min(memoryUsed / memoryTotal, 1);
@@ -563,29 +562,29 @@ import {
   
   // Helper function to calculate node-level CPU usage
   const getNodeCpuUsage = (nodeData: NodeData) => {
-    if (!nodeData.actors) {
+    if (!nodeData.services) {
       return null;
     }
   
     let totalCpuPercent = 0;
-    let actorCount = 0;
+    let serviceCount = 0;
     let hasNodeCpuInfo = false;
   
-    Object.values(nodeData.actors).forEach((actor) => {
-      // If any actor has nodeCpuPercent, use that instead of summing individual CPU usages
-      if (actor.nodeCpuPercent !== undefined) {
-        totalCpuPercent = actor.nodeCpuPercent;
+    Object.values(nodeData.services).forEach((service) => {
+      // If any service has nodeCpuPercent, use that instead of summing individual CPU usages
+      if (service.nodeCpuPercent !== undefined) {
+        totalCpuPercent = service.nodeCpuPercent;
         hasNodeCpuInfo = true;
         return; // Exit the loop early once we find node CPU info
       }
   
-      if (actor.processStats && actor.processStats.cpuPercent !== undefined) {
-        totalCpuPercent += actor.processStats.cpuPercent;
-        actorCount++;
+      if (service.processStats && service.processStats.cpuPercent !== undefined) {
+        totalCpuPercent += service.processStats.cpuPercent;
+        serviceCount++;
       }
     });
   
-    if (!hasNodeCpuInfo && actorCount === 0) {
+    if (!hasNodeCpuInfo && serviceCount === 0) {
       return null;
     }
   
@@ -602,7 +601,7 @@ import {
   
   // Helper function to calculate node-level memory usage
   const getNodeMemoryUsage = (nodeData: NodeData) => {
-    if (!nodeData.actors) {
+    if (!nodeData.services) {
       return null;
     }
   
@@ -610,11 +609,11 @@ import {
     let memoryTotal = 0;
     let memoryAvailable = 0;
   
-    // Try to get node memory info from any actor
-    Object.values(nodeData.actors).forEach((actor) => {
-      if (actor.nodeMem && actor.nodeMem.length >= 4 && !hasNodeMemInfo) {
-        memoryTotal = actor.nodeMem[0]; // Total memory
-        memoryAvailable = actor.nodeMem[1]; // Available memory
+    // Try to get node memory info from any service
+    Object.values(nodeData.services).forEach((service) => {
+      if (service.nodeMem && service.nodeMem.length >= 4 && !hasNodeMemInfo) {
+        memoryTotal = service.nodeMem[0]; // Total memory
+        memoryAvailable = service.nodeMem[1]; // Available memory
         hasNodeMemInfo = true;
       }
     });
@@ -640,14 +639,14 @@ import {
   // Helper function to calculate node-level GPU utilization
   const getNodeGpuUtilization = (nodeData: NodeData) => {
     if (!nodeData.gpus || nodeData.gpus.length === 0) {
-      // Try accessing gpu utilization from actors instead
-      if (nodeData.actors) {
+      // Try accessing gpu utilization from services instead
+      if (nodeData.services) {
         let totalUtilization = 0;
         let deviceCount = 0;
   
-        Object.values(nodeData.actors).forEach((actor) => {
-          if (actor.gpuDevices) {
-            actor.gpuDevices.forEach((gpu) => {
+        Object.values(nodeData.services).forEach((service) => {
+          if (service.gpuDevices) {
+            service.gpuDevices.forEach((gpu) => {
               if (gpu.utilization !== undefined) {
                 totalUtilization += gpu.utilization;
                 deviceCount++;
@@ -699,22 +698,22 @@ import {
     };
   };
   
-  // Helper function to check if actor or node has resource info
+  // Helper function to check if service or node has resource info
   const hasResourceInfo = (
-    data: Actor | NodeData,
+    data: Service | NodeData,
     resourceType: string,
   ): boolean => {
     if (resourceType.toLowerCase() === "gpu") {
-      if ((data as Actor).gpuDevices) {
-        return ((data as Actor).gpuDevices?.length ?? 0) > 0;
+      if ((data as Service).gpuDevices) {
+        return ((data as Service).gpuDevices?.length ?? 0) > 0;
       }
       if ((data as NodeData).gpus) {
         return ((data as NodeData).gpus?.length ?? 0) > 0;
       }
     } else if (resourceType.toLowerCase() === "gpuutil") {
-      if ((data as Actor).gpuDevices) {
+      if ((data as Service).gpuDevices) {
         return (
-          (data as Actor).gpuDevices?.some(
+          (data as Service).gpuDevices?.some(
             (gpu) => gpu.utilization !== undefined,
           ) ?? false
         );
@@ -726,45 +725,45 @@ import {
           ) ?? false
         );
       }
-      if ((data as NodeData).actors) {
-        return Object.values((data as NodeData).actors).some(
-          (actor) =>
-            actor.gpuDevices?.some((gpu) => gpu.utilization !== undefined) ??
+      if ((data as NodeData).services) {
+        return Object.values((data as NodeData).services).some(
+          (service) =>
+            service.gpuDevices?.some((gpu) => gpu.utilization !== undefined) ??
             false,
         );
       }
     } else if (resourceType.toLowerCase() === "cpu") {
-      if ((data as Actor).processStats) {
-        return (data as Actor).processStats?.cpuPercent !== undefined;
+      if ((data as Service).processStats) {
+        return (data as Service).processStats?.cpuPercent !== undefined;
       }
-      if ((data as NodeData).actors) {
-        return Object.values((data as NodeData).actors).some(
-          (actor) => actor.processStats?.cpuPercent !== undefined,
+      if ((data as NodeData).services) {
+        return Object.values((data as NodeData).services).some(
+          (service) => service.processStats?.cpuPercent !== undefined,
         );
       }
     } else if (resourceType.toLowerCase() === "memory") {
       // Update memory check to only require processStats.memoryInfo
-      if ((data as Actor).processStats) {
-        return (data as Actor).processStats?.memoryInfo?.rss !== undefined;
+      if ((data as Service).processStats) {
+        return (data as Service).processStats?.memoryInfo?.rss !== undefined;
       }
-      if ((data as NodeData).actors) {
-        return Object.values((data as NodeData).actors).some(
-          (actor) => actor.processStats?.memoryInfo?.rss !== undefined,
+      if ((data as NodeData).services) {
+        return Object.values((data as NodeData).services).some(
+          (service) => service.processStats?.memoryInfo?.rss !== undefined,
         );
       }
     }
   
     // Check for custom resources in resourceUsage field
-    if ((data as Actor).resourceUsage) {
-      return (data as Actor).resourceUsage?.[resourceType] !== undefined;
+    if ((data as Service).resourceUsage) {
+      return (data as Service).resourceUsage?.[resourceType] !== undefined;
     }
   
     return false;
   };
   
-  // Constants for actor dimensions
-  const ACTOR_HEIGHT = 24; // Fixed height for all actors
-  const ACTOR_WIDTH = ACTOR_HEIGHT * 6; // Width is 6 times the height
+  // Constants for service dimensions
+  const SERVICE_HEIGHT = 24; // Fixed height for all services
+  const SERVICE_WIDTH = SERVICE_HEIGHT * 6; // Width is 6 times the height
   
   // Extend this to include an exportSvg method
   export type PhysicalVisualizationHandle = {
@@ -795,7 +794,7 @@ import {
         useRef<d3.Selection<SVGGElement, unknown, null, any> | null>(null);
       const [selectedResource, setSelectedResource] = useState<string>("GPU");
       const [selectedContext, setSelectedContext] =
-        useState<string>("actor_name");
+        useState<string>("service_name");
       const [contextValueFilter, setContextValueFilter] = useState<string>("");
       const legendRef = useRef<SVGGElement | null>(null);
   
@@ -806,13 +805,13 @@ import {
           nodeStroke: "#2e7d32",
           placementGroup: "#bbdefb",
           placementGroupStroke: "#1976d2",
-          freeActors: "#ffecb3",
-          freeActorsStroke: "#ff8f00",
-          actor: "#c5e1a5",
-          actorStroke: "#558b2f",
+          freeServices: "#ffecb3",
+          freeServicesStroke: "#ff8f00",
+          service: "#c5e1a5",
+          serviceStroke: "#558b2f",
           selectedElement: "#ff5722",
-          actorSection: "#ffffff",
-          actorSectionStroke: "#90caf9",
+          serviceSection: "#ffffff",
+          serviceSectionStroke: "#90caf9",
         }),
         [],
       );
@@ -867,7 +866,7 @@ import {
             .style("font-size", "12px")
             .style("font-weight", "bold")
             .style("margin-bottom", "10px")
-            .text(contextKey === "actor_id" ? "Actor ID" : contextKey);
+            .text(contextKey === "instance_id" ? "Instance ID" : contextKey);
   
           // Create scrollable container for legend items
           const itemsContainer = legendDiv
@@ -951,32 +950,32 @@ import {
         [physicalViewData, searchTerm],
       );
   
-      // Function to check if an actor matches the search term
-      const actorMatchesSearch = useCallback(
-        (actor: Actor): boolean => {
+      // Function to check if an service matches the search term
+      const serviceMatchesSearch = useCallback(
+        (service: Service): boolean => {
           if (!searchTerm || searchTerm.trim() === "") {
             return false;
           }
   
           const searchTermLower = searchTerm.toLowerCase();
   
-          // Check actor ID
+          // Check instance ID
           if (
-            actor.actorId &&
-            actor.actorId.toLowerCase().includes(searchTermLower)
+            service.id &&
+            service.id.toLowerCase().includes(searchTermLower)
           ) {
             return true;
           }
   
-          // Check actor name
-          if (actor.name && actor.name.toLowerCase().includes(searchTermLower)) {
+          // Check service name
+          if (service.name && service.name.toLowerCase().includes(searchTermLower)) {
             return true;
           }
   
           // Check context info
-          if (actor.contextInfo) {
-            for (const key in actor.contextInfo) {
-              const value = actor.contextInfo[key];
+          if (service.contextInfo) {
+            for (const key in service.contextInfo) {
+              const value = service.contextInfo[key];
               if (
                 value &&
                 value.toString().toLowerCase().includes(searchTermLower)
@@ -991,22 +990,22 @@ import {
         [searchTerm],
       );
   
-      // Function to check if an actor matches the context value filter
-      const actorMatchesContextFilter = useCallback(
-        (actor: Actor): boolean => {
+      // Function to check if a service matches the context value filter
+      const serviceMatchesContextFilter = useCallback(
+        (service: Service): boolean => {
           if (!contextValueFilter || contextValueFilter.trim() === "") {
-            return true; // No filter applied, all actors match
+            return true; // No filter applied, all services match
           }
   
           const filterLower = contextValueFilter.toLowerCase();
   
           let contextValue: string | undefined;
-          if (selectedContext === "actor_id") {
-            contextValue = actor.actorId;
-          } else if (selectedContext === "actor_name") {
-            contextValue = actor.name || "Unknown";
+          if (selectedContext === "instance_id") {
+            contextValue = service.id;
+          } else if (selectedContext === "service_name") {
+            contextValue = service.name || "Unknown";
           } else {
-            contextValue = actor.contextInfo?.[selectedContext]?.toString();
+            contextValue = service.contextInfo?.[selectedContext]?.toString();
           }
   
           // If context value is undefined or doesn't match the filter, return false
@@ -1107,67 +1106,67 @@ import {
         );
         const contextColorScale = getContextColorScale(contextValues);
   
-        // Update the actor coloring
-        const getActorColor = (actor: Actor): string => {
-          if (!actor) {
+        // Update the service coloring
+        const getServiceColor = (service: Service): string => {
+          if (!service) {
             return "#cccccc";
           }
   
           let contextValue;
-          if (selectedContext === "actor_id") {
-            contextValue = actor.actorId;
-          } else if (selectedContext === "actor_name") {
-            contextValue = actor.name || "Unknown";
+          if (selectedContext === "instance_id") {
+            contextValue = service.id;
+          } else if (selectedContext === "service_name") {
+            contextValue = service.name || "Unknown";
           } else {
-            contextValue = actor.contextInfo?.[selectedContext]?.toString();
+            contextValue = service.contextInfo?.[selectedContext]?.toString();
           }
   
           return contextValue ? contextColorScale(contextValue) : "#cccccc";
         };
   
-        // Calculate maximum node width based on actors
+        // Calculate maximum node width based on services
         let maxNodeWidth = 0;
         nodes.forEach(([_, nodeData]) => {
           let nodeWidth = 0;
   
           // Group all placement groups by ID
-          const placementGroups: { [pgId: string]: Actor[] } = {};
-          const freeActors: Actor[] = [];
+          const placementGroups: { [pgId: string]: Service[] } = {};
+          const freeServices: Service[] = [];
   
-          // Categorize actors
-          if (nodeData?.actors) {
-            Object.values(nodeData.actors).forEach((actor) => {
-              // Skip actors that don't match the context value filter
-              if (!actorMatchesContextFilter(actor)) {
+          // Categorize services
+          if (nodeData?.services) {
+            Object.values(nodeData.services).forEach((service) => {
+              // Skip services that don't match the context value filter
+              if (!serviceMatchesContextFilter(service)) {
                 return;
               }
   
-              if (actor?.placementGroup?.id) {
-                const pgId = actor.placementGroup.id;
+              if (service?.placementGroup?.id) {
+                const pgId = service.placementGroup.id;
                 if (!placementGroups[pgId]) {
                   placementGroups[pgId] = [];
                 }
-                placementGroups[pgId].push(actor);
+                placementGroups[pgId].push(service);
               } else {
-                freeActors.push(actor);
+                freeServices.push(service);
               }
             });
           }
   
           // Calculate width for each placement group
-          Object.values(placementGroups).forEach((actors) => {
-            // Calculate width based on fixed actor dimensions and margins
+          Object.values(placementGroups).forEach((services) => {
+            // Calculate width based on fixed service dimensions and margins
             const pgWidth =
-              actors.length * ACTOR_WIDTH + (actors.length - 1) * 8 + 40; // Add margins and padding
+              services.length * SERVICE_WIDTH + (services.length - 1) * 8 + 40; // Add margins and padding
             nodeWidth = Math.max(nodeWidth, pgWidth);
           });
   
-          // Calculate width for free actors
-          if (freeActors.length > 0) {
-            // Calculate width based on fixed actor dimensions and margins
-            const freeActorsWidth =
-              freeActors.length * ACTOR_WIDTH + (freeActors.length - 1) * 8 + 40; // Add margins and padding
-            nodeWidth = Math.max(nodeWidth, freeActorsWidth);
+          // Calculate width for free services
+          if (freeServices.length > 0) {
+            // Calculate width based on fixed service dimensions and margins
+            const freeServicesWidth =
+              freeServices.length * SERVICE_WIDTH + (freeServices.length - 1) * 8 + 40; // Add margins and padding
+            nodeWidth = Math.max(nodeWidth, freeServicesWidth);
           }
   
           // Ensure minimum node width
@@ -1182,32 +1181,32 @@ import {
         const nodeHeights: number[] = [];
         nodes.forEach(([_, nodeData]) => {
           // Group all placement groups by ID
-          const placementGroups: { [pgId: string]: Actor[] } = {};
-          const freeActors: Actor[] = [];
+          const placementGroups: { [pgId: string]: Service[] } = {};
+          const freeServices: Service[] = [];
   
-          // Categorize actors
-          if (nodeData?.actors) {
-            Object.values(nodeData.actors).forEach((actor) => {
-              // Skip actors that don't match the context value filter
-              if (!actorMatchesContextFilter(actor)) {
+          // Categorize services
+          if (nodeData?.services) {
+            Object.values(nodeData.services).forEach((service) => {
+              // Skip services that don't match the context value filter
+              if (!serviceMatchesContextFilter(service)) {
                 return;
               }
   
-              if (actor?.placementGroup?.id) {
-                const pgId = actor.placementGroup.id;
+              if (service?.placementGroup?.id) {
+                const pgId = service.placementGroup.id;
                 if (!placementGroups[pgId]) {
                   placementGroups[pgId] = [];
                 }
-                placementGroups[pgId].push(actor);
+                placementGroups[pgId].push(service);
               } else {
-                freeActors.push(actor);
+                freeServices.push(service);
               }
             });
           }
   
           const pgKeys = Object.keys(placementGroups);
-          const hasFreeActors = freeActors.length > 0;
-          const totalGroups = pgKeys.length + (hasFreeActors ? 1 : 0);
+          const hasFreeServices = freeServices.length > 0;
+          const totalGroups = pgKeys.length + (hasFreeServices ? 1 : 0);
   
           if (totalGroups === 0) {
             nodeHeights.push(200); // Default height for empty nodes
@@ -1216,24 +1215,24 @@ import {
   
           // Constants for height calculation
           const headerHeight = 40; // Space for node header
-          const actorBoxHeight = ACTOR_HEIGHT + 16; // Fixed height plus padding
-          const actorResourceBarMargin = 4;
+          const serviceBoxHeight = SERVICE_HEIGHT + 16; // Fixed height plus padding
+          const serviceResourceBarMargin = 4;
           const groupSpacing = 14; // Spacing between groups
           const topMargin = 10; // Top margin inside node
   
           // Calculate height for placement groups
           const pgTotalHeight =
             pgKeys.length *
-            (actorBoxHeight + actorResourceBarMargin + groupSpacing);
+            (serviceBoxHeight + serviceResourceBarMargin + groupSpacing);
   
-          // Calculate height for free actors if present
-          const freeActorsHeight = hasFreeActors
-            ? actorBoxHeight + actorResourceBarMargin
+          // Calculate height for free services if present
+          const freeServicesHeight = hasFreeServices
+            ? serviceBoxHeight + serviceResourceBarMargin
             : 0;
   
           // Calculate total node height
           const totalNodeHeight =
-            headerHeight + pgTotalHeight + freeActorsHeight + topMargin;
+            headerHeight + pgTotalHeight + freeServicesHeight + topMargin;
   
           // Ensure minimum node height
           nodeHeights.push(Math.max(totalNodeHeight, 200));
@@ -1254,12 +1253,12 @@ import {
   
         // Draw nodes with vertical positioning
         nodes.forEach(([nodeId, nodeData], index) => {
-          // Skip nodes that don't have any actors matching the context value filter
+          // Skip nodes that don't have any services matching the context value filter
           if (contextValueFilter && contextValueFilter.trim() !== "") {
-            const hasMatchingActors = Object.values(nodeData?.actors || {}).some(
-              (actor) => actorMatchesContextFilter(actor),
+            const hasMatchingServices = Object.values(nodeData?.services || {}).some(
+              (service) => serviceMatchesContextFilter(service),
             );
-            if (!hasMatchingActors) {
+            if (!hasMatchingServices) {
               return;
             }
           }
@@ -1268,32 +1267,32 @@ import {
           const y = index * (maxNodeHeight + nodeMargin) + nodeMargin;
   
           // Group all placement groups by ID
-          const placementGroups: { [pgId: string]: Actor[] } = {};
-          const freeActors: Actor[] = [];
+          const placementGroups: { [pgId: string]: Service[] } = {};
+          const freeServices: Service[] = [];
   
-          // Categorize actors
-          if (nodeData?.actors) {
-            Object.values(nodeData.actors).forEach((actor) => {
-              // Skip actors that don't match the context value filter
-              if (!actorMatchesContextFilter(actor)) {
+          // Categorize services
+          if (nodeData?.services) {
+            Object.values(nodeData.services).forEach((service) => {
+              // Skip services that don't match the context value filter
+              if (!serviceMatchesContextFilter(service)) {
                 return;
               }
   
-              if (actor?.placementGroup?.id) {
-                const pgId = actor.placementGroup.id;
+              if (service?.placementGroup?.id) {
+                const pgId = service.placementGroup.id;
                 if (!placementGroups[pgId]) {
                   placementGroups[pgId] = [];
                 }
-                placementGroups[pgId].push(actor);
+                placementGroups[pgId].push(service);
               } else {
-                freeActors.push(actor);
+                freeServices.push(service);
               }
             });
           }
   
           const pgKeys = Object.keys(placementGroups);
-          const hasFreeActors = freeActors.length > 0;
-          const totalGroups = pgKeys.length + (hasFreeActors ? 1 : 0);
+          const hasFreeServices = freeServices.length > 0;
+          const totalGroups = pgKeys.length + (hasFreeServices ? 1 : 0);
   
           // Use the calculated height for this node
           const nodeHeight = nodeHeights[index];
@@ -1450,12 +1449,12 @@ import {
   
           // Constants for layout
           const headerHeight = 40; // Space for node header
-          const actorBoxHeight = ACTOR_HEIGHT + 16; // Fixed height plus padding
-          const actorResourceBarMargin = 4;
+          const serviceBoxHeight = SERVICE_HEIGHT + 16; // Fixed height plus padding
+          const serviceResourceBarMargin = 4;
           const groupSpacing = 14; // Spacing between groups
   
           // Calculate total height for each placement group
-          const pgTotalHeight = actorBoxHeight + actorResourceBarMargin;
+          const pgTotalHeight = serviceBoxHeight + serviceResourceBarMargin;
   
           // Use the new rendering functions with all required parameters
           renderPlacementGroups(
@@ -1470,31 +1469,31 @@ import {
             selectedResource,
             selectedElementId,
             onElementClick,
-            getActorColor,
-            actorMatchesSearch,
+            getServiceColor,
+            serviceMatchesSearch,
             searchTerm,
             groupSpacing, // Pass group spacing as parameter
             selectedContext,
           );
   
-          // Calculate Y position for free actors
-          const freeActorsY =
+          // Calculate Y position for free services
+          const freeServicesY =
             headerHeight +
             (pgKeys.length > 0
               ? pgKeys.length * (pgTotalHeight + groupSpacing)
               : 0);
   
-          renderFreeActors(
+          renderFreeServices(
             nodeGroup,
-            freeActors,
-            freeActorsY,
+            freeServices,
+            freeServicesY,
             pgWidth,
             pgTotalHeight,
             colors,
             selectedElementId,
             onElementClick,
-            getActorColor,
-            actorMatchesSearch,
+            getServiceColor,
+            serviceMatchesSearch,
             selectedResource,
             searchTerm,
             selectedContext,
@@ -1528,10 +1527,10 @@ import {
         selectedContext,
         renderLegend,
         colors,
-        actorMatchesSearch,
+        serviceMatchesSearch,
         searchTerm,
         addGlowFilter,
-        actorMatchesContextFilter,
+        serviceMatchesContextFilter,
         contextValueFilter, // Add contextValueFilter to dependency array
       ]);
   
@@ -1717,14 +1716,14 @@ import {
     },
   );
   
-  // Helper function to get context value for an actor (move before renderPlacementGroups)
-  const getActorContextValue = (actor: Actor, contextKey: string): string => {
-    if (contextKey === "actor_id") {
-      return actor.actorId || "unknown";
-    } else if (contextKey === "actor_name") {
-      return actor.name || "Unknown";
-    } else if (actor.contextInfo && actor.contextInfo[contextKey] !== undefined) {
-      return actor.contextInfo[contextKey].toString();
+  // Helper function to get context value for an service (move before renderPlacementGroups)
+  const getServiceContextValue = (service: Service, contextKey: string): string => {
+    if (contextKey === "instance_id") {
+      return service.id || "unknown";
+    } else if (contextKey === "service_name") {
+      return service.name || "Unknown";
+    } else if (service.contextInfo && service.contextInfo[contextKey] !== undefined) {
+      return service.contextInfo[contextKey].toString();
     }
     return "Unknown";
   };
@@ -1732,7 +1731,7 @@ import {
   // Update renderPlacementGroups signature to include selectedContext
   const renderPlacementGroups = (
     nodeGroup: any,
-    placementGroups: Record<string, Actor[]>,
+    placementGroups: Record<string, Service[]>,
     pgKeys: string[],
     nodeData: NodeData,
     pgY: number,
@@ -1742,40 +1741,40 @@ import {
     selectedResource: string,
     selectedElementId: string | null,
     onElementClick: (data: any, skip_zoom: boolean) => void,
-    getActorColor: (actor: Actor) => string,
-    actorMatchesSearchFn: (actor: Actor) => boolean,
+    getServiceColor: (service: Service) => string,
+    serviceMatchesSearchFn: (service: Service) => boolean,
     searchTerm: string | undefined,
     groupSpacing: number,
     selectedContext: string,
   ) => {
-    const actorMargin = 8; // Add margin between actors
+    const serviceMargin = 8; // Add margin between services
     const topMargin = 4; // Add top margin
-    const actorResourceBarMargin = 4; // Margin between actor and its resource bar
+    const serviceResourceBarMargin = 4; // Margin between service and its resource bar
     const pgPadding = 20; // Padding inside placement group (10px on each side)
   
     // Available width for placement groups (accounting for node padding)
     const availableWidth = pgWidth - pgPadding;
   
     pgKeys.forEach((pgId, pgIndex) => {
-      const actors = placementGroups[pgId];
+      const services = placementGroups[pgId];
       const currentY = pgY + pgIndex * (pgHeight + groupSpacing); // Increased spacing
   
-      // Calculate total width needed for all actors including margins
-      const totalActorsWidth =
-        actors.length * ACTOR_WIDTH + (actors.length - 1) * actorMargin;
+      // Calculate total width needed for all services including margins
+      const totalServicesWidth =
+        services.length * SERVICE_WIDTH + (services.length - 1) * serviceMargin;
   
-      // Calculate scale factor if total width exceeds available width
-      let containerWidth = totalActorsWidth + 20; // Add some padding
-      let scaleFactor = 1;
+      // Calculate scale fservice if total width exceeds available width
+      let containerWidth = totalServicesWidth + 20; // Add some padding
+      let scaleFservice = 1;
   
       if (containerWidth > availableWidth) {
-        scaleFactor = availableWidth / containerWidth;
+        scaleFservice = availableWidth / containerWidth;
         containerWidth = availableWidth;
       }
   
       // Calculate the total height needed for the placement group
-      const actorBoxHeight = ACTOR_HEIGHT + 16; // Fixed height plus padding
-      const totalPGHeight = actorBoxHeight + actorResourceBarMargin;
+      const serviceBoxHeight = SERVICE_HEIGHT + 16; // Fixed height plus padding
+      const totalPGHeight = serviceBoxHeight + serviceResourceBarMargin;
   
       // Placement group rectangle
       const pgGroup = nodeGroup
@@ -1829,105 +1828,103 @@ import {
           .attr("stroke-dasharray", "4,2");
       }
   
-      // Calculate starting X position to center actors
-      const startX = (containerWidth - totalActorsWidth * scaleFactor) / 2;
+      // Calculate starting X position to center services
+      const startX = (containerWidth - totalServicesWidth * scaleFservice) / 2;
   
-      // Draw actor sections
+      // Draw service sections
       let currentX = startX;
-      actors.forEach((actor: Actor, actorIndex: number) => {
-        if (!actor) {
+      services.forEach((service: Service, serviceIndex: number) => {
+        if (!service) {
           return;
         }
   
-        const actorWidth = ACTOR_WIDTH * scaleFactor;
+        const serviceWidth = SERVICE_WIDTH * scaleFservice;
   
         // Create clickable section group
         const sectionGroup = pgGroup
           .append("g")
           .attr("transform", `translate(${currentX}, 0)`)
-          .attr("class", "actor-section")
-          .attr("data-id", actor.actorId || "unknown")
+          .attr("class", "service-section")
+          .attr("data-id", service.id || "unknown")
           .on("click", (event: any) => {
             event.stopPropagation();
             onElementClick(
               {
-                id: actor.actorId || "unknown",
-                type: "actor",
-                name: actor.name || `Actor${actorIndex + 1}`,
-                language: "python",
-                devices: actor.devices || [],
-                gpuDevices: actor.gpuDevices || [],
-                state: actor.state,
-                pid: actor.pid,
-                nodeId: actor.nodeId,
-                requiredResources: actor.requiredResources,
-                data: actor,
+                id: service.id || "unknown",
+                type: "service",
+                name: service.name || `Service${serviceIndex + 1}`,
+                gpuDevices: service.gpuDevices || [],
+                state: service.state,
+                pid: service.pid,
+                nodeId: service.nodeId,
+                requiredResources: service.requiredResources,
+                data: service,
               },
               true,
             );
           });
   
-        // Calculate actor dimensions with padding
+        // Calculate service dimensions with padding
         const padding = 8;
-        const actorHeight = ACTOR_HEIGHT;
+        const serviceHeight = SERVICE_HEIGHT;
   
-        // Get actor-level resource usage based on selected resource type
-        let actorResourceInfo: ResourceInfo | null = null;
+        // Get service-level resource usage based on selected resource type
+        let serviceResourceInfo: ResourceInfo | null = null;
         if (selectedResource) {
           if (
             selectedResource.toLowerCase() === "gpu" &&
-            hasResourceInfo(actor, "gpu")
+            hasResourceInfo(service, "gpu")
           ) {
-            actorResourceInfo = getActorGpuUsage(actor);
+            serviceResourceInfo = getServiceGpuUsage(service);
           } else if (
             selectedResource.toLowerCase() === "gpuutil" &&
-            hasResourceInfo(actor, "gpuutil")
+            hasResourceInfo(service, "gpuutil")
           ) {
-            actorResourceInfo = getActorGpuUtilization(actor);
+            serviceResourceInfo = getServiceGpuUtilization(service);
           } else if (
             selectedResource.toLowerCase() === "cpu" &&
-            hasResourceInfo(actor, "cpu")
+            hasResourceInfo(service, "cpu")
           ) {
-            actorResourceInfo = getActorCpuUsage(actor);
+            serviceResourceInfo = getServiceCpuUsage(service);
           } else if (
             selectedResource.toLowerCase() === "memory" &&
-            hasResourceInfo(actor, "memory")
+            hasResourceInfo(service, "memory")
           ) {
-            actorResourceInfo = getActorMemoryUsage(actor);
-          } else if (hasResourceInfo(actor, selectedResource)) {
+            serviceResourceInfo = getServiceMemoryUsage(service);
+          } else if (hasResourceInfo(service, selectedResource)) {
             // Use getResourceUsageFromField for custom resources
-            actorResourceInfo = getResourceUsageFromField(
-              actor,
+            serviceResourceInfo = getResourceUsageFromField(
+              service,
               selectedResource,
             );
           }
         }
   
-        // Draw actor background (empty part)
+        // Draw service background (empty part)
         sectionGroup
           .append("rect")
           .attr("x", 0)
           .attr("y", padding)
-          .attr("width", actorWidth)
-          .attr("height", actorHeight)
+          .attr("width", serviceWidth)
+          .attr("height", serviceHeight)
           .attr("fill", "#f5f5f5") // Light background for empty part
-          .attr("opacity", searchTerm && !actorMatchesSearchFn(actor) ? 0.3 : 1)
+          .attr("opacity", searchTerm && !serviceMatchesSearchFn(service) ? 0.3 : 1)
           .attr("stroke", "none")
           .attr("rx", 2)
           .attr("ry", 2);
   
         // Draw filled part based on resource usage
-        if (actorResourceInfo && actorResourceInfo.usage > 0) {
+        if (serviceResourceInfo && serviceResourceInfo.usage > 0) {
           sectionGroup
             .append("rect")
             .attr("x", 0)
             .attr("y", padding)
-            .attr("width", actorWidth * actorResourceInfo.usage)
-            .attr("height", actorHeight)
-            .attr("fill", getActorColor(actor))
+            .attr("width", serviceWidth * serviceResourceInfo.usage)
+            .attr("height", serviceHeight)
+            .attr("fill", getServiceColor(service))
             .attr(
               "opacity",
-              searchTerm && !actorMatchesSearchFn(actor) ? 0.3 : 0.7,
+              searchTerm && !serviceMatchesSearchFn(service) ? 0.3 : 0.7,
             )
             .attr("stroke", "none")
             .attr("rx", 2)
@@ -1936,46 +1933,46 @@ import {
           // Add dashed line divider at the boundary
           sectionGroup
             .append("line")
-            .attr("x1", actorWidth * actorResourceInfo.usage)
+            .attr("x1", serviceWidth * serviceResourceInfo.usage)
             .attr("y1", padding)
-            .attr("x2", actorWidth * actorResourceInfo.usage)
-            .attr("y2", padding + actorHeight)
+            .attr("x2", serviceWidth * serviceResourceInfo.usage)
+            .attr("y2", padding + serviceHeight)
             .attr("stroke", "#666")
             .attr("stroke-width", 1)
             .attr("stroke-dasharray", "3,2");
         }
   
         // Create a clipping path for text
-        const clipId = `actor-text-clip-${pgId}-${actorIndex}`;
+        const clipId = `service-text-clip-${pgId}-${serviceIndex}`;
         sectionGroup
           .append("clipPath")
           .attr("id", clipId)
           .append("rect")
-          .attr("width", actorWidth - 4) // Slight padding
-          .attr("height", actorHeight);
+          .attr("width", serviceWidth - 4) // Slight padding
+          .attr("height", serviceHeight);
   
-        // Add actor label with clipping
+        // Add service label with clipping
         sectionGroup
           .append("text")
-          .attr("x", actorWidth / 2)
-          .attr("y", actorHeight / 2 + padding)
+          .attr("x", serviceWidth / 2)
+          .attr("y", serviceHeight / 2 + padding)
           .attr("text-anchor", "middle")
           .attr("dominant-baseline", "middle")
           .attr("font-size", "10px")
           .attr("fill", "#000000")
           .attr("clip-path", `url(#${clipId})`)
-          .text(getActorContextValue(actor, selectedContext))
+          .text(getServiceContextValue(service, selectedContext))
           .append("title") // Add tooltip for full context value
-          .text(getActorContextValue(actor, selectedContext));
+          .text(getServiceContextValue(service, selectedContext));
   
-        // Add search highlight border if actor matches search
-        if (actorMatchesSearchFn(actor)) {
+        // Add search highlight border if service matches search
+        if (serviceMatchesSearchFn(service)) {
           sectionGroup
             .append("rect")
             .attr("x", 0)
             .attr("y", padding)
-            .attr("width", actorWidth)
-            .attr("height", actorHeight)
+            .attr("width", serviceWidth)
+            .attr("height", serviceHeight)
             .attr("fill", "none")
             .attr("stroke", "#4caf50")
             .attr("stroke-width", 2)
@@ -1986,155 +1983,153 @@ import {
             .attr("ry", 2);
         }
   
-        // Update currentX to include margin for next actor
-        currentX += actorWidth + actorMargin;
+        // Update currentX to include margin for next service
+        currentX += serviceWidth + serviceMargin;
       });
     });
   };
   
-  // Update renderFreeActors signature to include selectedContext
-  const renderFreeActors = (
+  // Update renderFreeServices signature to include selectedContext
+  const renderFreeServices = (
     nodeGroup: any,
-    freeActors: Actor[],
-    freeActorsY: number,
+    freeServices: Service[],
+    freeServicesY: number,
     pgWidth: number,
     pgHeight: number,
     colors: any,
     selectedElementId: string | null,
     onElementClick: (data: any, skip_zoom: boolean) => void,
-    getActorColor: (actor: Actor) => string,
-    actorMatchesSearchFn: (actor: Actor) => boolean,
+    getServiceColor: (service: Service) => string,
+    serviceMatchesSearchFn: (service: Service) => boolean,
     selectedResource: string,
     searchTerm: string | undefined,
     selectedContext: string,
   ) => {
-    if (freeActors.length === 0) {
+    if (freeServices.length === 0) {
       return;
     }
   
-    const actorMargin = 8;
+    const serviceMargin = 8;
     const topMargin = 4;
     const groupSpacing = 0; // Add consistent spacing
-    const pgPadding = 20; // Padding inside free actors group (10px on each side)
+    const pgPadding = 20; // Padding inside free services group (10px on each side)
   
-    // Available width for free actors (accounting for node padding)
+    // Available width for free services (accounting for node padding)
     const availableWidth = pgWidth - pgPadding;
   
     // Adjust the starting Y position to account for the increased spacing
-    const adjustedFreeActorsY = freeActorsY + groupSpacing;
+    const adjustedFreeServicesY = freeServicesY + groupSpacing;
   
-    const freeActorsGroup = nodeGroup
+    const freeServicesGroup = nodeGroup
       .append("g")
-      .attr("transform", `translate(10, ${adjustedFreeActorsY + topMargin})`)
-      .attr("class", "free-actors");
+      .attr("transform", `translate(10, ${adjustedFreeServicesY + topMargin})`)
+      .attr("class", "free-services");
   
-    // Calculate total width needed for all free actors including margins
-    const totalActorsWidth =
-      freeActors.length * ACTOR_WIDTH + (freeActors.length - 1) * actorMargin;
+    // Calculate total width needed for all free services including margins
+    const totalServicesWidth =
+      freeServices.length * SERVICE_WIDTH + (freeServices.length - 1) * serviceMargin;
   
-    // Calculate scale factor if total width exceeds available width
-    let containerWidth = totalActorsWidth + 20; // Add some padding
-    let scaleFactor = 1;
+    // Calculate scale fservice if total width exceeds available width
+    let containerWidth = totalServicesWidth + 20; // Add some padding
+    let scaleFservice = 1;
   
     if (containerWidth > availableWidth) {
-      scaleFactor = availableWidth / containerWidth;
+      scaleFservice = availableWidth / containerWidth;
       containerWidth = availableWidth;
     }
   
-    // Calculate starting X position to center actors
-    const startX = (containerWidth - totalActorsWidth * scaleFactor) / 2;
+    // Calculate starting X position to center services
+    const startX = (containerWidth - totalServicesWidth * scaleFservice) / 2;
   
-    // Draw free actor sections
+    // Draw free service sections
     let currentX = startX;
-    freeActors.forEach((actor, actorIndex) => {
-      if (!actor) {
+    freeServices.forEach((service, serviceIndex) => {
+      if (!service) {
         return;
       }
   
-      const actorWidth = ACTOR_WIDTH * scaleFactor;
+      const serviceWidth = SERVICE_WIDTH * scaleFservice;
   
       // Create clickable section group
-      const sectionGroup = freeActorsGroup
+      const sectionGroup = freeServicesGroup
         .append("g")
         .attr("transform", `translate(${currentX}, 0)`)
-        .attr("class", "actor-section")
-        .attr("data-id", actor.actorId || "unknown")
+        .attr("class", "service-section")
+        .attr("data-id", service.id || "unknown")
         .on("click", (event: any) => {
           event.stopPropagation();
           onElementClick(
             {
-              id: actor.actorId || "unknown",
-              type: "actor",
-              name: actor.name || `Actor${actorIndex + 1}`,
-              language: "python",
-              devices: actor.devices || [],
-              gpuDevices: actor.gpuDevices || [],
-              state: actor.state,
-              pid: actor.pid,
-              nodeId: actor.nodeId,
-              requiredResources: actor.requiredResources,
-              data: actor,
+              id: service.id || "unknown",
+              type: "service",
+              name: service.name || `Service${serviceIndex + 1}`,
+              gpuDevices: service.gpuDevices || [],
+              state: service.state,
+              pid: service.pid,
+              nodeId: service.nodeId,
+              requiredResources: service.requiredResources,
+              data: service,
             },
             true,
           );
         });
   
-      // Calculate actor dimensions with padding
+      // Calculate service dimensions with padding
       const padding = 0;
-      const actorHeight = ACTOR_HEIGHT;
+      const serviceHeight = SERVICE_HEIGHT;
   
-      // Get actor-level resource usage based on selected resource type
-      let actorResourceInfo: ResourceInfo | null = null;
+      // Get service-level resource usage based on selected resource type
+      let serviceResourceInfo: ResourceInfo | null = null;
       if (selectedResource) {
         if (
           selectedResource.toLowerCase() === "gpu" &&
-          hasResourceInfo(actor, "gpu")
+          hasResourceInfo(service, "gpu")
         ) {
-          actorResourceInfo = getActorGpuUsage(actor);
+          serviceResourceInfo = getServiceGpuUsage(service);
         } else if (
           selectedResource.toLowerCase() === "gpuutil" &&
-          hasResourceInfo(actor, "gpuutil")
+          hasResourceInfo(service, "gpuutil")
         ) {
-          actorResourceInfo = getActorGpuUtilization(actor);
+          serviceResourceInfo = getServiceGpuUtilization(service);
         } else if (
           selectedResource.toLowerCase() === "cpu" &&
-          hasResourceInfo(actor, "cpu")
+          hasResourceInfo(service, "cpu")
         ) {
-          actorResourceInfo = getActorCpuUsage(actor);
+          serviceResourceInfo = getServiceCpuUsage(service);
         } else if (
           selectedResource.toLowerCase() === "memory" &&
-          hasResourceInfo(actor, "memory")
+          hasResourceInfo(service, "memory")
         ) {
-          actorResourceInfo = getActorMemoryUsage(actor);
-        } else if (hasResourceInfo(actor, selectedResource)) {
+          serviceResourceInfo = getServiceMemoryUsage(service);
+        } else if (hasResourceInfo(service, selectedResource)) {
           // Use getResourceUsageFromField for custom resources
-          actorResourceInfo = getResourceUsageFromField(actor, selectedResource);
+          serviceResourceInfo = getResourceUsageFromField(service, selectedResource);
         }
       }
   
-      // Draw actor background (empty part)
+      // Draw service background (empty part)
       sectionGroup
         .append("rect")
         .attr("x", 0)
         .attr("y", padding)
-        .attr("width", actorWidth)
-        .attr("height", actorHeight)
+        .attr("width", serviceWidth)
+        .attr("height", serviceHeight)
         .attr("fill", "#f5f5f5") // Light background for empty part
-        .attr("opacity", searchTerm && !actorMatchesSearchFn(actor) ? 0.3 : 1)
+        .attr("opacity", searchTerm && !serviceMatchesSearchFn(service) ? 0.3 : 1)
         .attr("stroke", "none")
         .attr("rx", 2)
         .attr("ry", 2);
   
       // Draw filled part based on resource usage
-      if (actorResourceInfo && actorResourceInfo.usage > 0) {
+      if (serviceResourceInfo && serviceResourceInfo.usage > 0) {
         sectionGroup
           .append("rect")
           .attr("x", 0)
           .attr("y", padding)
-          .attr("width", actorWidth * actorResourceInfo.usage)
-          .attr("height", actorHeight)
-          .attr("fill", getActorColor(actor))
-          .attr("opacity", searchTerm && !actorMatchesSearchFn(actor) ? 0.3 : 0.7)
+          .attr("width", serviceWidth * serviceResourceInfo.usage)
+          .attr("height", serviceHeight)
+          .attr("fill", getServiceColor(service))
+          .attr("opacity", searchTerm && !serviceMatchesSearchFn(service) ? 0.3 : 0.7)
           .attr("stroke", "none")
           .attr("rx", 2)
           .attr("ry", 2);
@@ -2142,46 +2137,46 @@ import {
         // Add dashed line divider at the boundary
         sectionGroup
           .append("line")
-          .attr("x1", actorWidth * actorResourceInfo.usage)
+          .attr("x1", serviceWidth * serviceResourceInfo.usage)
           .attr("y1", padding)
-          .attr("x2", actorWidth * actorResourceInfo.usage)
-          .attr("y2", padding + actorHeight)
+          .attr("x2", serviceWidth * serviceResourceInfo.usage)
+          .attr("y2", padding + serviceHeight)
           .attr("stroke", "#666")
           .attr("stroke-width", 1)
           .attr("stroke-dasharray", "3,2");
       }
   
       // Create a clipping path for text
-      const clipId = `free-actor-text-clip-${actorIndex}`;
+      const clipId = `free-service-text-clip-${serviceIndex}`;
       sectionGroup
         .append("clipPath")
         .attr("id", clipId)
         .append("rect")
-        .attr("width", actorWidth - 4) // Slight padding
-        .attr("height", actorHeight);
+        .attr("width", serviceWidth - 4) // Slight padding
+        .attr("height", serviceHeight);
   
-      // Add actor label with clipping
+      // Add service label with clipping
       sectionGroup
         .append("text")
-        .attr("x", actorWidth / 2)
-        .attr("y", actorHeight / 2 + padding)
+        .attr("x", serviceWidth / 2)
+        .attr("y", serviceHeight / 2 + padding)
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "middle")
         .attr("font-size", "10px")
         .attr("fill", "#000000")
         .attr("clip-path", `url(#${clipId})`)
-        .text(getActorContextValue(actor, selectedContext))
+        .text(getServiceContextValue(service, selectedContext))
         .append("title") // Add tooltip for full context value
-        .text(getActorContextValue(actor, selectedContext));
+        .text(getServiceContextValue(service, selectedContext));
   
-      // Add search highlight border if actor matches search
-      if (actorMatchesSearchFn(actor)) {
+      // Add search highlight border if service matches search
+      if (serviceMatchesSearchFn(service)) {
         sectionGroup
           .append("rect")
           .attr("x", 0)
           .attr("y", padding)
-          .attr("width", actorWidth)
-          .attr("height", actorHeight)
+          .attr("width", serviceWidth)
+          .attr("height", serviceHeight)
           .attr("fill", "none")
           .attr("stroke", "#4caf50")
           .attr("stroke-width", 2)
@@ -2192,23 +2187,23 @@ import {
           .attr("ry", 2);
       }
   
-      // Update currentX to include margin for next actor
-      currentX += actorWidth + actorMargin;
+      // Update currentX to include margin for next service
+      currentX += serviceWidth + serviceMargin;
     });
   };
   
   // Add a new helper function to get resource usage from resource_usage field
-  const getResourceUsageFromField = (actor: Actor, resourceType: string): any => {
-    if (!actor.resourceUsage) {
+  const getResourceUsageFromField = (service: Service, resourceType: string): any => {
+    if (!service.resourceUsage) {
       return null;
     }
   
     // Check if the requested resource exists in the usage data
-    if (!actor.resourceUsage[resourceType]) {
+    if (!service.resourceUsage[resourceType]) {
       return null;
     }
   
-    const resourceData = actor.resourceUsage[resourceType];
+    const resourceData = service.resourceUsage[resourceType];
     const usageValue = resourceData.used;
     const baseResource = resourceData.base;
     let total = 0;
@@ -2216,21 +2211,21 @@ import {
     // Get total based on the base field
     if (
       baseResource.toLowerCase() === "gpu" &&
-      actor.gpuDevices &&
-      actor.gpuDevices.length > 0
+      service.gpuDevices &&
+      service.gpuDevices.length > 0
     ) {
       // Use GPU memory as total
-      total = actor.gpuDevices[0].memoryTotal;
+      total = service.gpuDevices[0].memoryTotal;
     } else if (baseResource.toLowerCase() === "cpu") {
       // Use 100 as total for CPU percentage
       total = 100;
     } else if (
       baseResource.toLowerCase() === "memory" &&
-      actor.nodeMem &&
-      actor.nodeMem.length >= 1
+      service.nodeMem &&
+      service.nodeMem.length >= 1
     ) {
       // Use node memory as total
-      total = actor.nodeMem[0];
+      total = service.nodeMem[0];
     } else if (baseResource.toLowerCase() === resourceType.toLowerCase()) {
       // If base is the same as resource type, assume usage is a percentage
       total = 100;

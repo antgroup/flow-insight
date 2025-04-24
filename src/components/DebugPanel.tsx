@@ -305,7 +305,6 @@ const SourceCodeView: React.FC<{
         }}
       >
         <SyntaxHighlighter
-          language="python"
           style={atomDark}
           {...codeWithLineNumbers}
           wrapLongLines={false}
@@ -417,15 +416,15 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     }
 
     try {
-      let className = "";
+      let serviceName = "";
       const funcName = selectedElement.name;
 
-      // If it's a method, get the actor class name
-      if (selectedElement.type === "method" && selectedElement.actorId) {
-        className = selectedElement.actorName + ":" + selectedElement.actorId;
+      // If it's a method, get the service name and instance id
+      if (selectedElement.type === "method" && selectedElement.instanceId) {
+        serviceName = selectedElement.serviceName + ":" + selectedElement.instanceId;
       }
 
-      const sessions = await apiService.getDebugSessions(jobId, className, funcName);
+      const sessions = await apiService.getDebugSessions(jobId, serviceName, funcName);
       setSessions(sessions);
     } catch (error) {
       console.error("Failed to fetch debug sessions:", error);
@@ -441,14 +440,14 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     try {
       const activeSessions = await apiService.getActiveDebugSessions(jobId);
       setActiveSessions(activeSessions);
-      const className = selectedElement?.actorId
-        ? selectedElement?.actorName + ":" + selectedElement?.actorId
+      const serviceName = selectedElement?.instanceId
+        ? selectedElement?.serviceName + ":" + selectedElement?.instanceId
         : "";
       const funcName = selectedElement?.name;
       const currentActiveSessions = sessions.find(
         (session) =>
           session.taskId === selectedSession &&
-          session.className === className &&
+          session.serviceName === serviceName &&
           session.funcName === funcName,
       );
       if (!currentActiveSessions) {
@@ -553,7 +552,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     try {
       const result = await apiService.activateDebugSession(
         jobId,
-        session.className,
+        session.serviceName,
         session.funcName,
         session.taskId,
       );

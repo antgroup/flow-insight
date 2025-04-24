@@ -1,11 +1,8 @@
 // Basic Node Types
-export type Actor = {
+export type Service = {
   id: string;
-  actorId: string;
   name: string;
-  language: string;
-  type: "actor";
-  devices: string[];
+  type: "service";
   gpuDevices?: Array<{
     index: number;
     name: string;
@@ -48,26 +45,23 @@ export type Actor = {
 
 export type Method = {
   id: string;
-  actorId?: string;
+  instanceId: string;
   name: string;
-  language: string;
-  actorName?: string;
+  serviceName?: string;
   type?: "method";
 };
 
 export type FunctionNode = {
   id: string;
   name: string;
-  language: string;
-  actorId?: string;
   type?: "function";
 };
 
-export type ElementData = Actor | Method | FunctionNode;
+export type ElementData = Service | Method | FunctionNode;
 
 // Graph Data Types
 export type GraphData = {
-  actors: Actor[];
+  services: Service[];
   methods: Method[];
   functions: FunctionNode[];
   callFlows: {
@@ -89,7 +83,7 @@ export type GraphData = {
 
 // Debug Types
 export type DebugSession = {
-  className: string;
+  serviceName: string;
   funcName: string;
   taskId: string;
 };
@@ -116,7 +110,7 @@ export type ResourceUsageInfo = {
 
 export type NodeData = {
   resources: Record<string, ResourceValue>;
-  actors: Record<string, Actor>;
+  services: Record<string, Service>;
   gpus?: Array<{
     index: number;
     name: string;
@@ -129,33 +123,23 @@ export type NodeData = {
       gpuMemoryUsage: number;
     }>;
   }>;
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  class?: string;
-  originalData?: any;
-  actorName?: string;
-  actorId?: string;
 };
 
 export type PhysicalViewData = {
   physicalView: Record<string, NodeData>;
-  nodes: Record<string, NodeData>;
-  placementGroups: Record<string, string[]>;
 };
 
 export type FlameGraphNode = {
-  name: string;
+  name: string[];
   value: number;
   count?: number;
   totalInParent?: Array<{
-    callerNodeId: string;
+    callerNodeId: string[];
     duration: number;
     count: number;
     startTime: number;
   }>;
-  actorName?: string;
+  serviceName?: string;
 };
 
 export type FlameGraphData = {
@@ -165,17 +149,17 @@ export type FlameGraphData = {
     startTime: number;
     endTime: number;
     duration: number;
-    callerClass: string | null;
+    callerService: string | null;
     callerFunc: string;
-    actorName: string | null;
-    actorState?: string;
+    serviceName: string | null;
+    serviceState?: string;
     parentId?: string;
   }>;
   aggregated: FlameGraphNode[];
   parentStartTimes: Array<{
-    calleeId: string;
+    calleeId: string[];
     startTimes: Array<{
-      callerId: string;
+      callerId: string[];
       startTime: number;
     }>;
   }>;

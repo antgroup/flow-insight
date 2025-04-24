@@ -33,10 +33,10 @@ type FlameVisualizationProps = {
 };
 
 type FlameNode = {
-  name: string;
+  name: string[];
   customValue: number;
   totalInParent?: Array<{
-    callerNodeId: string;
+    callerNodeId: string[];
     duration: number;
     count: number;
     startTime: number;
@@ -49,7 +49,7 @@ type FlameNode = {
   fade?: boolean;
   highlight?: boolean;
   dimmed?: boolean; // Add dimmed property
-  actorName?: string;
+  serviceName?: string;
   value?: number;
   delta?: number;
   isRunning?: boolean;
@@ -73,16 +73,19 @@ type PartitionHierarchyNode = d3.HierarchyNode<FlameNode> & {
 };
 
 // Generate a hash value between 0 and 1 based on function name
-const generateHash = (name: string): number => {
+const generateHash = (name: string[] | string): number => {
   const MAX_CHAR = 6;
   let hash = 0;
   let maxHash = 0;
   let weight = 1;
   const mod = 10;
 
-  if (name) {
-    for (let i = 0; i < Math.min(name.length, MAX_CHAR); i++) {
-      hash += weight * (name.charCodeAt(i) % mod);
+  // Convert array to string if needed
+  const nameStr = Array.isArray(name) ? name.join('.') : name;
+
+  if (nameStr) {
+    for (let i = 0; i < Math.min(nameStr.length, MAX_CHAR); i++) {
+      hash += weight * (nameStr.charCodeAt(i) % mod);
       maxHash += weight * (mod - 1);
       weight *= 0.7;
     }
@@ -94,15 +97,12 @@ const generateHash = (name: string): number => {
 };
 
 // Generate a color vector based on the function name
-const generateColorVector = (name: string): number => {
+const generateColorVector = (name: string[] | string): number => {
   let vector = 0;
   if (name) {
-    const nameArr = name.split("`");
-    if (nameArr.length > 1) {
-      name = nameArr[nameArr.length - 1]; // drop module name if present
-    }
-    name = name.split("(")[0]; // drop extra info
-    vector = generateHash(name);
+    // For array names, use the last element (method/function name)
+    const nameToUse = Array.isArray(name) ? name[name.length - 1] : name;
+    vector = generateHash(nameToUse);
   }
   return vector;
 };
@@ -320,11 +320,36 @@ const FlameVisualization = forwardRef<
     const chartRef = useRef<any>(null);
     const svgRef = useRef<SVGSVGElement | null>(null);
 
+    // Move getName here so it's accessible to all child functions
+    const getName = (d: PartitionHierarchyNode) => {
+      const name: string[] = d.data.name;
+      if (!name || name.length === 0) {
+        return "";
+      }
+      if (name.length === 1 && name[0] === "_main") {
+        return "main";
+      }
+
+      // Handle array-based names
+      if (name.length === 3) {
+        // Service method: [ServiceName, InstanceID, MethodName]
+        const [serviceName, _, methodName] = name;
+        // Use service_name from the data if available, otherwise fallback to service_name from array
+        return `${d.data.serviceName || serviceName}.${methodName}`;
+      } else if (name.length === 1) {
+        // Regular function: [FuncName]
+        return name[0];
+      }
+      
+      // Fallback: join with dots
+      return name.join('.');
+    };
+
     const generatePathId = (node: d3.HierarchyNode<FlameNode>): string => {
       const path: string[] = [];
       let current: typeof node | null = node;
       while (current) {
-        path.unshift(current.data.name);
+        path.unshift(...current.data.name);
         current = current.parent;
       }
       return path.join("->");
@@ -408,31 +433,6 @@ const FlameVisualization = forwardRef<
         }
       };
 
-      const getName = (d: PartitionHierarchyNode) => {
-        const name = d.data.name;
-        if (!name) {
-          return "";
-        }
-        if (name === "_main") {
-          return "main";
-        }
-
-        // Check if the name follows the expected format: actor_class:actor_id.func
-        const match = name.match(/^(.+?):(.+?)\.(.+)$/);
-        if (match) {
-          const [_, actorClass, _1, func] = match; // eslint-disable-line
-          // Use actor_name from the data if available, otherwise fallback to actor_id
-          const actorName = d.data.actorName;
-          if (actorName) {
-            return `${actorName}.${func}`;
-          }
-          return `${actorClass}.${func}`;
-        }
-
-        // If the name doesn't match the expected format, return it as is
-        return name;
-      };
-
       const getValue = (d: PartitionHierarchyNode) => {
         // Return the normalized value for sizing
         return d.customValue !== undefined ? d.customValue : d.value || 0;
@@ -505,7 +505,7 @@ const FlameVisualization = forwardRef<
           resetNodes(root, nodeHierarchy);
           update();
         }
-        if (d.data.name === "_main") {
+        if (d.data.name.length === 1 && d.data.name[0] === "_main") {
           return;
         }
 
@@ -591,7 +591,7 @@ const FlameVisualization = forwardRef<
           node: PartitionHierarchyNode,
           path: string[] = [],
         ) => {
-          const currentPath = [...path, node.data.name];
+          const currentPath = [...path, ...node.data.name];
           const pathKey = currentPath.join("->");
 
           const isMatch = searchMatch(node, term);
@@ -620,7 +620,7 @@ const FlameVisualization = forwardRef<
           node: PartitionHierarchyNode,
           path: string[] = [],
         ) => {
-          const currentPath = [...path, node.data.name];
+          const currentPath = [...path, ...node.data.name];
           const pathKey = currentPath.join("->");
 
           // Clear previous highlighting/dimming
@@ -1311,160 +1311,134 @@ const FlameVisualization = forwardRef<
         .onClick((d: PartitionHierarchyNode) => {
           // Extract function/method name and actor information
           const nodeName = d.data.name;
-          const actorName = d.data.actorName;
+          const serviceName = d.data.serviceName;
 
-          // Check if the name follows the expected format: actor_class:actor_id.func
-          const match = nodeName.match(/^(.+?):(.+?)\.(.+)$/);
+          // Handle array-based names
+          if (Array.isArray(nodeName)) {
+            if (nodeName.length === 3) {
+              // This is a service method: [ServiceName, InstanceID, MethodName]
+              const [serviceCls, instanceId, funcName] = nodeName;
 
-          if (match) {
-            // This is an actor method
-            const [_, actorClass, actorId, funcName] = match; // eslint-disable-line
+              // Try to find the service in physicalViewData if available
+              let serviceGpuDevices: any[] = [];
 
-            // Try to find the actor in physicalViewData if available
-            let actorDevices: string[] = [];
-            let actorGpuDevices: any[] = [];
-
-            if (physicalViewData && physicalViewData.physicalView) {
-              // Look through all nodes in physicalViewData
-              // eslint-disable-next-line
-              for (const [_, nodeData] of Object.entries(
-                physicalViewData.physicalView,
-              )) {
-                if (nodeData.actors && nodeData.actors[actorId]) {
-                  const physicalActor = nodeData.actors[actorId];
-                  // Use type assertion to access potential extended properties
-                  const extendedActor = physicalActor as any;
-                  if (
-                    extendedActor.devices &&
-                    Array.isArray(extendedActor.devices)
-                  ) {
-                    actorDevices = extendedActor.devices;
-                  }
-
-                  // If the actor has gpuDevices directly
-                  if (
-                    extendedActor.gpuDevices &&
-                    Array.isArray(extendedActor.gpuDevices)
-                  ) {
-                    actorGpuDevices = extendedActor.gpuDevices;
-                  }
-                  // If the node has GPUs and the actor has a pid, try to match GPU by pid
-                  else if (physicalActor.pid) {
+              if (physicalViewData && physicalViewData.physicalView) {
+                // Look through all nodes in physicalViewData
+                for (const [_, nodeData] of Object.entries(physicalViewData.physicalView)) {
+                  if (nodeData.services && nodeData.services[instanceId]) {
+                    const physicalService = nodeData.services[instanceId];
                     // Use type assertion to access potential extended properties
-                    const extendedNodeData = nodeData as any;
-                    if (
-                      extendedNodeData.gpus &&
-                      Array.isArray(extendedNodeData.gpus)
-                    ) {
-                      const actorPid = physicalActor.pid;
-                      const matchingGpus = extendedNodeData.gpus.filter(
-                        (gpu: any) =>
-                          gpu.processesPids &&
-                          Array.isArray(gpu.processesPids) &&
-                          gpu.processesPids.some(
-                            (process: any) => process.pid === actorPid,
-                          ),
-                      );
+                    const extendedService = physicalService as any;
 
-                      if (matchingGpus.length > 0) {
-                        actorGpuDevices = matchingGpus;
+                    // If the service has gpuDevices directly
+                    if (extendedService.gpuDevices && Array.isArray(extendedService.gpuDevices)) {
+                      serviceGpuDevices = extendedService.gpuDevices;
+                    }
+                    // If the node has GPUs and the actor has a pid, try to match GPU by pid
+                    else if (physicalService.pid) {
+                      // Use type assertion to access potential extended properties
+                      const extendedNodeData = nodeData as any;
+                      if (extendedNodeData.gpus && Array.isArray(extendedNodeData.gpus)) {
+                        const servicePid = physicalService.pid;
+                        const matchingGpus = extendedNodeData.gpus.filter(
+                          (gpu: any) =>
+                            gpu.processesPids &&
+                            Array.isArray(gpu.processesPids) &&
+                            gpu.processesPids.some((process: any) => process.pid === servicePid),
+                        );
+
+                        if (matchingGpus.length > 0) {
+                          serviceGpuDevices = matchingGpus;
+                        }
                       }
                     }
+                    break;
                   }
-                  break;
                 }
               }
-            }
 
-            if (graphData) {
-              const method = graphData.methods.find(
-                (m) => m.name === funcName && m.actorId === actorId,
+              if (graphData) {
+                const method = graphData.methods.find(
+                  (m) => m.name === funcName && m.id === instanceId,
+                );
+
+                if (method) {
+                  // If we found the function in graphData, use that data
+                  onElementClick(
+                    {
+                      id: method.id,
+                      type: "method",
+                      name: method.name,
+                      gpuDevices: serviceGpuDevices,
+                      data: {
+                        ...d.data,
+                        duration: d.data.originalValue,
+                        count: d.data.count,
+                      },
+                    },
+                    true,
+                  );
+                  return;
+                }
+              }
+
+              onElementClick(
+                {
+                  id: instanceId,
+                  type: "method",
+                  name: funcName,
+                  serviceName: serviceName || serviceCls,
+                  gpuDevices: serviceGpuDevices,
+                  data: {
+                    ...d.data,
+                    duration: d.data.originalValue,
+                    count: d.data.count,
+                  },
+                },
+                true,
               );
+            } else if (nodeName.length === 1) {
+              // This is a regular function: [FuncName]
+              const funcName = nodeName[0];
+              if (graphData) {
+                const func = graphData.functions.find((f) => f.name === funcName);
 
-              if (method) {
-                // If we found the function in graphData, use that data
-                onElementClick(
-                  {
-                    id: method.id,
-                    type: "method",
-                    name: method.name,
-                    language: method.language || "python",
-                    devices: actorDevices,
-                    gpuDevices: actorGpuDevices,
-                    data: {
-                      ...d.data,
-                      duration: d.data.originalValue,
-                      count: d.data.count,
+                if (func) {
+                  // If we found the function in graphData, use that data
+                  onElementClick(
+                    {
+                      id: func.id,
+                      type: "function",
+                      name: func.name,
+                      gpuDevices: [],
+                      data: {
+                        ...d.data,
+                        duration: d.data.originalValue,
+                        count: d.data.count,
+                      },
                     },
-                  },
-                  true,
-                );
-                return;
+                    true,
+                  );
+                  return;
+                }
               }
-            }
 
-            onElementClick(
-              {
-                id: actorId,
-                type: "method",
-                name: funcName,
-                language: "python",
-                actorId: actorId,
-                actorName: actorName || actorClass,
-                devices: actorDevices,
-                gpuDevices: actorGpuDevices,
-                data: {
-                  ...d.data,
-                  duration: d.data.originalValue,
-                  count: d.data.count,
-                },
-              },
-              true,
-            );
-          } else {
-            // This is a regular function
-            if (graphData) {
-              const func = graphData.functions.find((f) => f.name === nodeName);
-
-              if (func) {
-                // If we found the function in graphData, use that data
-                onElementClick(
-                  {
-                    id: func.id,
-                    type: "function",
-                    name: func.name,
-                    language: func.language || "python",
-                    devices: [],
-                    gpuDevices: [],
-                    data: {
-                      ...d.data,
-                      duration: d.data.originalValue,
-                      count: d.data.count,
-                    },
+              // Create a function object with the information we have
+              onElementClick(
+                {
+                  id: funcName,
+                  type: "function",
+                  name: funcName,
+                  gpuDevices: [],
+                  data: {
+                    ...d.data,
+                    duration: d.data.originalValue,
+                    count: d.data.count,
                   },
-                  true,
-                );
-                return;
-              }
-            }
-
-            // Create a function object with the information we have
-            onElementClick(
-              {
-                id: nodeName,
-                type: "function",
-                name: nodeName,
-                language: "python",
-                devices: [],
-                gpuDevices: [],
-                data: {
-                  ...d.data,
-                  duration: d.data.originalValue,
-                  count: d.data.count,
                 },
-              },
-              true,
-            );
+                true,
+              );
+            }
           }
         });
 
@@ -1490,17 +1464,12 @@ const FlameVisualization = forwardRef<
           }
 
           // Format name consistently with node display
-          let displayName = d.data.name;
-          const match = displayName.match(/^(.+?):(.+?)\.(.+)$/);
-          let actorId: string | undefined;
-          if (match) {
-            const [_, actorClass, matchActorId, func] = match; // eslint-disable-line
-            if (d.data.actorName) {
-              displayName = `${d.data.actorName}.${func}`;
-            } else {
-              displayName = `${actorClass}.${func}`;
-            }
-            actorId = matchActorId;
+          let displayName = getName(d);
+          let instanceId: string | undefined;
+          
+          // Extract instance ID if it's a service method
+          if (Array.isArray(d.data.name) && d.data.name.length === 3) {
+            instanceId = d.data.name[1];
           }
 
           let durationLabel = "Duration";
@@ -1511,14 +1480,10 @@ const FlameVisualization = forwardRef<
           tooltip.style("visibility", "visible").html(`
             <div style="font-family: Verdana, sans-serif;">
               <strong>${displayName}</strong><br/>
-              ${actorId ? `Actor ID: ${actorId}<br/>` : ""}
+              ${instanceId ? `Instance ID: ${instanceId}<br/>` : ""}
               ${durationLabel}: ${formattedValue}s<br/>
               ${d.data.count ? `Count: ${d.data.count}<br/>` : ""}
-              ${
-                d.parent
-                  ? `Percentage in parent: ${percentageOfParent.toFixed(1)}%`
-                  : ""
-              }
+              ${d.parent ? `Percentage in parent: ${percentageOfParent.toFixed(1)}%` : ""}
             </div>
           `);
 
@@ -1695,7 +1660,7 @@ const FlameVisualization = forwardRef<
         !Array.isArray(data.aggregated)
       ) {
         console.warn("Invalid flame graph data format:", data);
-        return { name: "_root", customValue: 0, children: [] };
+        return { name: ["_root"], customValue: 0, children: [] };
       }
 
       // Find max value for normalization
@@ -1716,7 +1681,7 @@ const FlameVisualization = forwardRef<
       }
 
       // Create a map of function names to their nodes for quick lookup
-      const nodeMap = new Map<string, FlameNode>();
+      const nodeMap = new Map<string[], FlameNode>();
 
       // First pass: create all nodes with normalized values
       data.aggregated.forEach((node) => {
@@ -1768,33 +1733,33 @@ const FlameVisualization = forwardRef<
           totalInParent: node.totalInParent,
           count: node.count || 0,
           children: [], // Initialize with empty array
-          actorName: node.actorName, // Add actorName property
+          serviceName: node.serviceName, // Add actorName property
         });
       });
 
       // Add this before the second pass:
       const addedAsChild = new Set<string>();
       const mainNode: FlameNode = {
-        name: "_main",
+        name: ["_main"],
         customValue: 0, // Will be calculated based on children
         originalValue: 0,
         children: [],
-        actorName: "_main",
+        serviceName: "_main",
         totalInParent: [],
       };
-      nodeMap.set("_main", mainNode);
+      nodeMap.set(["_main"], mainNode);
 
       const fillParent = (
-        nodeMap: Map<string, FlameNode>,
+        nodeMap: Map<string[], FlameNode>,
         data: FlameGraphData,
         nodeData: FlameNode,
-        callerNodeId: string,
+        callerNodeId: string[],
         startTime: number,
         duration: number,
         count: number,
         isRunning: boolean,
       ) => {
-        addedAsChild.add(nodeData.name);
+        addedAsChild.add(nodeData.name.join("->"));
         const parentNode = nodeMap.get(callerNodeId);
 
         const nodeDataCopy: FlameNode = {
@@ -1804,7 +1769,7 @@ const FlameVisualization = forwardRef<
           count: count,
           startTime: startTime,
           children: nodeData.children ? [...nodeData.children] : [],
-          actorName: nodeData.actorName,
+          serviceName: nodeData.serviceName,
           hide: nodeData.hide,
           fade: nodeData.fade,
           highlight: nodeData.highlight,
@@ -1825,7 +1790,7 @@ const FlameVisualization = forwardRef<
           return;
         } else {
           const startTimes = data.parentStartTimes.find(
-            (item) => item.calleeId === callerNodeId,
+            (item) => item.calleeId.join("->") === callerNodeId.join("->"),
           )?.startTimes;
           if (startTimes) {
             for (const { callerId, startTime } of startTimes) {
@@ -1834,7 +1799,7 @@ const FlameVisualization = forwardRef<
                 originalValue = Date.now() / 1000 - startTime; // Convert to seconds since startTime is in seconds
               }
               const parentDataCopy: FlameNode = {
-                name: callerNodeId,
+                name: callerId,
                 customValue: originalValue,
                 count: 1,
                 originalValue: originalValue,
@@ -1844,10 +1809,10 @@ const FlameVisualization = forwardRef<
                 totalInParent: [],
                 isRunning: true,
               };
-              nodeMap.set(callerNodeId, parentDataCopy);
+              nodeMap.set(callerId, parentDataCopy);
               const ancester = nodeMap.get(callerId);
               if (ancester) {
-                addedAsChild.add(callerNodeId);
+                addedAsChild.add(callerId.join("->"));
                 ancester.children?.push(parentDataCopy);
               } else {
                 fillParent(
@@ -1953,7 +1918,7 @@ const FlameVisualization = forwardRef<
       const childrens = new Set<string>();
       if (mainNode.children) {
         for (const child of mainNode.children) {
-          childrens.add(child.name);
+          childrens.add(child.name.join("->"));
         }
       }
 
@@ -1961,9 +1926,9 @@ const FlameVisualization = forwardRef<
         ...(mainNode.children || []),
         ...Array.from(nodeMap.values()).filter(
           (node) =>
-            !addedAsChild.has(node.name) &&
-            node.name !== "_main" &&
-            !childrens.has(node.name),
+            !addedAsChild.has(node.name.join("->")) &&
+            node.name.length === 1 &&
+            !childrens.has(node.name.join("->")),
         ),
       ];
       // Calculate total value of all children

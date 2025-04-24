@@ -177,8 +177,8 @@
     cursor: pointer;
   }
   
-  /* Actor node styles in force layout */
-  .actor rect {
+  /* service node styles in force layout */
+  .service rect {
     transition: fill 0.3s;
   }
   
@@ -188,27 +188,27 @@
     stroke-width: 2px;
   }
   
-  /* Actor group boundaries styling */
-  .actor-groups rect {
+  /* service group boundaries styling */
+  .service-groups rect {
     pointer-events: none;
     opacity: 0.7;
   }
   
-  .actor-groups rect:hover {
+  .service-groups rect:hover {
     stroke-width: 3px;
     opacity: 1;
   }
   
   /* Force layout specific styles */
-  .nodes .actor {
+  .nodes .service {
     filter: drop-shadow(0px 3px 5px rgba(0, 0, 0, 0.2));
   }
   
-  .nodes .actor rect {
+  .nodes .service rect {
     transition: fill 0.2s ease;
   }
   
-  .nodes .actor:hover rect {
+  .nodes .service:hover rect {
     fill: #f0f0f0;
   }
   
@@ -217,7 +217,7 @@
   }
   
   /* Style for parent nodes */
-  .nodes g[class*="actor"] rect {
+  .nodes g[class*="service"] rect {
     stroke-width: 2px;
   }
   
@@ -276,7 +276,7 @@
   }
   
   /* Cursor styles for draggable vs non-draggable */
-  .nodes .actor {
+  .nodes .service {
     cursor: move;
   }
   
@@ -295,7 +295,7 @@
   }
   
   /* Indicate draggable items */
-  .nodes .actor:hover rect {
+  .nodes .service:hover rect {
     filter: brightness(1.1);
     stroke-width: 2.5px;
   }
@@ -330,7 +330,7 @@
   }
   
   /* Primary group members should be visually distinct */
-  .nodes g.actor[superparentid="primary-group"] rect {
+  .nodes g.service[superparentid="primary-group"] rect {
     filter: drop-shadow(0px 2px 4px rgba(24, 144, 255, 0.4));
   }
   
@@ -447,16 +447,16 @@
     fill: #333;
   }
   
-  /* Actor section styles with updated colors */
-  .actor-section rect {
+  /* service section styles with updated colors */
+  .service-section rect {
     transition: opacity 0.2s ease;
   }
   
-  .actor-section:hover rect {
+  .service-section:hover rect {
     opacity: 0.9;
   }
   
-  .actor-section text {
+  .service-section text {
     pointer-events: none;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-weight: 500;
@@ -468,8 +468,8 @@
     cursor: default;
   }
   
-  /* Free actors section styles without labels */
-  .free-actors {
+  /* Free services section styles without labels */
+  .free-services {
     cursor: default;
   }
   

@@ -17,13 +17,9 @@ import "./Visualization.css";
 import { GraphData, Method } from "../types";
 
 export const colorScheme = {
-    actorPython: "#90CAF9", // Material Blue 200 - Light blue for Python actors
-    actorJava: "#B39DDB", // Material Deep Purple 200 - Light purple for Java actors
-    actorCpp: "#F48FB1", // Material Pink 200 - Light pink for C++ actors
+    service: "#90CAF9", // Material Blue 200 - Light blue for services
     method: "#80CBC4", // Material Teal 200 - Light teal for methods
-    functionPython: "#FFE082", // Material Amber 200 - Light amber for Python functions
-    functionJava: "#9FA8DA", // Material Indigo 200 - Light indigo for Java functions
-    functionCpp: "#EF9A9A", // Material Red 200 - Light red for C++ functions
+    function: "#FFE082", // Material Amber 200 - Light amber for functions
   };
 
 type VisualizationProps = {
@@ -52,8 +48,8 @@ type NodeData = {
   height: number;
   class?: string;
   originalData?: any;
-  actorName?: string;
-  actorId?: string;
+  serviceName?: string;
+  instanceId?: string;
 };
 
 type GraphMap = {
@@ -237,10 +233,8 @@ const Visualization = forwardRef<
             nodeScale = 0.6; // Small nodes (increased from 0.3)
           }
 
-          // Special handling for actor/cluster nodes
-          if (nodeData.class === "actor" || nodeData.class === "cluster") {
-            // Actors still need to be zoomed out more to show their children
-            // But use a less aggressive reduction factor
+          // Special handling for service/cluster nodes
+          if (nodeData.class === "service" || nodeData.class === "cluster") {
             nodeScale *= 0.8; // Increased from 0.7
           }
 
@@ -307,15 +301,15 @@ const Visualization = forwardRef<
             }
           });
 
-          // Check if the selected node is an actor
-          const isActor = nodeData && nodeData.class === "actor";
+          // Check if the selected node is an service
+          const isService = nodeData && nodeData.class === "service";
 
-          // If it's an actor, find all its methods
+          // If it's an service, find all its methods
           const relatedNodeIds = [selectedElementId];
-          if (isActor) {
-            // Find all methods that belong to this actor
+          if (isService) {
+            // Find all methods that belong to this service
             graphData.methods.forEach((method) => {
-              if (method.actorId === selectedElementId) {
+              if (method.instanceId === selectedElementId) {
                 relatedNodeIds.push(method.id);
               }
             });
@@ -493,9 +487,7 @@ const Visualization = forwardRef<
         }
 
         const searchTermLower = searchTerm.toLowerCase();
-        const nodeType =
-          node.type ||
-          (node.actorId ? "method" : node.language ? "function" : "actor");
+        const nodeType = node.type;
 
         // Check node ID
         if (node.id && node.id.toLowerCase().includes(searchTermLower)) {
@@ -507,12 +499,12 @@ const Visualization = forwardRef<
           return true;
         }
 
-        // Only check actor name for actors, not for methods
-        // This prevents methods from being highlighted when searching for an actor
+        // Only check service name for services, not for methods
+        // This prevents methods from being highlighted when searching for an service
         if (
-          nodeType === "actor" &&
-          node.actorName &&
-          node.actorName.toLowerCase().includes(searchTermLower)
+          nodeType === "service" &&
+          node.serviceName &&
+          node.serviceName.toLowerCase().includes(searchTermLower)
         ) {
           return true;
         }
@@ -529,14 +521,12 @@ const Visualization = forwardRef<
           return false;
         }
 
-        const nodeType =
-          node.type ||
-          (node.actorId ? "method" : node.language ? "function" : "actor");
+        const nodeType = node.type;
 
         return activeDebugSessions.some((session) => {
           if (nodeType === "method") {
             return (
-              node.actorName + ":" + node.actorId === session.className &&
+              node.serviceName + ":" + node.instanceId === session.serviceName &&
               node.name === session.funcName
             );
           } else if (nodeType === "function") {
@@ -553,7 +543,7 @@ const Visualization = forwardRef<
 
         // Initialize graph with all nodes
         const allNodes = [
-          ...graphData.actors.map((actor) => actor.id),
+          ...graphData.services.map((service) => service.id),
           ...graphData.methods.map((method) => method.id),
           ...graphData.functions.map((func) => func.id),
         ];
@@ -568,7 +558,7 @@ const Visualization = forwardRef<
             graph[flow.source].push(flow.target);
             graph[flow.target].push(flow.source);
 
-            // If methods from different actors are connected, connect the actors
+            // If methods from different services are connected, connect the services
             const sourceMethod = graphData.methods.find(
               (method) => method.id === flow.source,
             );
@@ -579,13 +569,13 @@ const Visualization = forwardRef<
             if (
               sourceMethod &&
               targetMethod &&
-              sourceMethod.actorId &&
-              targetMethod.actorId &&
-              sourceMethod.actorId !== targetMethod.actorId
+              sourceMethod.instanceId &&
+              targetMethod.instanceId &&
+              sourceMethod.instanceId !== targetMethod.instanceId
             ) {
-              // Connect the two actors
-              graph[sourceMethod.actorId].push(targetMethod.actorId);
-              graph[targetMethod.actorId].push(sourceMethod.actorId);
+              // Connect the two services
+              graph[sourceMethod.instanceId].push(targetMethod.instanceId);
+              graph[targetMethod.instanceId].push(sourceMethod.instanceId);
             }
           }
         });
@@ -596,7 +586,7 @@ const Visualization = forwardRef<
             graph[flow.source].push(flow.target);
             graph[flow.target].push(flow.source);
 
-            // If methods from different actors are connected, connect the actors
+            // If methods from different services are connected, connect the services
             const sourceMethod = graphData.methods.find(
               (method) => method.id === flow.source,
             );
@@ -607,22 +597,22 @@ const Visualization = forwardRef<
             if (
               sourceMethod &&
               targetMethod &&
-              sourceMethod.actorId &&
-              targetMethod.actorId &&
-              sourceMethod.actorId !== targetMethod.actorId
+              sourceMethod.instanceId &&
+              targetMethod.instanceId &&
+              sourceMethod.instanceId !== targetMethod.instanceId
             ) {
-              // Connect the two actors
-              graph[sourceMethod.actorId].push(targetMethod.actorId);
-              graph[targetMethod.actorId].push(sourceMethod.actorId);
+              // Connect the two services
+              graph[sourceMethod.instanceId].push(targetMethod.instanceId);
+              graph[targetMethod.instanceId].push(sourceMethod.instanceId);
             }
           }
         });
 
-        // Add parent-child relationships for methods to their actors
+        // Add parent-child relationships for methods to their services
         graphData.methods.forEach((method) => {
-          if (method.actorId && !graph[method.id].includes(method.actorId)) {
-            graph[method.id].push(method.actorId);
-            graph[method.actorId].push(method.id);
+          if (method.instanceId && !graph[method.id].includes(method.instanceId)) {
+            graph[method.id].push(method.instanceId);
+            graph[method.instanceId].push(method.id);
           }
         });
 
@@ -750,7 +740,6 @@ const Visualization = forwardRef<
       ) || {
         id: "_main",
         name: "_main",
-        language: "python",
       };
 
       // Create a new directed graph for the entire layout
@@ -772,16 +761,8 @@ const Visualization = forwardRef<
         label: mainNode.name,
         class: "function main-node",
         style: nodeMatchesSearch(mainNode)
-          ? `fill: ${
-              mainNode.language === "python"
-                ? colorScheme.functionPython
-                : colorScheme.functionJava
-            }; stroke: #4caf50; stroke-width: 5px; stroke-dasharray: 8,4;`
-          : `fill: ${
-              mainNode.language === "python"
-                ? colorScheme.functionPython
-                : colorScheme.functionJava
-            }; stroke: #333; stroke-width: 3px;`,
+          ? `fill: ${colorScheme.function}; stroke: #4caf50; stroke-width: 5px; stroke-dasharray: 8,4;`
+          : `fill: ${colorScheme.function}; stroke: #333; stroke-width: 3px;`,
         rx: 5,
         ry: 5,
         width: 120,
@@ -812,23 +793,23 @@ const Visualization = forwardRef<
           let nodeType;
 
           // Find the node data
-          const actorData = graphData.actors.find(
-            (actor) => actor.id === nodeId,
+          const serviceData = graphData.services.find(
+            (service) => service.id === nodeId,
           );
-          if (actorData) {
-            nodeData = actorData;
-            nodeType = "actor";
+          if (serviceData) {
+            nodeData = serviceData;
+            nodeType = "service";
           } else {
             const methodData = graphData.methods.find(
               (method) => method.id === nodeId,
             );
             if (methodData) {
               nodeData = methodData as Method;
-              // Find actor this method belongs to
-              const actor = graphData.actors.find(
-                (a) => a.id === methodData.actorId,
+              // Find service this method belongs to
+              const service = graphData.services.find(
+                (s) => s.id === methodData.instanceId,
               );
-              nodeData.actorName = actor ? actor.name : "Unknown Actor";
+              nodeData.serviceName = service ? service.name : "Unknown Service";
               nodeType = "method";
             } else {
               const funcData = graphData.functions.find(
@@ -844,7 +825,7 @@ const Visualization = forwardRef<
           if (nodeData) {
             // Add node to graph with proper styling
             let label = nodeData.name;
-            if (nodeType === "actor" && label.length > 20) {
+            if (nodeType === "service" && label.length > 20) {
               label = label.substring(0, 20) + "...";
             }
 
@@ -857,13 +838,9 @@ const Visualization = forwardRef<
             // Check if node matches search term and highlight it
             const matchesSearch = nodeMatchesSearch(nodeData);
 
-            if (nodeType === "actor") {
+            if (nodeType === "service") {
               style = `fill: ${
-                nodeData.language === "python"
-                  ? colorScheme.actorPython
-                  : nodeData.language === "cpp"
-                  ? colorScheme.actorCpp
-                  : colorScheme.actorJava
+                colorScheme.service
               }; stroke: ${matchesSearch ? "#4caf50" : "#999"}; stroke-width: ${
                 matchesSearch ? "5px" : "1px"
               }; ${matchesSearch ? "stroke-dasharray: 8,4;" : ""}`;
@@ -879,11 +856,7 @@ const Visualization = forwardRef<
               }`;
             } else if (nodeType === "function") {
               style = `fill: ${
-                nodeData.language === "python"
-                  ? colorScheme.functionPython
-                  : nodeData.language === "cpp"
-                  ? colorScheme.functionCpp
-                  : colorScheme.functionJava
+                  colorScheme.function
               }; stroke: ${matchesSearch ? "#4caf50" : "#999"}; stroke-width: ${
                 matchesSearch ? "5px" : "1px"
               }; ${matchesSearch ? "stroke-dasharray: 8,4;" : ""}`;
@@ -911,15 +884,15 @@ const Visualization = forwardRef<
               originalData: { ...nodeData, type: nodeType },
             });
 
-            if (nodeType === "actor") {
-              // Ensure actor labels appear at the top
+            if (nodeType === "service") {
+              // Ensure service labels appear at the top
               (subG.node(nodeId) as DagreNodeConfig).clusterLabelPos = "top";
             }
 
             // Set parent-child relationships for methods
-            if (nodeType === "method" && (nodeData as Method).actorId) {
+            if (nodeType === "method" && (nodeData as Method).instanceId) {
               const methodData = nodeData as Method;
-              subG.setParent(nodeId, methodData.actorId!); // eslint-disable-line @typescript-eslint/no-non-null-assertion
+              subG.setParent(nodeId, methodData.instanceId!); // eslint-disable-line @typescript-eslint/no-non-null-assertion
             }
 
             // Also add all nodes to the main graph for edge connections
@@ -937,18 +910,18 @@ const Visualization = forwardRef<
               originalData: { ...nodeData, type: nodeType },
             });
 
-            if (nodeType === "actor") {
-              // Ensure actor labels appear at the top
+            if (nodeType === "service") {
+              // Ensure service labels appear at the top
               (g.node(nodeId) as DagreNodeConfig).clusterLabelPos = "top";
             }
 
             if (
               nodeType === "method" &&
-              (nodeData as Method).actorId &&
-              subgraph.includes((nodeData as Method).actorId!) // eslint-disable-line @typescript-eslint/no-non-null-assertion
+              (nodeData as Method).instanceId &&
+              subgraph.includes((nodeData as Method).instanceId!) // eslint-disable-line @typescript-eslint/no-non-null-assertion
             ) {
               // eslint-disable-line @typescript-eslint/no-non-null-assertion
-              g.setParent(nodeId, (nodeData as Method).actorId!); // eslint-disable-line @typescript-eslint/no-non-null-assertion
+              g.setParent(nodeId, (nodeData as Method).instanceId!); // eslint-disable-line @typescript-eslint/no-non-null-assertion
             }
           }
         });
@@ -1085,9 +1058,7 @@ const Visualization = forwardRef<
         .attr("r", 60)
         .attr(
           "fill",
-          mainNode.language === "python"
-            ? colorScheme.functionPython
-            : colorScheme.functionJava,
+            colorScheme.function
         )
         .attr("stroke", "#333")
         .attr("stroke-width", 3);
@@ -1707,15 +1678,15 @@ const Visualization = forwardRef<
         const svg = d3.select(svgRef.current);
         const mainContainer = svg.select("g > g"); // Get the main container
 
-        // Check if the selected node is an actor
+        // Check if the selected node is an service
         const selectedNodeData = g.node(nodeId);
-        const isActor = selectedNodeData && selectedNodeData.class === "actor";
+        const isService = selectedNodeData && selectedNodeData.class === "service";
 
-        // If it's an actor, find all its methods
+        // If it's an service, find all its methods
         const relatedNodeIds = [nodeId];
-        if (isActor) {
+        if (isService) {
           graphData.methods.forEach((method) => {
-            if (method.actorId === nodeId) {
+            if (method.instanceId === nodeId) {
               relatedNodeIds.push(method.id);
             }
           });

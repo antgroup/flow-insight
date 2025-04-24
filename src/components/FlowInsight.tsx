@@ -46,7 +46,7 @@ const defaultTheme = createTheme({
 /**
  * FlowInsight Component
  * 
- * Main entry point for the Flow Insight library. This component wraps the ActorGraph
+ * Main entry point for the Flow Insight library. This component wraps the ServiceGraph
  * component and handles the connection to the backend.
  */
 const FlowInsight: React.FC<FlowInsightProps> = ({
@@ -66,7 +66,7 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
   const [flameData, setFlameData] = useState<FlameGraphData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<number | null>(null);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
 
   // Initialize API service

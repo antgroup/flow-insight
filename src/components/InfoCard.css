@@ -185,7 +185,7 @@
     text-align: left;
   }
   
-  .connection-actor-info {
+  .connection-service-info {
     margin-bottom: 8px;
     font-size: 12px;
     color: #666;
@@ -197,21 +197,16 @@
     margin: 8px 0;
   }
   
-  .connection-actor, .connection-language {
+  .connection-service {
     display: block;
     padding: 2px 6px;
     border-radius: 3px;
     font-size: 11px;
   }
   
-  .connection-actor {
+  .connection-service {
     background-color: #e6f7ff;
     color: #1890ff;
-  }
-  
-  .connection-language {
-    background-color: #f9f0ff;
-    color: #722ed1;
   }
   
   .connection-name {

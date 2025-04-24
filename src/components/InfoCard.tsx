@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import "./InfoCard.css";
 import { BaseNode, FoldedSections, NodeWithCount, NodeWithSpeed, Node } from "../types/infocard";
-import { GraphData, Actor, Method } from "../types";
+import { GraphData, Service, Method } from "../types";
 
 type InfoCardProps = {
   data: Node | null;
@@ -80,18 +80,18 @@ const findDataOutputs = (
 
 // Find a node by ID across all node types
 const findNodeById = (id: string, graphData: GraphData): Node => {
-  const actor = graphData.actors.find((actor) => actor.id === id);
-  if (actor) {
-    return { ...actor, type: "actor" };
+  const service = graphData.services.find((service) => service.id === id);
+  if (service) {
+    return { ...service, type: "service" };
   }
 
   const method = graphData.methods.find((method) => method.id === id);
   if (method) {
-    const actor = graphData.actors.find((a) => a.id === method.actorId);
+    const service = graphData.services.find((s) => s.id === method.id);
     return {
       ...method,
       type: "method",
-      actorName: actor ? actor.name : "Unknown Actor",
+      serviceName: service ? service.name : "Unknown Service",
     };
   }
 
@@ -100,19 +100,19 @@ const findNodeById = (id: string, graphData: GraphData): Node => {
     return { ...func, type: "function" };
   }
 
-  return { id, name: id, type: "function", language: "unknown" };
+  return { id, name: id, type: "function"};
 };
 
-// Get all methods for an actor
-const getActorMethods = (actorId: string, graphData: GraphData): Method[] => {
+// Get all methods for a service
+const getServiceMethods = (id: string, graphData: GraphData): Method[] => {
   return graphData.methods
-    .filter((method) => method.actorId === actorId)
+    .filter((method) => method.id === id)
     .map((method) => ({ ...method, type: "method" as const }));
 };
 
-// Aggregated connections for an actor (include all methods)
-const getActorConnections = (actorId: string, graphData: GraphData) => {
-  const methods = getActorMethods(actorId, graphData);
+// Aggregated connections for a service (include all methods)
+const getServiceConnections = (id: string, graphData: GraphData) => {
+  const methods = getServiceMethods(id, graphData);
   const methodIds = methods.map((method) => method.id);
 
   const callInputs: NodeWithCount[] = [];
@@ -184,11 +184,10 @@ const InfoCard = ({
 
   // Render devices section
   const renderDevicesSection = (
-    devices: string[],
-    gpuDevices?: Actor["gpuDevices"],
+    gpuDevices?: Service["gpuDevices"],
   ) => {
     const hasDevices =
-      (devices && devices.length > 0) || (gpuDevices && gpuDevices.length > 0);
+      (gpuDevices && gpuDevices.length > 0);
 
     if (!hasDevices) {
       return (
@@ -234,28 +233,11 @@ const InfoCard = ({
             <h4>Devices</h4>
           </div>
           <span className="connection-count-badge">
-            ({(devices?.length || 0) + (gpuDevices?.length || 0)})
+            ({(gpuDevices?.length || 0)})
           </span>
         </div>
         {!foldedSections["Devices"] && (
           <div className="device-info-container">
-            {devices && devices.length > 0 && (
-              <div className="device-section">
-                <h5>General Devices</h5>
-                <ul className="connection-list">
-                  {devices.map((device, index) => (
-                    <li key={index} className="connection-item">
-                      <div className="connection-main-info">
-                        <div>
-                          <span className="connection-name">{device}</span>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
             {gpuDevices && gpuDevices.length > 0 && (
               <div className="device-section">
                 <h5>GPU Devices</h5>
@@ -439,10 +421,10 @@ const InfoCard = ({
           <ul className="connection-list">
             {nodes.map((node, index) => (
               <li key={`${node.id}-${index}`} className="connection-item">
-                {node.type === "method" && node.actorName && (
-                  <div className="connection-actor-info">
-                    <span className="connection-actor">
-                      Actor: {node.actorName}
+                {node.type === "method" && node.serviceName && (
+                  <div className="connection-service-info">
+                    <span className="connection-service">
+                      Service: {node.serviceName}
                     </span>
                   </div>
                 )}
@@ -506,13 +488,6 @@ const InfoCard = ({
                   </div>
                 )}
 
-                {node.type === "actor" && (
-                  <div className="connection-actor-info">
-                    <span className="connection-language">
-                      Language: {node.language}
-                    </span>
-                  </div>
-                )}
               </li>
             ))}
           </ul>
@@ -529,20 +504,16 @@ const InfoCard = ({
     }
 
     switch (data.type) {
-      case "actor": {
-        // Get all information for this actor including its methods
-        const connections = getActorConnections(data.id, graphData);
+      case "service": {
+        // Get all information for this service including its methods
+        const connections = getServiceConnections(data.id, graphData);
 
         return (
           <React.Fragment>
             <h3>{data.name}</h3>
             <div className="info-row">
               <span className="info-label">Type:</span>
-              <span className="info-value">Actor</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Language:</span>
-              <span className="info-value">{data.language}</span>
+              <span className="info-value">Service</span>
             </div>
             <div className="info-row">
               <span className="info-label">ID:</span>
@@ -561,7 +532,7 @@ const InfoCard = ({
               </div>
             )}
 
-            {renderDevicesSection(data.devices || [], data.gpuDevices || [])}
+            {renderDevicesSection(data.gpuDevices || [])}
             {renderMethodsSection(connections.methods)}
 
             <div className="connections-container">
@@ -579,7 +550,7 @@ const InfoCard = ({
         const callInputs = findCallInputs(data.id, graphData);
         const dataInputs = findDataInputs(data.id, graphData);
         const callOutputs = findCallOutputs(data.id, graphData);
-        const actor = findNodeById(data.actorId || "", graphData) as Actor;
+        const service = findNodeById(data.id, graphData) as Service;
 
         return (
           <React.Fragment>
@@ -589,15 +560,11 @@ const InfoCard = ({
               <span className="info-value">Method</span>
             </div>
             <div className="info-row">
-              <span className="info-label">Language:</span>
-              <span className="info-value">{data.language}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Actor:</span>
-              <span className="info-value">{data.actorName}</span>
+              <span className="info-label">Service:</span>
+              <span className="info-value">{data.serviceName}</span>
             </div>
 
-            {actor && renderDevicesSection(actor.devices || [], actor.gpuDevices || [])}
+            {service && renderDevicesSection(service.gpuDevices || [])}
 
             <div className="connections-container">
               {renderConnectedNodes(callInputs, "Callers")}
@@ -618,10 +585,6 @@ const InfoCard = ({
             <div className="info-row">
               <span className="info-label">Type:</span>
               <span className="info-value">Function</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Language:</span>
-              <span className="info-value">{data.language}</span>
             </div>
 
             <div className="connections-container">

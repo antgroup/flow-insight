@@ -15,9 +15,9 @@ const ElementsPanel = ({
   graphData,
   onSearchChange,
 }: ElementsPanelProps) => {
-  const [activeTab, setActiveTab] = useState("actors");
+  const [activeTab, setActiveTab] = useState("services");
   const [searchTerm, setSearchTerm] = useState("");
-  const [expandedActors, setExpandedActors] = useState<Record<string, boolean>>(
+  const [expandedServices, setExpandedServices] = useState<Record<string, boolean>>(
     {},
   );
 
@@ -43,11 +43,11 @@ const ElementsPanel = ({
     [searchTerm],
   );
 
-  // Get methods for a specific actor
-  const getActorMethods = useCallback(
-    (actorId: string) => {
+  // Get methods for a specific service
+  const getServiceMethods = useCallback(
+    (instanceId: string) => {
       const methods = graphData.methods.filter(
-        (method) => method.actorId === actorId,
+        (method) => method.instanceId === instanceId,
       );
       if (!searchTerm) {
         return methods;
@@ -62,47 +62,47 @@ const ElementsPanel = ({
     [graphData.methods, searchTerm],
   );
 
-  // Filter actors and their methods based on search term
-  const filterActorsAndMethods = useCallback(() => {
+  // Filter services and their methods based on search term
+  const filterServicesAndMethods = useCallback(() => {
     if (!searchTerm) {
-      return graphData.actors;
+      return graphData.services;
     }
 
-    return graphData.actors.filter((actor) => {
-      const actorMatches =
-        actor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        actor.id.toLowerCase().includes(searchTerm.toLowerCase());
+    return graphData.services.filter((service) => {
+      const serviceMatches =
+        service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        service.id.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const actorMethods = getActorMethods(actor.id);
-      const methodMatches = actorMethods.some(
+      const serviceMethods = getServiceMethods(service.id);
+      const methodMatches = serviceMethods.some(
         (method) =>
           method.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
           method.id.toLowerCase().includes(searchTerm.toLowerCase()),
       );
 
-      return actorMatches || methodMatches;
+      return serviceMatches || methodMatches;
     });
-  }, [searchTerm, graphData.actors, getActorMethods]);
+  }, [searchTerm, graphData.services, getServiceMethods]);
 
-  // Update expanded actors when search term changes
+  // Update expanded services when search term changes
   useEffect(() => {
-    const actorsToExpand: Record<string, boolean> = {};
-    graphData.actors.forEach((actor) => {
-      const methods = getActorMethods(actor.id);
+    const servicesToExpand: Record<string, boolean> = {};
+    graphData.services.forEach((service) => {
+      const methods = getServiceMethods(service.id);
       // Only expand if there's a search term and methods exist
-      actorsToExpand[actor.id] = searchTerm !== "" && methods.length > 0;
+      servicesToExpand[service.id] = searchTerm !== "" && methods.length > 0;
     });
-    setExpandedActors(actorsToExpand);
-  }, [searchTerm, getActorMethods, graphData.actors]);
+    setExpandedServices(servicesToExpand);
+  }, [searchTerm, getServiceMethods, graphData.services]);
 
-  const filteredActors = filterActorsAndMethods();
+  const filteredServices = filterServicesAndMethods();
   const filteredFunctions = filterItems(graphData.functions);
 
-  // Toggle expanded state for an actor
-  const toggleActorExpand = (actorId: string) => {
-    setExpandedActors((prev) => ({
+  // Toggle expanded state for an service
+  const toggleServiceExpand = (instanceId: string) => {
+    setExpandedServices((prev) => ({
       ...prev,
-      [actorId]: !prev[actorId],
+      [instanceId]: !prev[instanceId],
     }));
   };
 
@@ -123,10 +123,10 @@ const ElementsPanel = ({
 
       <div className="tab-container">
         <div
-          className={`tab ${activeTab === "actors" ? "active" : ""}`}
-          onClick={() => setActiveTab("actors")}
+          className={`tab ${activeTab === "services" ? "active" : ""}`}
+          onClick={() => setActiveTab("services")}
         >
-          Actors ({graphData.actors.length})
+          Services ({graphData.services.length})
         </div>
         <div
           className={`tab ${activeTab === "functions" ? "active" : ""}`}
@@ -137,7 +137,7 @@ const ElementsPanel = ({
       </div>
 
       <div className="elements-table-container">
-        {activeTab === "actors" && (
+        {activeTab === "services" && (
           <table className="elements-table">
             <thead>
               <tr>
@@ -145,38 +145,38 @@ const ElementsPanel = ({
               </tr>
             </thead>
             <tbody>
-              {filteredActors.map((actor) => (
-                <React.Fragment key={actor.id}>
+              {filteredServices.map((service) => (
+                <React.Fragment key={service.id}>
                   <tr
-                    className={`actor-row ${
-                      actor.id === selectedElementId ? "selected" : ""
+                    className={`service-row ${
+                      service.id === selectedElementId ? "selected" : ""
                     }`}
                   >
                     <td>
                       <button
                         className={`expand-button ${
-                          expandedActors[actor.id] ? "expanded" : ""
+                          expandedServices[service.id] ? "expanded" : ""
                         }`}
-                        onClick={() => toggleActorExpand(actor.id)}
+                        onClick={() => toggleServiceExpand(service.id)}
                       >
-                        {expandedActors[actor.id] ? "−" : "+"}
+                        {expandedServices[service.id] ? "−" : "+"}
                       </button>
                       <span
                         onClick={() =>
-                          onElementSelect({ ...actor, type: "actor" })
+                          onElementSelect({ ...service, type: "service" })
                         }
                       >
-                        {actor.name}
+                        {service.name}
                       </span>
                     </td>
                   </tr>
-                  {expandedActors[actor.id] && (
+                  {expandedServices[service.id] && (
                     <tr className="methods-container">
                       <td>
-                        <div className="actor-methods">
+                        <div className="service-methods">
                           <table className="methods-table">
                             <tbody>
-                              {getActorMethods(actor.id).map((method) => (
+                              {getServiceMethods(service.id).map((method) => (
                                 <tr
                                   key={method.id}
                                   className={

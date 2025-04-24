@@ -112,8 +112,8 @@
     }
   }
   
-  /* Actor row styles */
-  .actor-row {
+  /* service row styles */
+  .service-row {
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -122,14 +122,14 @@
     width: 100%;
   }
   
-  .actor-row td {
+  .service-row td {
     display: flex;
     align-items: center;
     width: 100%;
     padding: 8px 16px;
   }
   
-  .actor-row td span {
+  .service-row td span {
     flex: 1;
     white-space: nowrap;
     overflow: hidden;
@@ -172,13 +172,13 @@
     width: 100%;
   }
   
-  .actor-methods {
+  .service-methods {
     width: 100%;
     padding: 0;
     margin-left: 32px;
   }
   
-  .actor-methods h4 {
+  .service-methods h4 {
     display: none;
   }
   
@@ -211,14 +211,14 @@
   
   /* Selected states */
   .elements-table tbody tr.selected,
-  .actor-row.selected,
+  .service-row.selected,
   .methods-table tr.selected {
     background-color: #e6f7ff;
     border-left: 3px solid #1890ff;
   }
   
   .elements-table tbody tr.selected:hover,
-  .actor-row.selected:hover,
+  .service-row.selected:hover,
   .methods-table tr.selected:hover {
     background-color: #e6f7ff;
   }

@@ -32,7 +32,7 @@ export class ApiService {
   }
 
   public async request<T>(endpoint: string, options: AxiosRequestConfig = {}): Promise<T> {
-    const url = `${endpoint}`;
+    const url = this.formatUrl(`${this.baseUrl}/${endpoint}`);
     
     const config: AxiosRequestConfig = {
       ...options,
@@ -100,14 +100,14 @@ export class ApiService {
   // Debug Sessions
   public async getDebugSessions(
     jobId: string,
-    className?: string | null,
+    serviceName?: string | null,
     funcName?: string | null,
     filterActive = false
   ): Promise<DebugSession[]> {
     let path = `get_debug_sessions?job_id=${jobId}&filter_active=${filterActive}`;
     
-    if (className !== null && className !== undefined && className !== "") {
-      path += `&class_name=${className}`;
+    if (serviceName !== null && serviceName !== undefined && serviceName !== "") {
+      path += `&service_name=${serviceName}`;
     }
     
     if (funcName !== null) {
@@ -160,11 +160,11 @@ export class ApiService {
   // Activate Debug Session
   public async activateDebugSession(
     jobId: string, 
-    className: string, 
+    serviceName: string, 
     funcName: string,
     taskId: string
   ): Promise<boolean> {
-    const path = `activate_debug_session?job_id=${jobId}&class_name=${className}&func_name=${funcName}&task_id=${taskId}`;
+    const path = `activate_debug_session?job_id=${jobId}&service_name=${serviceName}&func_name=${funcName}&task_id=${taskId}`;
     const response = await this.request<ApiResponse<boolean>>(path);
     return response.result;
   }
@@ -362,11 +362,11 @@ export class ApiService {
     // Create a mapping of IDs to names
     const idToNameMap: Record<string, string> = {};
 
-    // First pass: collect all actor, method, and function IDs and their names
-    if (result.actors) {
-      result.actors.forEach((actor: any) => {
-        if (actor.id && actor.name) {
-          idToNameMap[actor.id] = actor.name;
+    // First pass: collect all service, method, and function IDs and their names
+    if (result.services) {
+      result.services.forEach((service: any) => {
+        if (service.id && service.name) {
+          idToNameMap[service.id] = service.name;
         }
       });
     }

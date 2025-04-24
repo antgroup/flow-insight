@@ -25,13 +25,13 @@ import FlameVisualization, {
 import Visualization, {
   VisualizationHandle,
 } from "./Visualization";
-import { GraphData, Actor, Method, FunctionNode, PhysicalViewData, FlameGraphData} from "../types";
+import { GraphData, Service, Method, FunctionNode, PhysicalViewData, FlameGraphData} from "../types";
 import { ApiService } from "../services/api";
 
 // Create an ApiService instance
 const apiService = new ApiService({ baseUrl: "" });
 
-type ElementData = Actor | Method | FunctionNode;
+type ElementData = Service | Method | FunctionNode;
 
 type RouteParams = Record<string, string | undefined>;
 
@@ -78,7 +78,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const visualizationRef = useRef<VisualizationHandle>(null);
   const physicalVisualizationRef = useRef<PhysicalVisualizationHandle>(null);
   const flameVisualizationRef = useRef<FlameVisualizationHandle>(null);
-  const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoRefreshIntervalRef = useRef<number | null>(null);
   const [updating, setUpdating] = useState(false);
   
   // Use the provided API service or the local one
@@ -89,7 +89,6 @@ const GraphPage: React.FC<GraphPageProps> = ({
     id: "default",
     type: "function",
     name: "Component Details",
-    language: "unknown",
   });
 
   const [selectedElementId, setSelectedElementId] =
@@ -278,7 +277,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         onSearchChange={handleSearchChange}
         graphData={
           graphData || {
-            actors: [],
+            services: [],
             methods: [],
             functions: [],
             callFlows: [],
@@ -401,9 +400,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
             <div className="legend-item">
               <span
                 className="legend-color"
-                style={{ backgroundColor: colorScheme.actorPython }}
+                style={{ backgroundColor: colorScheme.service}}
               ></span>
-              <span>Python Actor</span>
+              <span>Service</span>
             </div>
             <div className="legend-item">
               <span
@@ -415,9 +414,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
             <div className="legend-item">
               <span
                 className="legend-color"
-                style={{ backgroundColor: colorScheme.functionPython }}
+                style={{ backgroundColor: colorScheme.function }}
               ></span>
-              <span>Python Function</span>
+              <span>Function</span>
             </div>
             {searchTerm && searchTerm.trim() !== "" && (
               <div className="legend-item">
@@ -529,7 +528,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
           visible={true}
           graphData={
             graphData || {
-              actors: [],
+              services: [],
               methods: [],
               functions: [],
               callFlows: [],

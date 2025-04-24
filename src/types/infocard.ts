@@ -1,13 +1,12 @@
-import { Actor, Method, FunctionNode } from "./index";
+import { Service, Method, FunctionNode } from "./index";
 
 export type BaseNode = {
   id: string;
   name: string;
-  language: string;
 };
 
 
-export type Node = Actor | Method | FunctionNode;
+export type Node = Service | Method | FunctionNode;
 
 export type NodeWithCount = Node & {
   count: number;
