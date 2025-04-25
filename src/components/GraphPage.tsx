@@ -292,7 +292,13 @@ const GraphPage: React.FC<GraphPageProps> = ({
         }}
       >
         <div className="header">
-          <div className="title-container">
+          <div className="title-container" style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            flexWrap: "wrap",
+            gap: "8px",
+            marginTop: "16px"
+          }}>
             {handleUpdate && (
               <Tooltip title="Update graph">
                 <IconButton
@@ -305,7 +311,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
                     "&:hover": {
                       backgroundColor: "grey.100",
                     },
-                    mt: "4px",
+                    padding: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                     "& svg": {
                       animation: updating ? "spin 1s linear infinite" : "none",
                     },
@@ -337,7 +346,15 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 }}
                 aria-label="view type"
                 size="small"
-                sx={{ ml: 2 }}
+                sx={{ 
+                  ml: 2,
+                  '& .MuiToggleButton-root': {
+                    padding: '6px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    height: '32px',
+                  }
+                }}
               >
                 <ToggleButton value="logical" aria-label="logical view">
                   Logical
@@ -356,13 +373,28 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 </ToggleButton>
               </ToggleButtonGroup>
 
-              <div style={{ marginLeft: '16px', display: 'flex', alignItems: 'center' }}>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <div style={{ 
+                marginLeft: '16px', 
+                display: 'flex', 
+                alignItems: 'center',
+                height: '32px'
+              }}>
+                <label style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  cursor: 'pointer',
+                  padding: '2px 4px'
+                }}>
                   <input
                     type="checkbox"
                     checked={autoRefresh}
                     onChange={(e) => handleAutoRefreshChange(e.target.checked)}
-                    style={{ marginRight: '8px' }}
+                    style={{ 
+                      marginRight: '8px',
+                      width: '16px',
+                      height: '16px',
+                      cursor: 'pointer'
+                    }}
                   />
                   Auto Refresh
                 </label>
@@ -380,6 +412,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
                       ml: 2,
                       backgroundColor: "white",
                       boxShadow: 1,
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center", 
+                      justifyContent: "center",
                       "&:hover": {
                         backgroundColor: "grey.100",
                       },

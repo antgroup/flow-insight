@@ -344,9 +344,6 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
 
       // Count tokens in the prompt to ensure it doesn't exceed limits
       const promptTokens = apiService.countTokens(promptWithLanguage, modelToUse);
-      console.log(
-        `Prompt tokens: ${promptTokens}, available per chunk: ${maxTokensPerChunk}`,
-      );
 
       // 5. Generate reports for each chunk concurrently
       const chunkPrompts = dataChunks.map((chunk, index) => {
@@ -437,9 +434,6 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
 
       // Count tokens for merge prompt
       const mergePromptTokens = apiService.countTokens(mergePrompt, modelToUse);
-      console.log(
-        `Merge prompt tokens: ${mergePromptTokens}, max output: ${maxTokensPerChunk}`,
-      );
 
       setIsStreaming(true);
       let streamedContent = "";

@@ -1,6 +1,7 @@
 // Basic Node Types
 export type Service = {
   id: string;
+  instanceId: string;
   name: string;
   type: "service";
   gpuDevices?: Array<{

@@ -106,7 +106,7 @@ const findNodeById = (id: string, graphData: GraphData): Node => {
 // Get all methods for a service
 const getServiceMethods = (id: string, graphData: GraphData): Method[] => {
   return graphData.methods
-    .filter((method) => method.id === id)
+    .filter((method) => method.instanceId === id)
     .map((method) => ({ ...method, type: "method" as const }));
 };
 
@@ -158,11 +158,6 @@ const InfoCard = ({
   currentView = "logical",
   onNavigateToLogicalView,
 }: InfoCardProps) => {
-  // Add debugging
-  useEffect(() => {
-    console.log("InfoCard rendering with data:", data);
-  }, [data]);
-
   type SectionKey = keyof FoldedSections;
 
   // Initialize all sections as folded

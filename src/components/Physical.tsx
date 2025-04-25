@@ -961,8 +961,8 @@ import {
   
           // Check instance ID
           if (
-            service.id &&
-            service.id.toLowerCase().includes(searchTermLower)
+            service.instanceId &&
+            service.instanceId.toLowerCase().includes(searchTermLower)
           ) {
             return true;
           }
@@ -1001,7 +1001,7 @@ import {
   
           let contextValue: string | undefined;
           if (selectedContext === "instance_id") {
-            contextValue = service.id;
+            contextValue = service.instanceId;
           } else if (selectedContext === "service_name") {
             contextValue = service.name || "Unknown";
           } else {
@@ -1114,7 +1114,7 @@ import {
   
           let contextValue;
           if (selectedContext === "instance_id") {
-            contextValue = service.id;
+            contextValue = service.instanceId;
           } else if (selectedContext === "service_name") {
             contextValue = service.name || "Unknown";
           } else {
@@ -1303,10 +1303,6 @@ import {
             .attr("transform", `translate(${x}, ${y})`)
             .attr("class", "node")
             .attr("data-id", nodeId)
-            .on("click", (event) => {
-              event.stopPropagation();
-              onElementClick({ id: nodeId, type: "node", data: nodeData }, true);
-            });
   
           // Get node-level GPU usage if resource is selected
           let nodeGpuInfo: ResourceInfo | null = null;
@@ -1719,7 +1715,7 @@ import {
   // Helper function to get context value for an service (move before renderPlacementGroups)
   const getServiceContextValue = (service: Service, contextKey: string): string => {
     if (contextKey === "instance_id") {
-      return service.id || "unknown";
+      return service.instanceId || "unknown";
     } else if (contextKey === "service_name") {
       return service.name || "Unknown";
     } else if (service.contextInfo && service.contextInfo[contextKey] !== undefined) {
@@ -1837,6 +1833,7 @@ import {
         if (!service) {
           return;
         }
+        service.id = service.instanceId;
   
         const serviceWidth = SERVICE_WIDTH * scaleFservice;
   
@@ -1845,12 +1842,12 @@ import {
           .append("g")
           .attr("transform", `translate(${currentX}, 0)`)
           .attr("class", "service-section")
-          .attr("data-id", service.id || "unknown")
+          .attr("data-id", service.instanceId || "unknown")
           .on("click", (event: any) => {
             event.stopPropagation();
             onElementClick(
               {
-                id: service.id || "unknown",
+                id: service.instanceId || "unknown",
                 type: "service",
                 name: service.name || `Service${serviceIndex + 1}`,
                 gpuDevices: service.gpuDevices || [],
@@ -2055,12 +2052,12 @@ import {
         .append("g")
         .attr("transform", `translate(${currentX}, 0)`)
         .attr("class", "service-section")
-        .attr("data-id", service.id || "unknown")
+        .attr("data-id", service.instanceId || "unknown")
         .on("click", (event: any) => {
           event.stopPropagation();
           onElementClick(
             {
-              id: service.id || "unknown",
+              id: service.instanceId || "unknown",
               type: "service",
               name: service.name || `Service${serviceIndex + 1}`,
               gpuDevices: service.gpuDevices || [],
