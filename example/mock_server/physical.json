@@ -1,0 +1,815 @@
+{
+    "result": true,
+    "msg": "Physical view data retrieved successfully.",
+    "data": {
+      "physicalView": {
+        "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb": {
+          "resources": {
+            "CPU": {
+              "total": 9,
+              "available": 9
+            },
+            "node:InternalHead": {
+              "total": 1,
+              "available": 1
+            },
+            "memory": {
+              "total": 11624597914,
+              "available": 11624597914
+            },
+            "objectStoreMemory": {
+              "total": 4981970534,
+              "available": 3859992181
+            },
+            "node:100.83.29.93": {
+              "total": 1,
+              "available": 1
+            }
+          },
+          "services": {
+            "196a98d1902da2c143e8829702000000": {
+              "instanceId": "196a98d1902da2c143e8829702000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 62416,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.5,
+                "memoryInfo": {
+                  "rss": 258555904,
+                  "vms": 10987192320,
+                  "shared": 84635648,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 838578176,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "12732b58d3c577af221b4da202000000": {
+              "instanceId": "12732b58d3c577af221b4da202000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 62530,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.4,
+                "memoryInfo": {
+                  "rss": 468594688,
+                  "vms": 10836033536,
+                  "shared": 294637568,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 822030336,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "44e8dedcbe5a7309de2c328002000000": {
+              "instanceId": "44e8dedcbe5a7309de2c328002000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 62694,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.4,
+                "memoryInfo": {
+                  "rss": 479035392,
+                  "vms": 10835914752,
+                  "shared": 304914432,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821944320,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "fa31e1169f6b98d6e9905c9102000000": {
+              "instanceId": "fa31e1169f6b98d6e9905c9102000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 62695,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.4,
+                "memoryInfo": {
+                  "rss": 480018432,
+                  "vms": 10836537344,
+                  "shared": 305164288,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 822587392,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "32d8b4b8205944d5f0d53c7c02000000": {
+              "instanceId": "32d8b4b8205944d5f0d53c7c02000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 62929,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.4,
+                "memoryInfo": {
+                  "rss": 373940224,
+                  "vms": 10836148224,
+                  "shared": 200212480,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821870592,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "eef2a0931d0b681ba737fbb002000000": {
+              "instanceId": "eef2a0931d0b681ba737fbb002000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 62945,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.5,
+                "memoryInfo": {
+                  "rss": 479035392,
+                  "vms": 10836062208,
+                  "shared": 304791552,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 822095872,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "62a61ea99824fd97c3e533b302000000": {
+              "instanceId": "62a61ea99824fd97c3e533b302000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 62927,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.4,
+                "memoryInfo": {
+                  "rss": 479404032,
+                  "vms": 10835972096,
+                  "shared": 305254400,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 822005760,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "222dfa4123674465e95763ac02000000": {
+              "instanceId": "222dfa4123674465e95763ac02000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 62926,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.4,
+                "memoryInfo": {
+                  "rss": 479744000,
+                  "vms": 10836029440,
+                  "shared": 305360896,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 822083584,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "abd6b011b846b251ed545c1402000000": {
+              "instanceId": "abd6b011b846b251ed545c1402000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 63438,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 8.1,
+                "memoryInfo": {
+                  "rss": 489832448,
+                  "vms": 10836029440,
+                  "shared": 316006400,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821858304,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "d849d1f4df7a2c5f83aaef0702000000": {
+              "instanceId": "d849d1f4df7a2c5f83aaef0702000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 63440,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.5,
+                "memoryInfo": {
+                  "rss": 552321024,
+                  "vms": 10835976192,
+                  "shared": 378269696,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821817344,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "8ff36725692a20df637bbf0e02000000": {
+              "instanceId": "8ff36725692a20df637bbf0e02000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 63456,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.5,
+                "memoryInfo": {
+                  "rss": 814575616,
+                  "vms": 10835959808,
+                  "shared": 640606208,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821809152,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "292a6fcf0474d07dcc57dd4802000000": {
+              "instanceId": "292a6fcf0474d07dcc57dd4802000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 63458,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.4,
+                "memoryInfo": {
+                  "rss": 594690048,
+                  "vms": 10835976192,
+                  "shared": 420941824,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821747712,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "a1850f15dc7ead72138894a302000000": {
+              "instanceId": "a1850f15dc7ead72138894a302000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 63461,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 8.3,
+                "memoryInfo": {
+                  "rss": 521023488,
+                  "vms": 10835922944,
+                  "shared": 347004928,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821772288,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "afb78827b2045c0c60a5794b02000000": {
+              "instanceId": "afb78827b2045c0c60a5794b02000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 63459,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 9,
+                "memoryInfo": {
+                  "rss": 563380224,
+                  "vms": 10836029440,
+                  "shared": 389111808,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821895168,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "20cb06427eef070670ba2c1202000000": {
+              "instanceId": "20cb06427eef070670ba2c1202000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 63478,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 8.3,
+                "memoryInfo": {
+                  "rss": 437637120,
+                  "vms": 10836029440,
+                  "shared": 263421952,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821829632,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "bd2bfc4112d89f90cfef4ac102000000": {
+              "instanceId": "bd2bfc4112d89f90cfef4ac102000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64125,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.7,
+                "memoryInfo": {
+                  "rss": 427581440,
+                  "vms": 10752688128,
+                  "shared": 337121280,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 738381824,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "85d100871322b08b2db7702f02000000": {
+              "instanceId": "85d100871322b08b2db7702f02000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64075,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.7,
+                "memoryInfo": {
+                  "rss": 531423232,
+                  "vms": 10752073728,
+                  "shared": 441532416,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 737816576,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "2c3bca06830a9e8fa1e70ac002000000": {
+              "instanceId": "2c3bca06830a9e8fa1e70ac002000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64076,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 21.1,
+                "memoryInfo": {
+                  "rss": 563109888,
+                  "vms": 10752049152,
+                  "shared": 473239552,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 737693696,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "a41afac495a90f17f5b1743d02000000": {
+              "instanceId": "a41afac495a90f17f5b1743d02000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64077,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.7,
+                "memoryInfo": {
+                  "rss": 374513664,
+                  "vms": 10752143360,
+                  "shared": 284446720,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 737837056,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "a442f467aba6034f3099cc9502000000": {
+              "instanceId": "a442f467aba6034f3099cc9502000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64121,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.7,
+                "memoryInfo": {
+                  "rss": 436850688,
+                  "vms": 10752139264,
+                  "shared": 346886144,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 737783808,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "79f728d3a451cb567fcbe2a402000000": {
+              "instanceId": "79f728d3a451cb567fcbe2a402000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64143,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.7,
+                "memoryInfo": {
+                  "rss": 647200768,
+                  "vms": 10752143360,
+                  "shared": 557248512,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 737857536,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "bd0372e4b99bf73c9862101602000000": {
+              "instanceId": "bd0372e4b99bf73c9862101602000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64080,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.7,
+                "memoryInfo": {
+                  "rss": 1118834688,
+                  "vms": 10752249856,
+                  "shared": 1028640768,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 738004992,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "260e70a8bf0dc3a6267ac7c002000000": {
+              "instanceId": "260e70a8bf0dc3a6267ac7c002000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64124,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 9.9,
+                "memoryInfo": {
+                  "rss": 520896512,
+                  "vms": 10836000768,
+                  "shared": 347332608,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 821686272,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "fcae6c8b24db1e66be4c19bc02000000": {
+              "instanceId": "fcae6c8b24db1e66be4c19bc02000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64191,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 21,
+                "memoryInfo": {
+                  "rss": 552783872,
+                  "vms": 10752172032,
+                  "shared": 462770176,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 737902592,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "164c0e57681fabf5c5005ce402000000": {
+              "instanceId": "164c0e57681fabf5c5005ce402000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64604,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 0.5,
+                "memoryInfo": {
+                  "rss": 447832064,
+                  "vms": 10752139264,
+                  "shared": 357785600,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 737837056,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            },
+            "e39f38a73c9b6ad38ffd103c02000000": {
+              "instanceId": "e39f38a73c9b6ad38ffd103c02000000",
+              "name": "Worker",
+              "state": "ALIVE",
+              "pid": 64958,
+              "nodeId": "2a9b1f8cd9c3ea3960cfbd7da5e1bc6317f3c590896918feccaf59bb",
+              "requiredResources": {},
+              "gpuDevices": [],
+              "processStats": {
+                "cpuPercent": 4.7,
+                "memoryInfo": {
+                  "rss": 543059968,
+                  "vms": 10836578304,
+                  "shared": 368648192,
+                  "text": 8192,
+                  "lib": 0,
+                  "data": 822263808,
+                  "dirty": 0
+                }
+              },
+              "nodeCpuPercent": 14.7,
+              "nodeMem": [
+                17179869184,
+                10167619584,
+                40.8,
+                7012249600
+              ],
+              "contextInfo": {},
+              "resourceUsage": {}
+            }
+          },
+          "gpus": []
+        }
+      }
+    }
+  }
