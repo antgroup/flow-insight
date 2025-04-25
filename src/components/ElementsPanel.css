@@ -1,5 +1,5 @@
 .elements-panel {
-    width: 300px;
+    width: 320px;
     height: 100%;
     background-color: #f8f9fa;
     border-right: 1px solid #e1e4e8;
@@ -222,3 +222,5 @@
   .methods-table tr.selected:hover {
     background-color: #e6f7ff;
   }
+
+  /* Panel header styling now comes from InfoCard.css for consistency */

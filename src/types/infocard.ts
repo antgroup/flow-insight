@@ -26,3 +26,8 @@ export type FoldedSections = {
   Callees: boolean;
   "Data Dependencies": boolean;
 };
+
+export type CardPosition = {
+  x: number;
+  y: number;
+};

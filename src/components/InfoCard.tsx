@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React  from "react";
 import "./InfoCard.css";
 import { BaseNode, FoldedSections, NodeWithCount, NodeWithSpeed, Node } from "../types/infocard";
 import { GraphData, Service, Method } from "../types";
@@ -9,6 +9,7 @@ type InfoCardProps = {
   graphData: GraphData;
   currentView?: "logical" | "physical" | "flame" | "call_stack" | "analysis";
   onNavigateToLogicalView?: (nodeId: string) => void;
+  isOpen: boolean; // New prop to control visibility
 };
 
 // Helper functions to find connected nodes
@@ -157,6 +158,7 @@ const InfoCard = ({
   graphData,
   currentView = "logical",
   onNavigateToLogicalView,
+  isOpen
 }: InfoCardProps) => {
   type SectionKey = keyof FoldedSections;
 
@@ -505,7 +507,6 @@ const InfoCard = ({
 
         return (
           <React.Fragment>
-            <h3>{data.name}</h3>
             <div className="info-row">
               <span className="info-label">Type:</span>
               <span className="info-value">Service</span>
@@ -549,7 +550,6 @@ const InfoCard = ({
 
         return (
           <React.Fragment>
-            <h3>{data.name === "_main" ? "main" : data.name}</h3>
             <div className="info-row">
               <span className="info-label">Type:</span>
               <span className="info-value">Method</span>
@@ -576,7 +576,6 @@ const InfoCard = ({
 
         return (
           <React.Fragment>
-            <h3>{data.name}</h3>
             <div className="info-row">
               <span className="info-label">Type:</span>
               <span className="info-value">Function</span>
@@ -600,22 +599,42 @@ const InfoCard = ({
     }
   };
 
-  // The panel is now always visible with a fixed position
-  const panelStyle = {
-    position: "fixed" as const,
-    top: "56px", // Align with elements table
-    right: 0,
-    height: "calc(100vh - 56px)", // Adjust height to account for top offset
+  const drawerStyle = {
+    position: "absolute" as const,
+    top: "135px",
+    right: isOpen ? "0" : "-320px",
     width: "320px",
+    height: "calc(100vh - 64px)",
     background: "white",
     zIndex: 9999,
     overflowY: "auto" as const,
-    borderLeft: "1px solid #e1e4e8",
+    boxShadow: "-2px 0 10px rgba(0, 0, 0, 0.1)",
+    transition: "right 0.3s ease",
   };
 
+  if (!isOpen) {
+    return null;
+  }
+
   return (
-    <div className="sidebar-panel" style={panelStyle}>
-      <div className="info-panel-content">{renderContent()}</div>
+    <div 
+      className="info-card" 
+      style={drawerStyle}
+    >
+      <div className="card-header">
+        <div style={{ 
+          fontWeight: "bold", 
+          fontSize: "14px", 
+          margin: 0,
+          padding: 0,
+          lineHeight: "1.2"
+        }}>
+          {data?.name || "Info"}
+        </div>
+      </div>
+      <div className="info-panel-content" style={{ padding: "16px" }}>
+        {renderContent()}
+      </div>
     </div>
   );
 };

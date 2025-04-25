@@ -30,6 +30,7 @@ type DebugPanelProps = {
   jobId?: string;
   selectedElement: any;
   apiService?: ApiService;
+  expanded: boolean;
 };
 
 const SourceCodeView: React.FC<{
@@ -316,8 +317,7 @@ const SourceCodeView: React.FC<{
   );
 };
 
-const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiService }) => {
-  const [expanded, setExpanded] = useState<boolean>(false);
+const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiService, expanded }) => {
   const [sessions, setSessions] = useState<DebugSession[]>([]);
   const [activeSessions, setActiveSessions] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -347,11 +347,6 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     console.error("ApiService is not provided to DebugPanel");
     return null;
   }
-
-  // Toggle the debug panel
-  const toggleExpanded = () => {
-    setExpanded(!expanded);
-  };
 
   // eslint-disable-next-line
   useEffect(() => {
@@ -1149,21 +1144,14 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     <Box
       sx={{
         position: "absolute",
-        top: 10,
+        top: 140,
         left: 200,
         zIndex: 99999,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
       }}
     >
-      <Button
-        variant="contained"
-        color="primary"
-        size="small"
-        startIcon={<Bug size={16} />}
-        onClick={toggleExpanded}
-        sx={{ mb: 1, borderRadius: 2 }}
-      >
-        {expanded ? "Hide" : "Debug"}
-      </Button>
 
       <Collapse in={expanded}>
         <Box

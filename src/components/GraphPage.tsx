@@ -1,4 +1,4 @@
-import { Download, RefreshCw, ArrowDown, ArrowUp, Bug, Circle, Pause, Play, SkipForward } from 'lucide-react';
+import { Download, RefreshCw, PanelLeft, PanelRight, Bug } from 'lucide-react';
 import {
   Box,
   IconButton,
@@ -77,6 +77,11 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const flameVisualizationRef = useRef<FlameVisualizationHandle>(null);
   const autoRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [updating, setUpdating] = useState(false);
+  
+  // State for drawer visibility
+  const [leftDrawerOpen, setLeftDrawerOpen] = useState(true);
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(true);
+  const [debugPanelOpen, setDebugPanelOpen] = useState(false);
   
   // Use the provided API service or the local one
   const activeApiService = externalApiService || apiService;
@@ -237,6 +242,19 @@ const GraphPage: React.FC<GraphPageProps> = ({
     setAutoRefresh(enabled);
   }, []);
 
+  // Toggle drawer states
+  const toggleLeftDrawer = () => {
+    setLeftDrawerOpen(!leftDrawerOpen);
+  };
+
+  const toggleRightDrawer = () => {
+    setRightDrawerOpen(!rightDrawerOpen);
+  };
+
+  const toggleDebugPanel = () => {
+    setDebugPanelOpen(!debugPanelOpen);
+  };
+
   // Function to handle SVG export based on current view type
   const handleExportSvg = () => {
     switch (currentViewType) {
@@ -268,27 +286,13 @@ const GraphPage: React.FC<GraphPageProps> = ({
         position: "relative",
       }}
     >
-      <ElementsPanel
-        onElementSelect={handleElementClick}
-        selectedElementId={selectedElementId || ""}
-        onSearchChange={handleSearchChange}
-        graphData={
-          graphData || {
-            services: [],
-            methods: [],
-            functions: [],
-            callFlows: [],
-            dataFlows: [],
-          }
-        }
-      />
-      <DebugPanel jobId={currentJobId} selectedElement={infoCardData} apiService={activeApiService} />
       <Box
         sx={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
           position: "relative",
+          width: "100%",
         }}
       >
         <div className="header">
@@ -299,39 +303,6 @@ const GraphPage: React.FC<GraphPageProps> = ({
             gap: "8px",
             marginTop: "16px"
           }}>
-            {handleUpdate && (
-              <Tooltip title="Update graph">
-                <IconButton
-                  onClick={handleUpdate}
-                  size="small"
-                  disabled={updating}
-                  sx={{
-                    backgroundColor: "white",
-                    boxShadow: 1,
-                    "&:hover": {
-                      backgroundColor: "grey.100",
-                    },
-                    padding: "6px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    "& svg": {
-                      animation: updating ? "spin 1s linear infinite" : "none",
-                    },
-                    "@keyframes spin": {
-                      "0%": {
-                        transform: "rotate(0deg)",
-                      },
-                      "100%": {
-                        transform: "rotate(360deg)",
-                      },
-                    },
-                  }}
-                >
-                  <RefreshCw />
-                </IconButton>
-              </Tooltip>
-            )}
             <h1 className="title" style={{ margin: 0 }}>
               Flow Insight
             </h1>
@@ -347,7 +318,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 aria-label="view type"
                 size="small"
                 sx={{ 
-                  ml: 2,
+                  ml: "100px",
                   '& .MuiToggleButton-root': {
                     padding: '6px 12px',
                     display: 'flex',
@@ -372,6 +343,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   Analysis
                 </ToggleButton>
               </ToggleButtonGroup>
+                <DebugPanel jobId={currentJobId} selectedElement={infoCardData} apiService={activeApiService} expanded={debugPanelOpen} />
 
               <div style={{ 
                 marginLeft: '16px', 
@@ -400,31 +372,128 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 </label>
               </div>
 
-              {(currentViewType === "logical" ||
-                currentViewType === "call_stack" ||
-                currentViewType === "physical" ||
-                currentViewType === "flame") && (
-                <Tooltip title="Export as SVG">
+              {/* IDE-style drawer toggle buttons */}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                {handleUpdate && (
+                  <Tooltip title="Update graph">
+                    <IconButton
+                      onClick={handleUpdate}
+                      size="small"
+                      disabled={updating}
+                      sx={{
+                        backgroundColor: "white",
+                        boxShadow: 1,
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        "&:hover": {
+                          backgroundColor: "grey.100",
+                        },
+                        "& svg": {
+                          animation: updating ? "spin 1s linear infinite" : "none",
+                        },
+                        "@keyframes spin": {
+                          "0%": {
+                            transform: "rotate(0deg)",
+                          },
+                          "100%": {
+                            transform: "rotate(360deg)",
+                          },
+                        },
+                      }}
+                    >
+                      <RefreshCw size={16} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                
+                {(currentViewType === "logical" ||
+                  currentViewType === "call_stack" ||
+                  currentViewType === "physical" ||
+                  currentViewType === "flame") && (
+                  <Tooltip title="Export as SVG">
+                    <IconButton
+                      onClick={handleExportSvg}
+                      size="small"
+                      sx={{
+                        backgroundColor: "white",
+                        boxShadow: 1,
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        "&:hover": {
+                          backgroundColor: "grey.100",
+                        },
+                      }}
+                    >
+                      <Download size={16} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                
+                <Tooltip title={debugPanelOpen ? "Hide debug panel" : "Show debug panel"}>
                   <IconButton
-                    onClick={handleExportSvg}
+                    onClick={toggleDebugPanel}
                     size="small"
                     sx={{
-                      ml: 2,
-                      backgroundColor: "white",
+                      backgroundColor: debugPanelOpen ? "grey.200" : "white",
                       boxShadow: 1,
                       padding: "6px",
                       display: "flex",
-                      alignItems: "center", 
+                      alignItems: "center",
                       justifyContent: "center",
                       "&:hover": {
                         backgroundColor: "grey.100",
                       },
                     }}
                   >
-                    <Download />
+                    <Bug size={16} />
                   </IconButton>
                 </Tooltip>
-              )}
+ 
+                <Tooltip title={leftDrawerOpen ? "Hide instances panel" : "Show instances panel"}>
+                  <IconButton
+                    onClick={toggleLeftDrawer}
+                    size="small"
+                    sx={{
+                      backgroundColor: leftDrawerOpen ? "grey.200" : "white",
+                      boxShadow: 1,
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      "&:hover": {
+                        backgroundColor: "grey.100",
+                      },
+                    }}
+                  >
+                    <PanelLeft size={16} />
+                  </IconButton>
+                </Tooltip>
+                
+                <Tooltip title={rightDrawerOpen ? "Hide details panel" : "Show details panel"}>
+                  <IconButton
+                    onClick={toggleRightDrawer}
+                    size="small"
+                    sx={{
+                      backgroundColor: rightDrawerOpen ? "grey.200" : "white",
+                      boxShadow: 1,
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      "&:hover": {
+                        backgroundColor: "grey.100",
+                      },
+                    }}
+                  >
+                    <PanelRight size={16} />
+                  </IconButton>
+                </Tooltip>
+
+             </div>
             </React.Fragment>
           </div>
           <div className="legends">
@@ -475,7 +544,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             flameData={flameData}
             viewType={currentViewType}
             onElementClick={handleElementClick}
-            showInfoCard={true}
+            showInfoCard={false}
             selectedElementId={selectedElementId}
             jobId={currentJobId}
             searchTerm={searchTerm}
@@ -493,7 +562,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             flameData={flameData}
             viewType={currentViewType}
             onElementClick={handleElementClick}
-            showInfoCard={true}
+            showInfoCard={false}
             selectedElementId={selectedElementId}
             jobId={currentJobId}
             searchTerm={searchTerm}
@@ -556,25 +625,43 @@ const GraphPage: React.FC<GraphPageProps> = ({
             />
           </Box>
         )}
-        <InfoCard
-          data={infoCardData}
-          visible={true}
-          graphData={
-            graphData || {
-              services: [],
-              methods: [],
-              functions: [],
-              callFlows: [],
-              dataFlows: [],
-            }
-          }
-          currentView={currentViewType}
-          onNavigateToLogicalView={(nodeId) => {
-            visualizationRef.current?.navigateToView("logical");
-            setSelectedElementId(nodeId);
-          }}
-        />
       </Box>
+      
+      <ElementsPanel
+        onElementSelect={handleElementClick}
+        selectedElementId={selectedElementId || ""}
+        onSearchChange={handleSearchChange}
+        graphData={
+          graphData || {
+            services: [],
+            methods: [],
+            functions: [],
+            callFlows: [],
+            dataFlows: [],
+          }
+        }
+        isOpen={leftDrawerOpen}
+      />
+      
+      <InfoCard
+        data={infoCardData}
+        visible={true}
+        graphData={
+          graphData || {
+            services: [],
+            methods: [],
+            functions: [],
+            callFlows: [],
+            dataFlows: [],
+          }
+        }
+        currentView={currentViewType}
+        onNavigateToLogicalView={(nodeId) => {
+          visualizationRef.current?.navigateToView("logical");
+          setSelectedElementId(nodeId);
+        }}
+        isOpen={rightDrawerOpen}
+      />
     </Box>
   );
 };

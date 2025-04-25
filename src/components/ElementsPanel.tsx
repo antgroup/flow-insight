@@ -7,6 +7,7 @@ type ElementsPanelProps = {
   selectedElementId: string | null;
   graphData: GraphData;
   onSearchChange?: (searchTerm: string) => void;
+  isOpen: boolean; // New prop to control visibility
 };
 
 const ElementsPanel = ({
@@ -14,6 +15,7 @@ const ElementsPanel = ({
   selectedElementId,
   graphData,
   onSearchChange,
+  isOpen
 }: ElementsPanelProps) => {
   const [activeTab, setActiveTab] = useState("services");
   const [searchTerm, setSearchTerm] = useState("");
@@ -106,10 +108,41 @@ const ElementsPanel = ({
     }));
   };
 
+  const drawerStyle = {
+    position: "absolute" as const,
+    top: "135px",
+    left: isOpen ? "0" : "-320px",
+    width: "320px",
+    height: "calc(100vh - 64px)",
+    backgroundColor: "white",
+    zIndex: 9998,
+    overflowY: "auto" as const,
+    boxShadow: "2px 0 10px rgba(0, 0, 0, 0.1)",
+    transition: "left 0.3s ease",
+  };
+
+  if (!isOpen) {
+    return null;
+  }
+
   return (
-    <div className="elements-panel">
-      <div className="elements-header">
-        <h3>Instances</h3>
+    <div 
+      className="elements-panel" 
+      style={drawerStyle}
+    >
+      <div className="panel-header">
+        <div style={{ 
+          fontWeight: "bold", 
+          fontSize: "14px", 
+          margin: 0, 
+          padding: 0,
+          lineHeight: "1.2"
+        }}>
+          Instances
+        </div>
+      </div>
+
+      <div className="elements-content" style={{ padding: "10px" }}>
         <div className="search-container">
           <input
             type="text"
@@ -119,113 +152,113 @@ const ElementsPanel = ({
             className="search-input"
           />
         </div>
-      </div>
 
-      <div className="tab-container">
-        <div
-          className={`tab ${activeTab === "services" ? "active" : ""}`}
-          onClick={() => setActiveTab("services")}
-        >
-          Services ({graphData.services.length})
+        <div className="tab-container">
+          <div
+            className={`tab ${activeTab === "services" ? "active" : ""}`}
+            onClick={() => setActiveTab("services")}
+          >
+            Services ({graphData.services.length})
+          </div>
+          <div
+            className={`tab ${activeTab === "functions" ? "active" : ""}`}
+            onClick={() => setActiveTab("functions")}
+          >
+            Functions ({graphData.functions.length})
+          </div>
         </div>
-        <div
-          className={`tab ${activeTab === "functions" ? "active" : ""}`}
-          onClick={() => setActiveTab("functions")}
-        >
-          Functions ({graphData.functions.length})
-        </div>
-      </div>
 
-      <div className="elements-table-container">
-        {activeTab === "services" && (
-          <table className="elements-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredServices.map((service) => (
-                <React.Fragment key={service.id}>
-                  <tr
-                    className={`service-row ${
-                      service.id === selectedElementId ? "selected" : ""
-                    }`}
-                  >
-                    <td>
-                      <button
-                        className={`expand-button ${
-                          expandedServices[service.id] ? "expanded" : ""
-                        }`}
-                        onClick={() => toggleServiceExpand(service.id)}
-                      >
-                        {expandedServices[service.id] ? "−" : "+"}
-                      </button>
-                      <span
-                        onClick={() =>
-                          onElementSelect({ ...service, type: "service" })
-                        }
-                      >
-                        {service.name}
-                      </span>
-                    </td>
-                  </tr>
-                  {expandedServices[service.id] && (
-                    <tr className="methods-container">
+        <div className="elements-table-container">
+          {activeTab === "services" && (
+            <table className="elements-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredServices.map((service) => (
+                  <React.Fragment key={service.id}>
+                    <tr
+                      className={`service-row ${
+                        service.id === selectedElementId ? "selected" : ""
+                      }`}
+                    >
                       <td>
-                        <div className="service-methods">
-                          <table className="methods-table">
-                            <tbody>
-                              {getServiceMethods(service.id).map((method) => (
-                                <tr
-                                  key={method.id}
-                                  className={
-                                    method.id === selectedElementId
-                                      ? "selected"
-                                      : ""
-                                  }
-                                  onClick={() =>
-                                    onElementSelect({
-                                      ...method,
-                                      type: "method",
-                                    })
-                                  }
-                                >
-                                  <td>{method.name}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                        <button
+                          className={`expand-button ${
+                            expandedServices[service.id] ? "expanded" : ""
+                          }`}
+                          onClick={() => toggleServiceExpand(service.id)}
+                        >
+                          {expandedServices[service.id] ? "−" : "+"}
+                        </button>
+                        <span
+                          onClick={() =>
+                            onElementSelect({ ...service, type: "service" })
+                          }
+                        >
+                          {service.name}
+                        </span>
                       </td>
                     </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        )}
+                    {expandedServices[service.id] && (
+                      <tr className="methods-container">
+                        <td>
+                          <div className="service-methods">
+                            <table className="methods-table">
+                              <tbody>
+                                {getServiceMethods(service.id).map((method) => (
+                                  <tr
+                                    key={method.id}
+                                    className={
+                                      method.id === selectedElementId
+                                        ? "selected"
+                                        : ""
+                                    }
+                                    onClick={() =>
+                                      onElementSelect({
+                                        ...method,
+                                        type: "method",
+                                      })
+                                    }
+                                  >
+                                    <td>{method.name}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          )}
 
-        {activeTab === "functions" && (
-          <table className="elements-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredFunctions.map((func) => (
-                <tr
-                  key={func.id}
-                  className={func.id === selectedElementId ? "selected" : ""}
-                  onClick={() => onElementSelect({ ...func, type: "function" })}
-                >
-                  <td>{func.name}</td>
+          {activeTab === "functions" && (
+            <table className="elements-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {filteredFunctions.map((func) => (
+                  <tr
+                    key={func.id}
+                    className={func.id === selectedElementId ? "selected" : ""}
+                    onClick={() => onElementSelect({ ...func, type: "function" })}
+                  >
+                    <td>{func.name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );

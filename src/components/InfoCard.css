@@ -419,3 +419,47 @@
     font-size: 0.85em;
     margin-left: 8px;
   }
+  
+  .card-header, .panel-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid #eee;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    cursor: grab;
+    user-select: none;
+    background-color: #f9f9f9;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    height: 36px;
+    box-sizing: border-box;
+  }
+  
+  .card-header:active, .panel-header:active {
+    cursor: grabbing;
+  }
+  
+  .expand-collapse-btn {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    font-size: 12px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    margin-left: 8px;
+    padding: 0;
+    transition: background-color 0.2s;
+  }
+  
+  .expand-collapse-btn:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+  
+  .expand-collapse-btn:active {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
