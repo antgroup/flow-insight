@@ -1,6 +1,6 @@
 {
   "name": "@aeonsule/flow-insight",
-  "version": "0.1.41",
+  "version": "0.1.46",
   "type": "module",
   "description": "A React component library for Flow visualization and insights",
   "main": "dist/index.js",
@@ -15,7 +15,6 @@
     },
     "./dist/index.css": "./dist/index.css"
   },
-  "sideEffects": false,
   "files": [
     "dist"
   ],
@@ -56,6 +55,7 @@
     "dagre-d3": "^0.6.4",
     "framer-motion": "^12.8.2",
     "js-tiktoken": "^1.0.19",
+    "lucide-react": "^0.503.0",
     "mermaid": "^11.6.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.0.0",
@@ -66,14 +66,20 @@
     "slashes": "^3.0.12"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.4",
     "@types/d3": "^7.0.0",
     "@types/dagre": "^0.7.0",
     "@types/node": "^22.14.1",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "@types/react-syntax-highlighter": "^15.0.0",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.3",
+    "postcss": "^8.5.3",
+    "postcss-modules": "^6.0.1",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
+    "tailwindcss": "^4.1.4",
     "tslib": "^2.0.0",
     "tsup": "^8.0.0",
     "typescript": "^4.9.0"
