@@ -1,9 +1,10 @@
 {
-  "name": "@aeonsule/flow-insight",
-  "version": "0.1.55",
+  "name": "@ant-ray/flow-insight",
+  "version": "0.1.0",
   "type": "module",
-  "description": "A React component library for Flow visualization and insights",
+  "description": "A React component library for distributed system visualization and insights",
   "main": "dist/index.js",
+  "author": "ant-ray group",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "exports": {
@@ -37,7 +38,6 @@
     "react",
     "component"
   ],
-  "author": "",
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/runtime": "7.12",

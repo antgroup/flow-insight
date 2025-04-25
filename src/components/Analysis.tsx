@@ -741,7 +741,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
   return (
     <div
       style={{
-        width: "calc(100% - 320px)",
+        width: "100%",
         height: "calc(80vh - 70px)",
         position: "relative",
         backgroundColor: "transparent",
@@ -750,7 +750,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         flexDirection: "column",
         alignItems: "flex-start",
         margin: "20px 0",
-        maxWidth: "calc(100% - 320px)",
+        maxWidth: "100%",
         overflow: "hidden",
       }}
     >
