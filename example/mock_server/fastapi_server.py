@@ -1,21 +1,13 @@
-from fastapi import FastAPI, Query
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import json
 import os
 import uvicorn
 from typing import Optional
+from pathlib import Path
 
 app = FastAPI(title="Flow Insight API")
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
 
 # Load JSON data files
 def load_json_file(filename):
@@ -48,17 +40,29 @@ async def get_flame_graph(job_id: Optional[str] = None):
     # Return the contents of flame.json
     return load_json_file('flame.json')
 
-# A simple health check endpoint
-@app.get('/')
-async def health_check():
-    return {
-        "result": True,
-        "msg": "API server is running",
-        "data": {
-            "endpoints": [
-                "/call_graph",
-                "/physical_view",
-                "/flame_graph"
-            ]
-        }
-    }
+# Get the absolute path to the dist directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+frontend_dir = os.path.join(os.path.dirname(current_dir), "dist")
+
+# Check if the dist directory exists
+if not os.path.exists(frontend_dir):
+    print(f"Warning: Frontend directory not found at {frontend_dir}")
+
+# Serve static files from the assets directory
+app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dir, "assets")), name="assets")
+
+# Serve the favicon.svg
+@app.get("/favicon.svg")
+async def favicon():
+    return FileResponse(os.path.join(frontend_dir, "favicon.svg"))
+
+# Catch-all route to serve index.html for any path
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    index_path = os.path.join(frontend_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "Page not found"}
+
+if __name__ == "__main__":
+    uvicorn.run("fastapi_server:app", host="0.0.0.0", port=8001, reload=True)
