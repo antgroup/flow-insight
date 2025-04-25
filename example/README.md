@@ -1,6 +1,6 @@
 # Flow Insight Example
 
-This is an example application demonstrating the usage of the [@aeonsule/flow-insight](https://github.com/aeonsule/flow-insight) component library for Flow visualization and insights.
+This is an example application demonstrating the usage of the [@ant-ray/flow-insight](https://github.com/antgroup/flow-insight) component library for Flow visualization and insights.
 
 ## Getting Started
 

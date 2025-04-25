@@ -9,7 +9,7 @@
     "serve": "vite preview"
   },
   "dependencies": {
-    "@aeonsule/flow-insight": "file:../",
+    "@ant-ray/flow-insight": "file:../",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
