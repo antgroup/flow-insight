@@ -22,7 +22,7 @@ def load_json_file(filename):
 
 # API endpoints
 @app.get('/call_graph')
-async def get_call_graph(job_id: Optional[str] = None, stack_mode: Optional[str] = None):
+async def get_call_graph(flow_id: Optional[str] = None, stack_mode: Optional[str] = None):
     if stack_mode == 'true' or stack_mode == '1':
         # Return the contents of dstack.json
         return load_json_file('dstack.json')
@@ -31,12 +31,12 @@ async def get_call_graph(job_id: Optional[str] = None, stack_mode: Optional[str]
         return load_json_file('graphdata.json')
 
 @app.get('/physical_view')
-async def get_physical_view(job_id: Optional[str] = None):
+async def get_physical_view(flow_id: Optional[str] = None):
     # Return the contents of physical.json
     return load_json_file('physical.json')
 
 @app.get('/flame_graph')
-async def get_flame_graph(job_id: Optional[str] = None):
+async def get_flame_graph(flow_id: Optional[str] = None):
     # Return the contents of flame.json
     return load_json_file('flame.json')
 

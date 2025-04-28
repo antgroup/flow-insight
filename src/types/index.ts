@@ -34,7 +34,6 @@ export type Service = {
   };
   nodeCpuPercent?: number;
   nodeMem?: number[];
-  mem?: number[];
   resourceUsage?: Record<
     string,
     {
@@ -74,7 +73,6 @@ export type GraphData = {
   dataFlows: {
     source: string;
     target: string;
-    speed: string;
     timestamp: number;
     argpos?: number;
     duration?: number;
@@ -86,7 +84,7 @@ export type GraphData = {
 export type DebugSession = {
   serviceInfo: string[];
   funcName: string;
-  taskId: string;
+  spanId: string;
 };
 
 export type Breakpoint = {
@@ -116,13 +114,9 @@ export type NodeData = {
     index: number;
     name: string;
     uuid: string;
-    utilizationGpu: number;
     memoryUsed: number;
     memoryTotal: number;
-    processesPids: Array<{
-      pid: number;
-      gpuMemoryUsage: number;
-    }>;
+    utilization?: number;
   }>;
 };
 
@@ -144,18 +138,6 @@ export type FlameGraphNode = {
 };
 
 export type FlameGraphData = {
-  nodes: Array<{
-    id: string;
-    nodeId: string;
-    startTime: number;
-    endTime: number;
-    duration: number;
-    callerService: string | null;
-    callerFunc: string;
-    serviceName: string | null;
-    serviceState?: string;
-    parentId?: string;
-  }>;
   aggregated: FlameGraphNode[];
   parentStartTimes: Array<{
     calleeId: string;

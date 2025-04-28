@@ -14,7 +14,7 @@ import GraphPage from "./GraphPage";
 // Define the props interface
 type FlowInsightProps = {
   baseUrl: string;
-  jobId?: string;
+  flowId?: string;
   initialViewType?: "logical" | "call_stack" | "physical" | "flame" | "analysis";
   autoRefresh?: boolean;
   refreshInterval?: number;
@@ -51,7 +51,7 @@ const defaultTheme = createTheme({
  */
 const FlowInsight: React.FC<FlowInsightProps> = ({
   baseUrl,
-  jobId,
+  flowId,
   initialViewType = "logical",
   autoRefresh = false,
   refreshInterval = 2000,
@@ -88,20 +88,20 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
       setError(null);
 
       // Fetch regular graph data
-      const data = await apiService.getGraphData(jobId, false);
+      const data = await apiService.getGraphData(flowId!, false);
       setGraphData(data);
 
       // Fetch stack graph data
-      const stackData = await apiService.getGraphData(jobId, true);
+      const stackData = await apiService.getGraphData(flowId!, true);
       setStackGraphData(stackData);
 
       // Fetch physical view data if job ID is provided
-      if (jobId) {
-        const physicalData = await apiService.getPhysicalViewData(jobId);
+      if (flowId) {
+        const physicalData = await apiService.getPhysicalViewData(flowId);
         setPhysicalViewData(physicalData);
 
         // Fetch flame graph data if job ID is provided
-        const flameGraphData = await apiService.getFlameGraphData(jobId);
+        const flameGraphData = await apiService.getFlameGraphData(flowId);
         setFlameData(flameGraphData);
       }
     } catch (err) {
@@ -109,7 +109,7 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [apiService, jobId]);
+  }, [apiService, flowId]);
 
   // Initial data fetch
   useEffect(() => {
@@ -183,7 +183,7 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
               stackGraphData={stackGraphData}
               physicalViewData={physicalViewData}
               flameData={flameData}
-              jobId={jobId}
+              flowId={flowId}
               initialViewType={initialViewType}
               autoRefresh={autoRefresh}
               onElementClick={handleElementClick}

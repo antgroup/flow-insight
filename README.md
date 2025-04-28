@@ -49,7 +49,7 @@ import { FlowInsight } from 'flow-insight';
 ```jsx
 <FlowInsight 
   baseUrl="https://your-api-endpoint.com"
-  jobId="job-12345"
+  FlowId="job-12345"
 />
 ```
 
@@ -58,7 +58,7 @@ import { FlowInsight } from 'flow-insight';
 ```jsx
 <FlowInsight 
   baseUrl="https://your-api-endpoint.com"
-  jobId="job-12345"
+  FlowId="job-12345"
   initialViewType="physical"
   autoRefresh={true}
   refreshInterval={5000}

@@ -398,7 +398,7 @@ import {
     physicalViewData: PhysicalViewData;
     onElementClick: (data: any, skip_zoom: boolean) => void;
     selectedElementId: string | null;
-    jobId?: string;
+    flowId?: string;
     onUpdate?: () => void;
     updating?: boolean;
     searchTerm?: string;
@@ -674,8 +674,8 @@ import {
     let deviceCount = 0;
   
     nodeData.gpus.forEach((gpu) => {
-      if (gpu.utilizationGpu !== undefined) {
-        totalUtilization += gpu.utilizationGpu;
+      if (gpu.utilization !== undefined) {
+        totalUtilization += gpu.utilization;
         deviceCount++;
       }
     });
@@ -721,7 +721,7 @@ import {
       if ((data as NodeData).gpus) {
         return (
           (data as NodeData).gpus?.some(
-            (gpu) => gpu.utilizationGpu !== undefined,
+            (gpu) => gpu.utilization !== undefined,
           ) ?? false
         );
       }
@@ -779,7 +779,7 @@ import {
         physicalViewData,
         onElementClick,
         selectedElementId,
-        jobId,
+        flowId,
         onUpdate,
         updating = false,
         searchTerm = "",

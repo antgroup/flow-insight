@@ -11,7 +11,7 @@ type FlameVisualizationProps = {
   flameData: FlameGraphData;
   onElementClick: (data: any, skip_zoom?: boolean) => void;
   selectedElementId: string | null;
-  jobId?: string;
+  flowId?: string;
   onUpdate?: () => void;
   updating?: boolean;
   searchTerm?: string;
@@ -303,7 +303,7 @@ const FlameVisualization = forwardRef<
       flameData,
       onElementClick,
       selectedElementId,
-      jobId,
+      flowId,
       onUpdate,
       updating,
       searchTerm,
@@ -1334,30 +1334,6 @@ const FlameVisualization = forwardRef<
                   ) {
                     serviceGpuDevices = extendedService.gpuDevices;
                   }
-                  // If the node has GPUs and the service has a pid, try to match GPU by pid
-                  else if (physicalService.pid) {
-                    // Use type assertion to access potential extended properties
-                    const extendedNodeData = nodeData as any;
-                    if (
-                      extendedNodeData.gpus &&
-                      Array.isArray(extendedNodeData.gpus)
-                    ) {
-                      const servicePid = physicalService.pid;
-                      const matchingGpus = extendedNodeData.gpus.filter(
-                        (gpu: any) =>
-                          gpu.processesPids &&
-                          Array.isArray(gpu.processesPids) &&
-                          gpu.processesPids.some(
-                            (process: any) => process.pid === servicePid,
-                          ),
-                      );
-
-                      if (matchingGpus.length > 0) {
-                        serviceGpuDevices = matchingGpus;
-                      }
-                    }
-                  }
-                  break;
                 }
               }
             }
@@ -1380,6 +1356,7 @@ const FlameVisualization = forwardRef<
                       duration: d.data.originalValue,
                       count: d.data.count,
                     },
+                    serviceName: serviceName,
                   },
                   true,
                 );

@@ -38,7 +38,7 @@ type GraphPageProps = {
   stackGraphData?: GraphData | null;
   physicalViewData?: PhysicalViewData | null;
   flameData?: FlameGraphData | null;
-  jobId?: string;
+  flowId?: string;
   initialViewType?: "logical" | "call_stack" | "physical" | "flame" | "analysis";
   autoRefresh?: boolean;
   onElementClick?: (data: ElementData, skip_zoom?: boolean) => void;
@@ -53,7 +53,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
   stackGraphData: initialStackGraphData,
   physicalViewData: initialPhysicalViewData,
   flameData: initialFlameData,
-  jobId: propJobId,
+  flowId: propFlowId,
   initialViewType = "logical",
   autoRefresh: initialAutoRefresh = false,
   onElementClick: externalElementClick,
@@ -62,13 +62,13 @@ const GraphPage: React.FC<GraphPageProps> = ({
   colorScheme: customColorScheme,
   apiService: externalApiService,
 }) => {
-  const { jobId: routeJobId } = useParams<RouteParams>();
+  const { flowId: routeFlowId } = useParams<RouteParams>();
   const [graphData, setGraphData] = useState<GraphData | null>(initialGraphData || null);
   const [stackGraphData, setStackGraphData] = useState<GraphData | null>(initialStackGraphData || null);
   const [physicalViewData, setPhysicalViewData] = useState<PhysicalViewData | null>(initialPhysicalViewData || null);
   const [flameData, setFlameData] = useState<FlameGraphData | null>(initialFlameData || null);
   const [error, setError] = useState<string | null>(null);
-  const [currentJobId, setCurrentJobId] = useState<string | undefined>(propJobId || routeJobId);
+  const [currentFlowId, setCurrentFlowId] = useState<string | undefined>(propFlowId || routeFlowId);
   const [searchTerm, setSearchTerm] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(initialAutoRefresh);
   const [currentViewType, setCurrentViewType] = useState<"logical" | "call_stack" | "physical" | "flame" | "analysis">(initialViewType || "logical");
@@ -122,23 +122,23 @@ const GraphPage: React.FC<GraphPageProps> = ({
     [activeApiService],
   );
 
-  // Update currentJobId when route jobId changes
+  // Update currentFlowId when route FlowId changes
   useEffect(() => {
-    if (routeJobId) {
-      setCurrentJobId(routeJobId);
+    if (routeFlowId) {
+      setCurrentFlowId(routeFlowId);
     }
-  }, [routeJobId]);
+  }, [routeFlowId]);
 
   // Initial data fetch
   useEffect(() => {
-    if (currentJobId) {
+    if (currentFlowId) {
       (async () => {
-        await fetchGraphData(currentJobId, false);
-        await fetchGraphData(currentJobId, true);
+        await fetchGraphData(currentFlowId, false);
+        await fetchGraphData(currentFlowId, true);
         try {
-          const data = await activeApiService.getPhysicalViewData(currentJobId);
+          const data = await activeApiService.getPhysicalViewData(currentFlowId);
           setPhysicalViewData(data);
-          const flameData = await activeApiService.getFlameGraphData(currentJobId);
+          const flameData = await activeApiService.getFlameGraphData(currentFlowId);
           setFlameData(flameData);
         } catch (err) {
           setError(
@@ -147,20 +147,20 @@ const GraphPage: React.FC<GraphPageProps> = ({
         }
       })();
     }
-  }, [currentJobId, fetchGraphData]);
+  }, [currentFlowId, fetchGraphData]);
 
   // eslint-disable-next-line
   const fetchDatas = async () => {
     if (currentViewType === "call_stack") {
-      await fetchGraphData(currentJobId, true);
+      await fetchGraphData(currentFlowId, true);
     }
     if (currentViewType === "logical") {
-      await fetchGraphData(currentJobId, false);
+      await fetchGraphData(currentFlowId, false);
     }
     if (currentViewType === "physical") {
-      await fetchGraphData(currentJobId, false);
+      await fetchGraphData(currentFlowId, false);
       try {
-        const data = await activeApiService.getPhysicalViewData(currentJobId);
+        const data = await activeApiService.getPhysicalViewData(currentFlowId!);
         setPhysicalViewData(data);
       } catch (err) {
         setError(
@@ -169,11 +169,11 @@ const GraphPage: React.FC<GraphPageProps> = ({
       }
     }
     if (currentViewType === "flame" || currentViewType === "analysis") {
-      await fetchGraphData(currentJobId, false);
+      await fetchGraphData(currentFlowId, false);
       try {
-        const data = await activeApiService.getPhysicalViewData(currentJobId);
+        const data = await activeApiService.getPhysicalViewData(currentFlowId!);
         setPhysicalViewData(data);
-        const flameData = await activeApiService.getFlameGraphData(currentJobId);
+        const flameData = await activeApiService.getFlameGraphData(currentFlowId!);
         setFlameData(flameData);
       } catch (err) {
         setError(
@@ -202,11 +202,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
       autoRefreshIntervalRef.current = null;
     }
     // eslint-disable-next-line
-  }, [autoRefresh, currentJobId, fetchGraphData, currentViewType]);
+  }, [autoRefresh, currentFlowId, fetchGraphData, currentViewType]);
 
   const handleElementClick = useCallback(
     (data: ElementData, skip_zoom = false) => {
-      console.log("Element clicked:", data);
       setInfoCardData({ ...data });
       if (skip_zoom) {
         return;
@@ -343,7 +342,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   Analysis
                 </ToggleButton>
               </ToggleButtonGroup>
-                <DebugPanel jobId={currentJobId} selectedElement={infoCardData} apiService={activeApiService} expanded={debugPanelOpen} />
+                <DebugPanel flowId={currentFlowId} selectedElement={infoCardData} apiService={activeApiService} expanded={debugPanelOpen} />
 
               <div style={{ 
                 marginLeft: '16px', 
@@ -546,7 +545,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             onElementClick={handleElementClick}
             showInfoCard={false}
             selectedElementId={selectedElementId}
-            jobId={currentJobId}
+            flowId={currentFlowId}
             searchTerm={searchTerm}
             autoRefresh={autoRefresh}
             setViewType={setCurrentViewType}
@@ -564,7 +563,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             onElementClick={handleElementClick}
             showInfoCard={false}
             selectedElementId={selectedElementId}
-            jobId={currentJobId}
+            flowId={currentFlowId}
             searchTerm={searchTerm}
             autoRefresh={autoRefresh}
             setViewType={setCurrentViewType}
@@ -578,7 +577,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             physicalViewData={physicalViewData!}
             onElementClick={handleElementClick}
             selectedElementId={selectedElementId}
-            jobId={currentJobId}
+            flowId={currentFlowId}
             onUpdate={handleUpdate}
             updating={false}
             searchTerm={searchTerm}
@@ -599,7 +598,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 flameData={flameData}
                 onElementClick={handleElementClick}
                 selectedElementId={selectedElementId}
-                jobId={currentJobId}
+                flowId={currentFlowId}
                 onUpdate={handleUpdate}
                 updating={false}
                 searchTerm={searchTerm}
@@ -617,7 +616,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         {currentViewType === "analysis" && (
           <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
             <InsightPanel
-              jobId={currentJobId}
+              flowId={currentFlowId}
               graphData={graphData}
               physicalViewData={physicalViewData}
               flameData={flameData}

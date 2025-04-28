@@ -30,7 +30,7 @@ type VisualizationProps = {
   onElementClick: (data: any, skip_zoom?: boolean) => void;
   showInfoCard: boolean;
   selectedElementId: string | null;
-  jobId?: string;
+  flowId?: string;
   updating?: boolean;
   searchTerm?: string;
   onAutoRefreshChange?: (enabled: boolean) => void;
@@ -118,7 +118,7 @@ const Visualization = forwardRef<
       showInfoCard,
       selectedElementId,
       viewType,
-      jobId,
+      flowId,
       updating = false,
       searchTerm,
       onAutoRefreshChange,
@@ -399,20 +399,20 @@ const Visualization = forwardRef<
     }, [selectedElementId, focusOnNode]);
 
     const fetchActiveDebugSessions = useCallback(async () => {
-      if (jobId && apiService) {
+      if (flowId && apiService) {
         try {
-          const sessions = await apiService.getDebugSessions(jobId, null, null, true);
+          const sessions = await apiService.getDebugSessions(flowId, null, null, true);
           setActiveDebugSessions(sessions);
         } catch (error) {
           console.error("Error fetching active debug sessions:", error);
         }
       }
       // eslint-disable-next-line
-    }, [jobId, graphData, apiService]);
+    }, [flowId, graphData, apiService]);
 
     useEffect(() => {
       fetchActiveDebugSessions();
-    }, [jobId, graphData, fetchActiveDebugSessions]);
+    }, [flowId, graphData, fetchActiveDebugSessions]);
 
     // Memoize the renderGraph function with useCallback
     const renderGraph = () => {

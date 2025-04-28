@@ -26,7 +26,7 @@ mermaid.initialize({
 });
 
 type InsightPanelProps = {
-  jobId?: string;
+  flowId?: string;
   graphData: any;
   physicalViewData: any;
   flameData: any;
@@ -155,7 +155,7 @@ const MermaidDiagram = ({ chart }: { chart: string }) => {
 };
 
 // Utility function to chunk data based on token count
-const chunkData = (data: any, apiService: ApiService, maxTokens = 10000, model = "gpt-4"): string[] => {
+const chunkData = (data: any, apiService: ApiService, maxTokens = 10000, model: string): string[] => {
   const dataStr = JSON.stringify(data, null, 2);
   const totalTokens = apiService.countTokens(dataStr, model);
   const chunks: string[] = [];
@@ -197,7 +197,7 @@ const chunkData = (data: any, apiService: ApiService, maxTokens = 10000, model =
 };
 
 const InsightPanel: React.FC<InsightPanelProps> = ({
-  jobId,
+  flowId,
   graphData,
   physicalViewData,
   flameData,
@@ -208,8 +208,8 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [report, setReport] = useState<string | null>(() => {
     // Initialize from localStorage if available for this job
-    if (jobId) {
-      const savedReport = localStorage.getItem(`insight-report-${jobId}`);
+    if (flowId) {
+      const savedReport = localStorage.getItem(`insight-report-${flowId}`);
       return savedReport || null;
     }
     return null;
@@ -245,10 +245,10 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
 
   // Save report to localStorage whenever it changes
   useEffect(() => {
-    if (jobId && report) {
-      localStorage.setItem(`insight-report-${jobId}`, report);
+    if (flowId && report) {
+      localStorage.setItem(`insight-report-${flowId}`, report);
     }
-  }, [jobId, report]);
+  }, [flowId, report]);
 
   // Function to export the report as markdown
   const exportReport = () => {
@@ -265,7 +265,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `insight-report-${jobId || "unknown"}-${
+    a.download = `insight-report-${flowId || "unknown"}-${
       new Date().toISOString().split("T")[0]
     }.md`;
     document.body.appendChild(a);
@@ -275,7 +275,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
   };
 
   const generateInsightReport = async () => {
-    if (!jobId) {
+    if (!flowId) {
       setError("No job ID provided");
       return;
     }
@@ -293,8 +293,8 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
 
     try {
       // 1. Get the analyze promp
-      const prompt = await apiService.getInsightAnalyzePrompt(jobId);
-      const modelToUse = openaiModel || "gpt-4";
+      const prompt = await apiService.getInsightAnalyzePrompt();
+      const modelToUse = openaiModel;
       const modelContextLength = parseInt(contextLength) || 64000;
 
       // Add language instruction to the prompt
@@ -504,8 +504,8 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
 
   // Add function to clear saved report
   const clearSavedReport = () => {
-    if (jobId) {
-      localStorage.removeItem(`insight-report-${jobId}`);
+    if (flowId) {
+      localStorage.removeItem(`insight-report-${flowId}`);
       setReport(null);
       setReportStream(null);
     }

@@ -27,7 +27,7 @@ import {
 type TimeoutType = ReturnType<typeof setTimeout>;
 
 type DebugPanelProps = {
-  jobId?: string;
+  flowId?: string;
   selectedElement: any;
   apiService?: ApiService;
   expanded: boolean;
@@ -41,7 +41,7 @@ const SourceCodeView: React.FC<{
   onLineClick?: (line: number) => void;
   selectedSourceFile?: any;
   selectedSession?: string;
-  jobId?: string;
+  flowId?: string;
   apiService?: ApiService;
 }> = ({
   sourceCode,
@@ -51,15 +51,15 @@ const SourceCodeView: React.FC<{
   onLineClick,
   selectedSourceFile,
   selectedSession,
-  jobId,
+  flowId,
   apiService,
 }) => {
   const [breakpoints, setBreakpoints] = useState<number[]>([]);
   const codeContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (jobId && selectedSession) {
-      apiService?.getBreakpoints(jobId, selectedSession)
+    if (flowId && selectedSession) {
+      apiService?.getBreakpoints(flowId, selectedSession)
         .then((breakpoints) => {
           const currentBreakpoints = breakpoints
             .filter(
@@ -106,7 +106,7 @@ const SourceCodeView: React.FC<{
   }, [currentLine, sourceCode, switchFrame]);
 
   const handleLineClick = async (lineNumber: number) => {
-    if (!selectedSourceFile || !selectedSession || !jobId) {
+    if (!selectedSourceFile || !selectedSession || !flowId) {
       return;
     }
 
@@ -124,7 +124,7 @@ const SourceCodeView: React.FC<{
 
       // Set all breakpoints at once
       const response = await apiService?.sendDebugCommand(
-        jobId,
+        flowId,
         selectedSession,
         "set_breakpoints",
         {
@@ -145,7 +145,7 @@ const SourceCodeView: React.FC<{
             line: line,
           }));
           // eslint-disable-next-line
-          apiService?.storeBreakpoints(jobId!, selectedSession!, storedBreakpoints);
+          apiService?.storeBreakpoints(flowId!, selectedSession!, storedBreakpoints);
         }
       }
     } catch (error) {
@@ -317,7 +317,7 @@ const SourceCodeView: React.FC<{
   );
 };
 
-const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiService, expanded }) => {
+const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiService, expanded }) => {
   const [sessions, setSessions] = useState<DebugSession[]>([]);
   const [activeSessions, setActiveSessions] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -382,22 +382,22 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
   // Fetch debug sessions when a node is selected
   // eslint-disable-next-line
   useEffect(() => {
-    if (expanded && selectedElement && jobId) {
+    if (expanded && selectedElement && flowId) {
       fetchDebugSessions();
     }
-  }, [selectedElement, jobId, expanded]);
+  }, [selectedElement, flowId, expanded]);
 
   // Fetch active debug sessions
   // eslint-disable-next-line
   useEffect(() => {
-    if (expanded && jobId) {
+    if (expanded && flowId) {
       fetchActiveDebugSessions();
     }
     // eslint-disable-next-line
-  }, [expanded, jobId]);
+  }, [expanded, flowId]);
 
   const fetchDebugSessions = async () => {
-    if (!jobId || !selectedElement || !selectedElement.name) {
+    if (!flowId || !selectedElement || !selectedElement.name) {
       return;
     }
 
@@ -410,7 +410,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
         serviceInfo = [selectedElement.serviceName, selectedElement.instanceId];
       }
 
-      const sessions = await apiService.getDebugSessions(jobId, serviceInfo, funcName);
+      const sessions = await apiService.getDebugSessions(flowId, serviceInfo, funcName);
       setSessions(sessions);
     } catch (error) {
       console.error("Failed to fetch debug sessions:", error);
@@ -419,12 +419,12 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
 
   // Fetch active debug sessions
   const fetchActiveDebugSessions = async () => {
-    if (!jobId) {
+    if (!flowId) {
       return;
     }
 
     try {
-      const activeSessions = await apiService.getActiveDebugSessions(jobId);
+      const activeSessions = await apiService.getActiveDebugSessions(flowId);
       setActiveSessions(activeSessions);
       const serviceInfo = selectedElement?.instanceId
         ? [selectedElement?.serviceName, selectedElement?.instanceId]
@@ -432,7 +432,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
       const funcName = selectedElement?.name;
       const currentActiveSessions = sessions.find(
         (session) =>
-          session.taskId === selectedSession &&
+          session.spanId === selectedSession &&
           session.serviceInfo[0] === serviceInfo[0] &&
           session.serviceInfo[1] === serviceInfo[1] &&
           session.funcName === funcName,
@@ -530,7 +530,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
 
   // Activate a debug session
   const handleActivate = async (session: DebugSession) => {
-    if (!jobId) {
+    if (!flowId) {
       return;
     }
 
@@ -538,30 +538,30 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
 
     try {
       const result = await apiService.activateDebugSession(
-        jobId,
+        flowId,
         session.serviceInfo,
         session.funcName,
-        session.taskId,
+        session.spanId,
       );
 
       if (result) {
         fetchActiveDebugSessions();
-        setSelectedSession(session.taskId);
+        setSelectedSession(session.spanId);
 
-        const threadIds = await fetchThreads(session.taskId);
+        const threadIds = await fetchThreads(session.spanId);
         // Try to pause the execution
         if (threadIds) {
           for (const threadId of threadIds) {
-            await apiService.sendDebugCommand(jobId, session.taskId, "pause", {
+            await apiService.sendDebugCommand(flowId, session.spanId, "pause", {
               thread_id: threadId,
             });
           }
         }
         setIsInitializing(false);
         setTimeout(async () => {
-          setSelectedSession(session.taskId);
+          setSelectedSession(session.spanId);
           if (threadIds) {
-            await fetchStackTrace(session.taskId, threadIds[0]);
+            await fetchStackTrace(session.spanId, threadIds[0]);
           }
           setProcessCmdType("switch");
         }, 100);
@@ -575,18 +575,18 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
   };
 
   // Deactivate a debug session
-  const handleDeactivate = async (taskId: string) => {
-    if (!jobId) {
+  const handleDeactivate = async (spanId: string) => {
+    if (!flowId) {
       return;
     }
 
     setLoading(true);
     try {
-      const result = await apiService.deactivateDebugSession(jobId, taskId);
+      const result = await apiService.deactivateDebugSession(flowId, spanId);
 
       if (result) {
         fetchActiveDebugSessions();
-        if (selectedSession === taskId) {
+        if (selectedSession === spanId) {
           setSelectedSession(null);
           setThreads([]);
           setStackFrames([]);
@@ -602,16 +602,16 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
   };
 
   // Fetch threads for a debug session
-  const fetchThreads = async (taskId: string): Promise<number[] | null> => {
-    if (!jobId) {
+  const fetchThreads = async (spanId: string): Promise<number[] | null> => {
+    if (!flowId) {
       return null;
     }
 
     try {
-      const response = await apiService.sendDebugCommand(jobId, taskId, "get_threads", {});
+      const response = await apiService.sendDebugCommand(flowId, spanId, "get_threads", {});
       if (response && response.result) {
         if (response.result.success === false) {
-          await handleSessionUnavailable(taskId);
+          await handleSessionUnavailable(spanId);
           return null;
         }
 
@@ -630,24 +630,24 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     } catch (error) {
       console.error("Failed to fetch threads:", error);
       // If we can't fetch threads, assume session is unavailable and remove it
-      await handleSessionUnavailable(taskId);
+      await handleSessionUnavailable(spanId);
       return null;
     }
     return null;
   };
 
   // Handle an unavailable session (could no longer be running)
-  const handleSessionUnavailable = async (taskId: string) => {
-    if (!jobId) {
+  const handleSessionUnavailable = async (spanId: string) => {
+    if (!flowId) {
       return;
     }
 
     try {
       // Remove the task from active sessions
-      setActiveSessions((prev) => prev.filter((id) => id !== taskId));
+      setActiveSessions((prev) => prev.filter((id) => id !== spanId));
 
       // Clear session data if this was the selected session
-      if (selectedSession === taskId) {
+      if (selectedSession === spanId) {
         setSelectedSession(null);
         setThreads([]);
         setStackFrames([]);
@@ -663,19 +663,19 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
 
   // Fetch source code for the current frame
   const fetchSourceCode = async (
-    taskId: string,
+    spanId: string,
     threadId: number,
     frameId: number,
     source: any,
   ): Promise<string | null> => {
-    if (!jobId || !source) {
+    if (!flowId || !source) {
       return null;
     }
 
     setLoadingSourceCode(true);
     try {
       // 1. Open the file
-      const openResponse = await apiService.sendDebugCommand(jobId, taskId, "evaluate", {
+      const openResponse = await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
         expression: `_f_visual_debug_var_ = open("${source.path}")`,
         thread_id: threadId,
         frame_id: frameId,
@@ -691,7 +691,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
       }
 
       // 2. Read the file content
-      const readResponse = await apiService.sendDebugCommand(jobId, taskId, "evaluate", {
+      const readResponse = await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
         expression: "_content_visual_debug_var_ = _f_visual_debug_var_.read()",
         thread_id: threadId,
         frame_id: frameId,
@@ -699,7 +699,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
 
       if (!readResponse?.result?.success) {
         // Try to close the file even if reading failed
-        await apiService.sendDebugCommand(jobId, taskId, "evaluate", {
+        await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
           expression: "_f_visual_debug_var_.close()",
           thread_id: threadId,
           frame_id: frameId,
@@ -709,14 +709,14 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
         return null;
       }
 
-      const lengthResponse = await apiService.sendDebugCommand(jobId, taskId, "evaluate", {
+      const lengthResponse = await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
         expression: "len(_content_visual_debug_var_)",
         thread_id: threadId,
         frame_id: frameId,
       });
 
       if (!lengthResponse?.result?.body?.result) {
-        await apiService.sendDebugCommand(jobId, taskId, "evaluate", {
+        await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
           expression: "_f_visual_debug_var_.close()",
           thread_id: threadId,
           frame_id: frameId,
@@ -730,8 +730,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
       let start_pos = 0;
       while (start_pos < length) {
         const sliceResponse = await apiService.sendDebugCommand(
-          jobId,
-          taskId,
+          flowId,
+          spanId,
           "evaluate",
           {
             expression:
@@ -749,7 +749,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
       }
 
       // 3. Close the file
-      await apiService.sendDebugCommand(jobId, taskId, "evaluate", {
+      await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
         expression: "_f_visual_debug_var_.close()",
         thread_id: threadId,
         frame_id: frameId,
@@ -772,17 +772,17 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
 
   // Fetch stack trace for a thread
   const getCallFrame = async (
-    taskId: string,
+    spanId: string,
     threadId: number,
   ): Promise<any> => {
-    if (!jobId) {
+    if (!flowId) {
       return null;
     }
 
     try {
       const response = await apiService.sendDebugCommand(
-        jobId,
-        taskId,
+        flowId,
+        spanId,
         "get_stack_trace",
         { thread_id: threadId },
       );
@@ -805,17 +805,17 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
 
   // Fetch stack trace for a thread
   const fetchStackTrace = async (
-    taskId: string,
+    spanId: string,
     threadId: number,
   ): Promise<[number | null, any | null]> => {
-    if (!jobId) {
+    if (!flowId) {
       return [null, null];
     }
 
     try {
       const response = await apiService.sendDebugCommand(
-        jobId,
-        taskId,
+        flowId,
+        spanId,
         "get_stack_trace",
         { thread_id: threadId },
       );
@@ -853,7 +853,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
 
   // Handle thread selection
   const handleThreadSelect = async (threadId: number) => {
-    if (!jobId || !selectedSession) {
+    if (!flowId || !selectedSession) {
       return;
     }
 
@@ -888,14 +888,14 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
 
   // Handle evaluating expressions
   const handleEvaluate = async () => {
-    if (!jobId || !selectedSession || !selectedFrame || !selectedThread) {
+    if (!flowId || !selectedSession || !selectedFrame || !selectedThread) {
       return;
     }
 
     setLoadingEvaluate(true);
     try {
       const response = await apiService.sendDebugCommand(
-        jobId,
+        flowId,
         selectedSession,
         "evaluate",
         {
@@ -931,7 +931,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     threadId?: number,
     message?: string,
   ) => {
-    if (!jobId || !selectedSession) {
+    if (!flowId || !selectedSession) {
       return;
     }
 
@@ -942,7 +942,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
       }
 
       const response = await apiService.sendDebugCommand(
-        jobId,
+        flowId,
         selectedSession,
         command,
         args,
@@ -967,7 +967,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     frameId?: number,
     session?: string,
   ): Promise<boolean> => {
-    if (!jobId) {
+    if (!flowId) {
       return false;
     }
 
@@ -977,7 +977,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
     try {
       // Use an empty evaluate command to check if code is paused
       const response = await apiService.sendDebugCommand(
-        jobId,
+        flowId,
         session || selectedSession || "",
         "evaluate",
         {
@@ -1269,7 +1269,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
                         isLoading={loadingSourceCode}
                         selectedSourceFile={selectedSourceFile}
                         selectedSession={selectedSession || undefined}
-                        jobId={jobId}
+                        flowId={flowId}
                         apiService={apiService}
                       />
                     )
@@ -1323,20 +1323,20 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
                       ) : (
                         sessions.map((session) => (
                           <ListItem
-                            key={session.taskId}
+                            key={session.spanId}
                             disablePadding
                             secondaryAction={
-                              activeSessions.includes(session.taskId) ? (
+                              activeSessions.includes(session.spanId) ? (
                                 <Button
                                   size="small"
                                   variant="outlined"
                                   color="error"
                                   onClick={() =>
-                                    handleDeactivate(session.taskId)
+                                    handleDeactivate(session.spanId)
                                   }
                                   disabled={
                                     isInitializing &&
-                                    selectedSession === session.taskId
+                                    selectedSession === session.spanId
                                   }
                                   sx={{ py: 0, px: 1, minWidth: "auto" }}
                                 >
@@ -1357,20 +1357,20 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
                             }
                           >
                             <ListItemButton
-                              selected={selectedSession === session.taskId}
+                              selected={selectedSession === session.spanId}
                               onClick={async () => {
                                 if (
-                                  activeSessions.includes(session.taskId) &&
+                                  activeSessions.includes(session.spanId) &&
                                   !isInitializing
                                 ) {
-                                  setSelectedSession(session.taskId);
+                                  setSelectedSession(session.spanId);
 
                                   const threadIds = await fetchThreads(
-                                    session.taskId,
+                                    session.spanId,
                                   );
                                   if (threadIds) {
                                     await fetchStackTrace(
-                                      session.taskId,
+                                      session.spanId,
                                       threadIds[0],
                                     );
                                   }
@@ -1378,7 +1378,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
                                 }
                               }}
                               disabled={
-                                !activeSessions.includes(session.taskId) ||
+                                !activeSessions.includes(session.spanId) ||
                                 isInitializing
                               }
                               dense
@@ -1386,19 +1386,19 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ jobId, selectedElement, apiServ
                             >
                               <ListItemText
                                 primary={`${session.funcName}`}
-                                secondary={`${session.taskId.substring(
+                                secondary={`${session.spanId.substring(
                                   0,
                                   8,
                                 )}...`}
                                 primaryTypographyProps={{
                                   style: {
                                     fontWeight: activeSessions.includes(
-                                      session.taskId,
+                                      session.spanId,
                                     )
                                       ? "bold"
                                       : "normal",
                                     color: activeSessions.includes(
-                                      session.taskId,
+                                      session.spanId,
                                     )
                                       ? "#1976d2"
                                       : "inherit",

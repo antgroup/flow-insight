@@ -38,7 +38,7 @@ const findDataInputs = (
       const sourceNode = findNodeById(flow.source, graphData);
       return {
         ...sourceNode,
-        speed: flow.speed,
+        speed: flow.size && flow.duration ? (flow.size / flow.duration).toFixed(2) : "N/A",
         argpos: flow.argpos,
         duration: flow.duration,
         size: flow.size,
@@ -71,7 +71,7 @@ const findDataOutputs = (
       const targetNode = findNodeById(flow.target, graphData);
       return {
         ...targetNode,
-        speed: flow.speed,
+        speed: flow.size && flow.duration ? (flow.size / flow.duration).toFixed(2) : "N/A",
         argpos: flow.argpos,
         duration: flow.duration,
         size: flow.size,
@@ -88,7 +88,7 @@ const findNodeById = (id: string, graphData: GraphData): Node => {
 
   const method = graphData.methods.find((method) => method.id === id);
   if (method) {
-    const service = graphData.services.find((s) => s.id === method.id);
+    const service = graphData.services.find((s) => s.id === method.instanceId);
     return {
       ...method,
       type: "method",
@@ -433,10 +433,7 @@ const InfoCard = ({
                     <span className="connection-name">{node.name}</span>
                   </div>
                   {"count" in node && node.count && (
-                    <span className="connection-count">{node.count}次</span>
-                  )}
-                  {"speed" in node && node.speed && (
-                    <span className="connection-speed">{node.speed}</span>
+                    <span className="connection-count">{node.count} times</span>
                   )}
                 </div>
 
@@ -471,14 +468,11 @@ const InfoCard = ({
                         </span>
                       </div>
                     )}
-                    {node.duration !== undefined && (
+                    {node.speed !== undefined && (
                       <div className="detail-row">
                         <span className="detail-label">Throughput:</span>
                         <span className="detail-value">
-                          {node.size !== undefined
-                            ? (node.size / node.duration).toFixed(2)
-                            : "N/A"}{" "}
-                          MB/s
+                          {node.speed} MB/s
                         </span>
                       </div>
                     )}
@@ -604,7 +598,7 @@ const InfoCard = ({
     top: "135px",
     right: isOpen ? "0" : "-320px",
     width: "320px",
-    height: "calc(100vh - 64px)",
+    height: "calc(100vh - 240px)",
     background: "white",
     zIndex: 9999,
     overflowY: "auto" as const,

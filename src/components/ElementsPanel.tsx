@@ -113,7 +113,7 @@ const ElementsPanel = ({
     top: "135px",
     left: isOpen ? "0" : "-320px",
     width: "320px",
-    height: "calc(100vh - 64px)",
+    height: "calc(100vh - 240px)",
     backgroundColor: "white",
     zIndex: 9998,
     overflowY: "auto" as const,
