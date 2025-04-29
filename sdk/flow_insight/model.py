@@ -1,8 +1,12 @@
-import pydantic
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+import pydantic
+
 from flow_insight.storage.persist.model import BatchNodePhysicalStats, ServicePhysicalStatsRecord
 from flow_insight.storage.snapshot.model import UsageModel
+
+
 class RecordType(Enum):
     CALL_SUBMIT = "call_submit"
     CALL_BEGIN = "call_begin"
@@ -15,6 +19,8 @@ class RecordType(Enum):
     SERVICE_PHYSICAL_STATS_ADD = "service_physical_stats_add"
     NODE_PHYSICAL_STATS_ADD = "node_physical_stats_add"
     PROMPT_REGISTER = "prompt_register"
+
+
 class CallSubmitEvent(pydantic.BaseModel):
     flow_id: str
     parent_span_id: str
@@ -26,6 +32,7 @@ class CallSubmitEvent(pydantic.BaseModel):
     target_method: str
     timestamp: int
 
+
 class CallBeginEvent(pydantic.BaseModel):
     flow_id: str
     source_service: Optional[str] = None
@@ -33,6 +40,7 @@ class CallBeginEvent(pydantic.BaseModel):
     source_method: str
     parent_span_id: str
     span_id: str
+
 
 class CallEndEvent(pydantic.BaseModel):
     flow_id: str
@@ -42,6 +50,7 @@ class CallEndEvent(pydantic.BaseModel):
     duration: float
     span_id: str
 
+
 class ObjectGetEvent(pydantic.BaseModel):
     flow_id: str
     object_id: str
@@ -49,6 +58,7 @@ class ObjectGetEvent(pydantic.BaseModel):
     receiver_instance_id: Optional[str] = None
     receiver_method: str
     timestamp: int
+
 
 class ObjectPutEvent(pydantic.BaseModel):
     flow_id: str
@@ -60,7 +70,7 @@ class ObjectPutEvent(pydantic.BaseModel):
     sender_method: str
     timestamp: int
 
-   
+
 class ContextEvent(pydantic.BaseModel):
     flow_id: str
     service_name: Optional[str] = None
@@ -68,12 +78,14 @@ class ContextEvent(pydantic.BaseModel):
     method_name: Optional[str] = None
     context: Dict[str, Any]
 
+
 class ResourceUsageEvent(pydantic.BaseModel):
     flow_id: str
     service_name: Optional[str] = None
     instance_id: Optional[str] = None
     method_name: Optional[str] = None
     usage: Dict[str, UsageModel]
+
 
 class DebuggerInfoEvent(pydantic.BaseModel):
     flow_id: str
@@ -85,12 +97,15 @@ class DebuggerInfoEvent(pydantic.BaseModel):
     debugger_port: int
     debugger_enabled: bool
 
+
 class BatchServicePhysicalStatsEvent(pydantic.BaseModel):
     flow_id: str
     stats: list[ServicePhysicalStatsRecord]
 
+
 class BatchNodePhysicalStatsEvent(pydantic.BaseModel):
     stats: BatchNodePhysicalStats
+
 
 class PromptRegisterEvent(pydantic.BaseModel):
     prompt: str

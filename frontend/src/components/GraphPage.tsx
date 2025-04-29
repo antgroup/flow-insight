@@ -1,32 +1,27 @@
+import { Box, IconButton, ToggleButton, ToggleButtonGroup, Tooltip } from '@mui/material';
 import { Download, RefreshCw, PanelLeft, PanelRight, Bug } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
+
+import InsightPanel from './Analysis';
+import DebugPanel from './DebugPanel';
+import ElementsPanel from './ElementsPanel';
+import FlameVisualization, { FlameVisualizationHandle } from './Flame';
+import InfoCard from './InfoCard';
+import PhysicalVisualization, { PhysicalVisualizationHandle } from './Physical';
+import Visualization, { colorScheme, VisualizationHandle } from './Visualization';
+import { ApiService } from '../services/api';
 import {
-  Box,
-  IconButton,
-  ToggleButton,
-  ToggleButtonGroup,
-  Tooltip,
-} from "@mui/material";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import DebugPanel from "./DebugPanel";
-import InsightPanel from "./Analysis";
-import ElementsPanel from "./ElementsPanel";
-import { colorScheme } from "./Visualization";
-import InfoCard from "./InfoCard";
-import PhysicalVisualization, {
-  PhysicalVisualizationHandle,
-} from "./Physical";
-import FlameVisualization, {
-  FlameVisualizationHandle,
-} from "./Flame";
-import Visualization, {
-  VisualizationHandle,
-} from "./Visualization";
-import { GraphData, Service, Method, FunctionNode, PhysicalViewData, FlameGraphData} from "../types";
-import { ApiService } from "../services/api";
+  GraphData,
+  Service,
+  Method,
+  FunctionNode,
+  PhysicalViewData,
+  FlameGraphData,
+} from '../types';
 
 // Create an ApiService instance
-const apiService = new ApiService({ baseUrl: "" });
+const apiService = new ApiService({ baseUrl: '' });
 
 type ElementData = Service | Method | FunctionNode;
 
@@ -39,14 +34,14 @@ type GraphPageProps = {
   physicalViewData?: PhysicalViewData | null;
   flameData?: FlameGraphData | null;
   flowId?: string;
-  initialViewType?: "logical" | "call_stack" | "physical" | "flame" | "analysis";
+  initialViewType?: 'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis';
   autoRefresh?: boolean;
   onElementClick?: (data: ElementData, skip_zoom?: boolean) => void;
   selectedElementId?: string | null;
   onUpdate?: () => Promise<void>;
   colorScheme?: Record<string, string>;
   apiService: ApiService;
-}
+};
 
 const GraphPage: React.FC<GraphPageProps> = ({
   graphData: initialGraphData,
@@ -54,47 +49,52 @@ const GraphPage: React.FC<GraphPageProps> = ({
   physicalViewData: initialPhysicalViewData,
   flameData: initialFlameData,
   flowId: propFlowId,
-  initialViewType = "logical",
+  initialViewType = 'logical',
   autoRefresh: initialAutoRefresh = false,
-  onElementClick: externalElementClick,
   selectedElementId: initialSelectedElementId,
-  onUpdate: externalUpdate,
   colorScheme: customColorScheme,
   apiService: externalApiService,
 }) => {
   const { flowId: routeFlowId } = useParams<RouteParams>();
   const [graphData, setGraphData] = useState<GraphData | null>(initialGraphData || null);
-  const [stackGraphData, setStackGraphData] = useState<GraphData | null>(initialStackGraphData || null);
-  const [physicalViewData, setPhysicalViewData] = useState<PhysicalViewData | null>(initialPhysicalViewData || null);
+  const [stackGraphData, setStackGraphData] = useState<GraphData | null>(
+    initialStackGraphData || null
+  );
+  const [physicalViewData, setPhysicalViewData] = useState<PhysicalViewData | null>(
+    initialPhysicalViewData || null
+  );
   const [flameData, setFlameData] = useState<FlameGraphData | null>(initialFlameData || null);
   const [error, setError] = useState<string | null>(null);
   const [currentFlowId, setCurrentFlowId] = useState<string | undefined>(propFlowId || routeFlowId);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(initialAutoRefresh);
-  const [currentViewType, setCurrentViewType] = useState<"logical" | "call_stack" | "physical" | "flame" | "analysis">(initialViewType || "logical");
+  const [currentViewType, setCurrentViewType] = useState<
+    'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis'
+  >(initialViewType || 'logical');
   const visualizationRef = useRef<VisualizationHandle>(null);
   const physicalVisualizationRef = useRef<PhysicalVisualizationHandle>(null);
   const flameVisualizationRef = useRef<FlameVisualizationHandle>(null);
   const autoRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [updating, setUpdating] = useState(false);
-  
+
   // State for drawer visibility
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(true);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(true);
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
-  
+
   // Use the provided API service or the local one
   const activeApiService = externalApiService || apiService;
 
   // State management similar to App.tsx
   const [infoCardData, setInfoCardData] = useState<ElementData>({
-    id: "default",
-    type: "function",
-    name: "Component Details",
+    id: 'default',
+    type: 'function',
+    name: 'Component Details',
   });
 
-  const [selectedElementId, setSelectedElementId] =
-    useState<string | null>(initialSelectedElementId || null);
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(
+    initialSelectedElementId || null
+  );
 
   const fetchGraphData = useCallback(
     async (id?: string, stackMode?: boolean) => {
@@ -104,7 +104,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
       try {
         const graphData = await activeApiService.getGraphData(id, stackMode);
-        
+
         if (graphData) {
           if (stackMode) {
             setStackGraphData(graphData);
@@ -114,12 +114,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
           setError(null);
         }
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch graph data",
-        );
+        setError(err instanceof Error ? err.message : 'Failed to fetch graph data');
       }
     },
-    [activeApiService],
+    [activeApiService]
   );
 
   // Update currentFlowId when route FlowId changes
@@ -141,9 +139,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
           const flameData = await activeApiService.getFlameGraphData(currentFlowId);
           setFlameData(flameData);
         } catch (err) {
-          setError(
-            err instanceof Error ? err.message : "Failed to fetch view data",
-          );
+          setError(err instanceof Error ? err.message : 'Failed to fetch view data');
         }
       })();
     }
@@ -151,24 +147,22 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
   // eslint-disable-next-line
   const fetchDatas = async () => {
-    if (currentViewType === "call_stack") {
+    if (currentViewType === 'call_stack') {
       await fetchGraphData(currentFlowId, true);
     }
-    if (currentViewType === "logical") {
+    if (currentViewType === 'logical') {
       await fetchGraphData(currentFlowId, false);
     }
-    if (currentViewType === "physical") {
+    if (currentViewType === 'physical') {
       await fetchGraphData(currentFlowId, false);
       try {
         const data = await activeApiService.getPhysicalViewData(currentFlowId!);
         setPhysicalViewData(data);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch physical view data",
-        );
+        setError(err instanceof Error ? err.message : 'Failed to fetch physical view data');
       }
     }
-    if (currentViewType === "flame" || currentViewType === "analysis") {
+    if (currentViewType === 'flame' || currentViewType === 'analysis') {
       await fetchGraphData(currentFlowId, false);
       try {
         const data = await activeApiService.getPhysicalViewData(currentFlowId!);
@@ -176,9 +170,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         const flameData = await activeApiService.getFlameGraphData(currentFlowId!);
         setFlameData(flameData);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch view data",
-        );
+        setError(err instanceof Error ? err.message : 'Failed to fetch view data');
       }
     }
   };
@@ -204,19 +196,16 @@ const GraphPage: React.FC<GraphPageProps> = ({
     // eslint-disable-next-line
   }, [autoRefresh, currentFlowId, fetchGraphData, currentViewType]);
 
-  const handleElementClick = useCallback(
-    (data: ElementData, skip_zoom = false) => {
-      setInfoCardData({ ...data });
-      if (skip_zoom) {
-        return;
-      }
+  const handleElementClick = useCallback((data: ElementData, skip_zoom = false) => {
+    setInfoCardData({ ...data });
+    if (skip_zoom) {
+      return;
+    }
 
-      if (data && data.id) {
-        setSelectedElementId(data.id);
-      }
-    },
-    [],
-  );
+    if (data && data.id) {
+      setSelectedElementId(data.id);
+    }
+  }, []);
 
   const handleUpdate = useCallback(async () => {
     setUpdating(true);
@@ -229,12 +218,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
   }, []);
 
   const handleViewTypeChange = useCallback(
-    (
-      viewType: "logical" | "call_stack" | "physical" | "flame" | "analysis",
-    ) => {
+    (viewType: 'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis') => {
       setCurrentViewType(viewType);
     },
-    [],
+    []
   );
 
   const handleAutoRefreshChange = useCallback((enabled: boolean) => {
@@ -257,18 +244,18 @@ const GraphPage: React.FC<GraphPageProps> = ({
   // Function to handle SVG export based on current view type
   const handleExportSvg = () => {
     switch (currentViewType) {
-      case "logical":
-      case "call_stack":
+      case 'logical':
+      case 'call_stack':
         visualizationRef.current?.exportSvg();
         break;
-      case "physical":
+      case 'physical':
         physicalVisualizationRef.current?.exportSvg();
         break;
-      case "flame":
+      case 'flame':
         flameVisualizationRef.current?.exportSvg();
         break;
       default:
-        console.warn("Export not supported for this view type");
+        console.warn('Export not supported for this view type');
     }
   };
 
@@ -279,29 +266,32 @@ const GraphPage: React.FC<GraphPageProps> = ({
   return (
     <Box
       sx={{
-        display: "flex",
-        height: "calc(100vh - 64px)",
-        width: "100%",
-        position: "relative",
+        display: 'flex',
+        height: 'calc(100vh - 64px)',
+        width: '100%',
+        position: 'relative',
       }}
     >
       <Box
         sx={{
           flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          position: "relative",
-          width: "100%",
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          width: '100%',
         }}
       >
         <div className="header">
-          <div className="title-container" style={{ 
-            display: "flex", 
-            alignItems: "center", 
-            flexWrap: "wrap",
-            gap: "8px",
-            marginTop: "16px"
-          }}>
+          <div
+            className="title-container"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
+              marginTop: '16px',
+            }}
+          >
             <h1 className="title" style={{ margin: 0 }}>
               Flow Insight
             </h1>
@@ -316,14 +306,14 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 }}
                 aria-label="view type"
                 size="small"
-                sx={{ 
-                  ml: "100px",
+                sx={{
+                  ml: '100px',
                   '& .MuiToggleButton-root': {
                     padding: '6px 12px',
                     display: 'flex',
                     alignItems: 'center',
                     height: '32px',
-                  }
+                  },
                 }}
               >
                 <ToggleButton value="logical" aria-label="logical view">
@@ -342,29 +332,38 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   Analysis
                 </ToggleButton>
               </ToggleButtonGroup>
-                <DebugPanel flowId={currentFlowId} selectedElement={infoCardData} apiService={activeApiService} expanded={debugPanelOpen} />
+              <DebugPanel
+                flowId={currentFlowId}
+                selectedElement={infoCardData}
+                apiService={activeApiService}
+                expanded={debugPanelOpen}
+              />
 
-              <div style={{ 
-                marginLeft: '16px', 
-                display: 'flex', 
-                alignItems: 'center',
-                height: '32px'
-              }}>
-                <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  cursor: 'pointer',
-                  padding: '2px 4px'
-                }}>
+              <div
+                style={{
+                  marginLeft: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  height: '32px',
+                }}
+              >
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={autoRefresh}
-                    onChange={(e) => handleAutoRefreshChange(e.target.checked)}
-                    style={{ 
+                    onChange={e => handleAutoRefreshChange(e.target.checked)}
+                    style={{
                       marginRight: '8px',
                       width: '16px',
                       height: '16px',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
                     }}
                   />
                   Auto Refresh
@@ -380,24 +379,24 @@ const GraphPage: React.FC<GraphPageProps> = ({
                       size="small"
                       disabled={updating}
                       sx={{
-                        backgroundColor: "white",
+                        backgroundColor: 'white',
                         boxShadow: 1,
-                        padding: "6px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        "&:hover": {
-                          backgroundColor: "grey.100",
+                        padding: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        '&:hover': {
+                          backgroundColor: 'grey.100',
                         },
-                        "& svg": {
-                          animation: updating ? "spin 1s linear infinite" : "none",
+                        '& svg': {
+                          animation: updating ? 'spin 1s linear infinite' : 'none',
                         },
-                        "@keyframes spin": {
-                          "0%": {
-                            transform: "rotate(0deg)",
+                        '@keyframes spin': {
+                          '0%': {
+                            transform: 'rotate(0deg)',
                           },
-                          "100%": {
-                            transform: "rotate(360deg)",
+                          '100%': {
+                            transform: 'rotate(360deg)',
                           },
                         },
                       }}
@@ -406,24 +405,24 @@ const GraphPage: React.FC<GraphPageProps> = ({
                     </IconButton>
                   </Tooltip>
                 )}
-                
-                {(currentViewType === "logical" ||
-                  currentViewType === "call_stack" ||
-                  currentViewType === "physical" ||
-                  currentViewType === "flame") && (
+
+                {(currentViewType === 'logical' ||
+                  currentViewType === 'call_stack' ||
+                  currentViewType === 'physical' ||
+                  currentViewType === 'flame') && (
                   <Tooltip title="Export as SVG">
                     <IconButton
                       onClick={handleExportSvg}
                       size="small"
                       sx={{
-                        backgroundColor: "white",
+                        backgroundColor: 'white',
                         boxShadow: 1,
-                        padding: "6px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        "&:hover": {
-                          backgroundColor: "grey.100",
+                        padding: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        '&:hover': {
+                          backgroundColor: 'grey.100',
                         },
                       }}
                     >
@@ -431,83 +430,79 @@ const GraphPage: React.FC<GraphPageProps> = ({
                     </IconButton>
                   </Tooltip>
                 )}
-                
-                <Tooltip title={debugPanelOpen ? "Hide debug panel" : "Show debug panel"}>
+
+                <Tooltip title={debugPanelOpen ? 'Hide debug panel' : 'Show debug panel'}>
                   <IconButton
                     onClick={toggleDebugPanel}
                     size="small"
                     sx={{
-                      backgroundColor: debugPanelOpen ? "grey.200" : "white",
+                      backgroundColor: debugPanelOpen ? 'grey.200' : 'white',
                       boxShadow: 1,
-                      padding: "6px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      "&:hover": {
-                        backgroundColor: "grey.100",
+                      padding: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      '&:hover': {
+                        backgroundColor: 'grey.100',
                       },
                     }}
                   >
                     <Bug size={16} />
                   </IconButton>
                 </Tooltip>
- 
-                <Tooltip title={leftDrawerOpen ? "Hide instances panel" : "Show instances panel"}>
+
+                <Tooltip title={leftDrawerOpen ? 'Hide instances panel' : 'Show instances panel'}>
                   <IconButton
                     onClick={toggleLeftDrawer}
                     size="small"
                     sx={{
-                      backgroundColor: leftDrawerOpen ? "grey.200" : "white",
+                      backgroundColor: leftDrawerOpen ? 'grey.200' : 'white',
                       boxShadow: 1,
-                      padding: "6px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      "&:hover": {
-                        backgroundColor: "grey.100",
+                      padding: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      '&:hover': {
+                        backgroundColor: 'grey.100',
                       },
                     }}
                   >
                     <PanelLeft size={16} />
                   </IconButton>
                 </Tooltip>
-                
-                <Tooltip title={rightDrawerOpen ? "Hide details panel" : "Show details panel"}>
+
+                <Tooltip title={rightDrawerOpen ? 'Hide details panel' : 'Show details panel'}>
                   <IconButton
                     onClick={toggleRightDrawer}
                     size="small"
                     sx={{
-                      backgroundColor: rightDrawerOpen ? "grey.200" : "white",
+                      backgroundColor: rightDrawerOpen ? 'grey.200' : 'white',
                       boxShadow: 1,
-                      padding: "6px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      "&:hover": {
-                        backgroundColor: "grey.100",
+                      padding: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      '&:hover': {
+                        backgroundColor: 'grey.100',
                       },
                     }}
                   >
                     <PanelRight size={16} />
                   </IconButton>
                 </Tooltip>
-
-             </div>
+              </div>
             </React.Fragment>
           </div>
           <div className="legends">
             <div className="legend-item">
               <span
                 className="legend-color"
-                style={{ backgroundColor: colorScheme.service}}
+                style={{ backgroundColor: colorScheme.service }}
               ></span>
               <span>Service</span>
             </div>
             <div className="legend-item">
-              <span
-                className="legend-color"
-                style={{ backgroundColor: colorScheme.method }}
-              ></span>
+              <span className="legend-color" style={{ backgroundColor: colorScheme.method }}></span>
               <span>Method</span>
             </div>
             <div className="legend-item">
@@ -517,15 +512,15 @@ const GraphPage: React.FC<GraphPageProps> = ({
               ></span>
               <span>Function</span>
             </div>
-            {searchTerm && searchTerm.trim() !== "" && (
+            {searchTerm && searchTerm.trim() !== '' && (
               <div className="legend-item">
                 <span
                   className="legend-color"
                   style={{
-                    backgroundColor: "white",
-                    border: "4px solid #4caf50",
-                    borderRadius: "2px",
-                    boxSizing: "border-box",
+                    backgroundColor: 'white',
+                    border: '4px solid #4caf50',
+                    borderRadius: '2px',
+                    boxSizing: 'border-box',
                   }}
                 ></span>
                 <span>Search Match</span>
@@ -534,7 +529,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
           </div>
         </div>
 
-        {graphData && currentViewType === "logical" && (
+        {graphData && currentViewType === 'logical' && (
           <Visualization
             ref={visualizationRef}
             // eslint-disable-next-line
@@ -552,7 +547,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             apiService={activeApiService}
           />
         )}
-        {currentViewType === "call_stack" && (
+        {currentViewType === 'call_stack' && (
           <Visualization
             ref={visualizationRef}
             // eslint-disable-next-line
@@ -570,7 +565,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             apiService={activeApiService}
           />
         )}
-        {graphData && currentViewType === "physical" && (
+        {graphData && currentViewType === 'physical' && (
           <PhysicalVisualization
             ref={physicalVisualizationRef}
             // eslint-disable-next-line
@@ -583,13 +578,13 @@ const GraphPage: React.FC<GraphPageProps> = ({
             searchTerm={searchTerm}
           />
         )}
-        {flameData && currentViewType === "flame" && (
+        {flameData && currentViewType === 'flame' && (
           <div
             style={{
-              position: "relative",
+              position: 'relative',
               zIndex: 1,
-              width: "100%",
-              height: "600px",
+              width: '100%',
+              height: '600px',
             }}
           >
             {flameData ? (
@@ -613,8 +608,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
             )}
           </div>
         )}
-        {currentViewType === "analysis" && (
-          <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
+        {currentViewType === 'analysis' && (
+          <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
             <InsightPanel
               flowId={currentFlowId}
               graphData={graphData}
@@ -625,10 +620,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
           </Box>
         )}
       </Box>
-      
+
       <ElementsPanel
         onElementSelect={handleElementClick}
-        selectedElementId={selectedElementId || ""}
+        selectedElementId={selectedElementId || ''}
         onSearchChange={handleSearchChange}
         graphData={
           graphData || {
@@ -641,7 +636,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         }
         isOpen={leftDrawerOpen}
       />
-      
+
       <InfoCard
         data={infoCardData}
         visible={true}
@@ -655,8 +650,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
           }
         }
         currentView={currentViewType}
-        onNavigateToLogicalView={(nodeId) => {
-          visualizationRef.current?.navigateToView("logical");
+        onNavigateToLogicalView={nodeId => {
+          visualizationRef.current?.navigateToView('logical');
           setSelectedElementId(nodeId);
         }}
         isOpen={rightDrawerOpen}

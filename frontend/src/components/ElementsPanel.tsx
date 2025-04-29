@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
-import "./ElementsPanel.css";
-import { GraphData } from "../types";
+import React, { useCallback, useEffect, useState } from 'react';
+
+import './ElementsPanel.css';
+import { GraphData } from '../types';
 
 type ElementsPanelProps = {
   onElementSelect: (element: any) => void;
@@ -15,13 +16,11 @@ const ElementsPanel = ({
   selectedElementId,
   graphData,
   onSearchChange,
-  isOpen
+  isOpen,
 }: ElementsPanelProps) => {
-  const [activeTab, setActiveTab] = useState("services");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [expandedServices, setExpandedServices] = useState<Record<string, boolean>>(
-    {},
-  );
+  const [activeTab, setActiveTab] = useState('services');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedServices, setExpandedServices] = useState<Record<string, boolean>>({});
 
   // Notify parent component when search term changes
   useEffect(() => {
@@ -37,31 +36,29 @@ const ElementsPanel = ({
         return items;
       }
       return items.filter(
-        (item) =>
+        item =>
           item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.id.toLowerCase().includes(searchTerm.toLowerCase()),
+          item.id.toLowerCase().includes(searchTerm.toLowerCase())
       );
     },
-    [searchTerm],
+    [searchTerm]
   );
 
   // Get methods for a specific service
   const getServiceMethods = useCallback(
     (instanceId: string) => {
-      const methods = graphData.methods.filter(
-        (method) => method.instanceId === instanceId,
-      );
+      const methods = graphData.methods.filter(method => method.instanceId === instanceId);
       if (!searchTerm) {
         return methods;
       }
 
       return methods.filter(
-        (method) =>
+        method =>
           method.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          method.id.toLowerCase().includes(searchTerm.toLowerCase()),
+          method.id.toLowerCase().includes(searchTerm.toLowerCase())
       );
     },
-    [graphData.methods, searchTerm],
+    [graphData.methods, searchTerm]
   );
 
   // Filter services and their methods based on search term
@@ -70,16 +67,16 @@ const ElementsPanel = ({
       return graphData.services;
     }
 
-    return graphData.services.filter((service) => {
+    return graphData.services.filter(service => {
       const serviceMatches =
         service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         service.id.toLowerCase().includes(searchTerm.toLowerCase());
 
       const serviceMethods = getServiceMethods(service.id);
       const methodMatches = serviceMethods.some(
-        (method) =>
+        method =>
           method.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          method.id.toLowerCase().includes(searchTerm.toLowerCase()),
+          method.id.toLowerCase().includes(searchTerm.toLowerCase())
       );
 
       return serviceMatches || methodMatches;
@@ -89,10 +86,10 @@ const ElementsPanel = ({
   // Update expanded services when search term changes
   useEffect(() => {
     const servicesToExpand: Record<string, boolean> = {};
-    graphData.services.forEach((service) => {
+    graphData.services.forEach(service => {
       const methods = getServiceMethods(service.id);
       // Only expand if there's a search term and methods exist
-      servicesToExpand[service.id] = searchTerm !== "" && methods.length > 0;
+      servicesToExpand[service.id] = searchTerm !== '' && methods.length > 0;
     });
     setExpandedServices(servicesToExpand);
   }, [searchTerm, getServiceMethods, graphData.services]);
@@ -102,23 +99,23 @@ const ElementsPanel = ({
 
   // Toggle expanded state for an service
   const toggleServiceExpand = (instanceId: string) => {
-    setExpandedServices((prev) => ({
+    setExpandedServices(prev => ({
       ...prev,
       [instanceId]: !prev[instanceId],
     }));
   };
 
   const drawerStyle = {
-    position: "absolute" as const,
-    top: "135px",
-    left: isOpen ? "0" : "-320px",
-    width: "320px",
-    height: "calc(100vh - 240px)",
-    backgroundColor: "white",
+    position: 'absolute' as const,
+    top: '135px',
+    left: isOpen ? '0' : '-320px',
+    width: '320px',
+    height: 'calc(100vh - 240px)',
+    backgroundColor: 'white',
     zIndex: 9998,
-    overflowY: "auto" as const,
-    boxShadow: "2px 0 10px rgba(0, 0, 0, 0.1)",
-    transition: "left 0.3s ease",
+    overflowY: 'auto' as const,
+    boxShadow: '2px 0 10px rgba(0, 0, 0, 0.1)',
+    transition: 'left 0.3s ease',
   };
 
   if (!isOpen) {
@@ -126,50 +123,49 @@ const ElementsPanel = ({
   }
 
   return (
-    <div 
-      className="elements-panel" 
-      style={drawerStyle}
-    >
+    <div className="elements-panel" style={drawerStyle}>
       <div className="panel-header">
-        <div style={{ 
-          fontWeight: "bold", 
-          fontSize: "14px", 
-          margin: 0, 
-          padding: 0,
-          lineHeight: "1.2"
-        }}>
+        <div
+          style={{
+            fontWeight: 'bold',
+            fontSize: '14px',
+            margin: 0,
+            padding: 0,
+            lineHeight: '1.2',
+          }}
+        >
           Instances
         </div>
       </div>
 
-      <div className="elements-content" style={{ padding: "10px" }}>
+      <div className="elements-content" style={{ padding: '10px' }}>
         <div className="search-container">
           <input
             type="text"
             placeholder="Search..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={e => setSearchTerm(e.target.value)}
             className="search-input"
           />
         </div>
 
         <div className="tab-container">
           <div
-            className={`tab ${activeTab === "services" ? "active" : ""}`}
-            onClick={() => setActiveTab("services")}
+            className={`tab ${activeTab === 'services' ? 'active' : ''}`}
+            onClick={() => setActiveTab('services')}
           >
             Services ({graphData.services.length})
           </div>
           <div
-            className={`tab ${activeTab === "functions" ? "active" : ""}`}
-            onClick={() => setActiveTab("functions")}
+            className={`tab ${activeTab === 'functions' ? 'active' : ''}`}
+            onClick={() => setActiveTab('functions')}
           >
             Functions ({graphData.functions.length})
           </div>
         </div>
 
         <div className="elements-table-container">
-          {activeTab === "services" && (
+          {activeTab === 'services' && (
             <table className="elements-table">
               <thead>
                 <tr>
@@ -177,27 +173,23 @@ const ElementsPanel = ({
                 </tr>
               </thead>
               <tbody>
-                {filteredServices.map((service) => (
+                {filteredServices.map(service => (
                   <React.Fragment key={service.id}>
                     <tr
                       className={`service-row ${
-                        service.id === selectedElementId ? "selected" : ""
+                        service.id === selectedElementId ? 'selected' : ''
                       }`}
                     >
                       <td>
                         <button
                           className={`expand-button ${
-                            expandedServices[service.id] ? "expanded" : ""
+                            expandedServices[service.id] ? 'expanded' : ''
                           }`}
                           onClick={() => toggleServiceExpand(service.id)}
                         >
-                          {expandedServices[service.id] ? "−" : "+"}
+                          {expandedServices[service.id] ? '−' : '+'}
                         </button>
-                        <span
-                          onClick={() =>
-                            onElementSelect({ ...service, type: "service" })
-                          }
-                        >
+                        <span onClick={() => onElementSelect({ ...service, type: 'service' })}>
                           {service.name}
                         </span>
                       </td>
@@ -208,18 +200,14 @@ const ElementsPanel = ({
                           <div className="service-methods">
                             <table className="methods-table">
                               <tbody>
-                                {getServiceMethods(service.id).map((method) => (
+                                {getServiceMethods(service.id).map(method => (
                                   <tr
                                     key={method.id}
-                                    className={
-                                      method.id === selectedElementId
-                                        ? "selected"
-                                        : ""
-                                    }
+                                    className={method.id === selectedElementId ? 'selected' : ''}
                                     onClick={() =>
                                       onElementSelect({
                                         ...method,
-                                        type: "method",
+                                        type: 'method',
                                       })
                                     }
                                   >
@@ -238,7 +226,7 @@ const ElementsPanel = ({
             </table>
           )}
 
-          {activeTab === "functions" && (
+          {activeTab === 'functions' && (
             <table className="elements-table">
               <thead>
                 <tr>
@@ -246,11 +234,11 @@ const ElementsPanel = ({
                 </tr>
               </thead>
               <tbody>
-                {filteredFunctions.map((func) => (
+                {filteredFunctions.map(func => (
                   <tr
                     key={func.id}
-                    className={func.id === selectedElementId ? "selected" : ""}
-                    onClick={() => onElementSelect({ ...func, type: "function" })}
+                    className={func.id === selectedElementId ? 'selected' : ''}
+                    onClick={() => onElementSelect({ ...func, type: 'function' })}
                   >
                     <td>{func.name}</td>
                   </tr>

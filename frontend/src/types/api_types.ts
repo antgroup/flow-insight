@@ -1,9 +1,8 @@
-
 // Service type
 export type ATService = {
   serviceName: string;
   instanceId: string;
-}
+};
 
 // Method type
 export type ATMethod = {
@@ -12,7 +11,7 @@ export type ATMethod = {
     name: string;
   };
   service: ATService;
-}
+};
 
 // Function type
 export type ATFunction = {
@@ -21,7 +20,7 @@ export type ATFunction = {
     name: string;
   };
   service: ATService | null;
-}
+};
 
 // Call Flow type
 export type ATCallFlow = {
@@ -29,7 +28,7 @@ export type ATCallFlow = {
   targetId: string;
   count: number;
   startTime: number;
-}
+};
 
 // Data Flow type
 export type ATDataFlow = {
@@ -39,7 +38,7 @@ export type ATDataFlow = {
   duration: number;
   size: number;
   timestamp: number;
-}
+};
 
 // Graph Data type
 export type ATGraphData = {
@@ -48,7 +47,7 @@ export type ATGraphData = {
   functions: ATFunction[];
   callFlows: ATCallFlow[];
   dataFlows: ATDataFlow[];
-}
+};
 
 // FlameGraph node type
 export type ATFlameGraphNode = {
@@ -62,7 +61,7 @@ export type ATFlameGraphNode = {
     count: number;
     startTime: number;
   }[];
-}
+};
 
 // Parent start times type
 export type ParentStartTime = {
@@ -71,13 +70,13 @@ export type ParentStartTime = {
     callerId: string;
     startTime: number;
   }[];
-}
+};
 
 // Flame Graph Data type
 export type ATFlameGraphData = {
   aggregated: ATFlameGraphNode[];
   parentStartTimes: ParentStartTime[];
-}
+};
 
 // Service stats type
 export type ATServiceStats = {
@@ -97,19 +96,19 @@ export type ATServiceStats = {
     dirty: number;
   };
   devices: Record<string, any>;
-}
+};
 
 // Service with stats type
 export type ATServiceWithStats = {
   service: ATService;
   stats: ATServiceStats;
-}
+};
 
 // Node resources type
 export type ATNodeResources = {
   total: number;
   available: number;
-}
+};
 
 // Node type
 export type ATNode = {
@@ -124,13 +123,13 @@ export type ATNode = {
     used: number;
     available: number;
   };
-}
+};
 
 // Physical View Data type
 export type ATPhysicalViewData = {
   services: ATServiceWithStats[];
   nodes: Record<string, ATNode>;
-} 
+};
 
 export type ATDebugSession = {
   service: ATService;
@@ -138,7 +137,7 @@ export type ATDebugSession = {
     name: string;
   };
   spanId: string;
-}
+};
 
 export type ATContext = {
   service: ATService;
@@ -146,15 +145,18 @@ export type ATContext = {
     name: string;
   };
   context: Record<string, any>;
-}
+};
 
 export type ATResourceUsage = {
   service: ATService;
   method: {
     name: string;
   };
-  usage: Record<string,{
-    used: number;
-    base: string;
-  }>;
-}
+  usage: Record<
+    string,
+    {
+      used: number;
+      base: string;
+    }
+  >;
+};

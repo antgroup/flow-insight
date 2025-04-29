@@ -3,7 +3,7 @@ export type Service = {
   id: string;
   instanceId: string;
   name: string;
-  type: "service";
+  type: 'service';
   gpuDevices?: Array<{
     index: number;
     name: string;
@@ -48,13 +48,13 @@ export type Method = {
   instanceId: string;
   name: string;
   serviceName?: string;
-  type?: "method";
+  type?: 'method';
 };
 
 export type FunctionNode = {
   id: string;
   name: string;
-  type?: "function";
+  type?: 'function';
 };
 
 export type ElementData = Service | Method | FunctionNode;
@@ -105,7 +105,6 @@ export type ResourceUsageInfo = {
   used: number;
   usage: number;
 };
-
 
 export type NodeData = {
   resources: Record<string, ResourceValue>;

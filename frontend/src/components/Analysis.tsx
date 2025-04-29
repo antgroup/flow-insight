@@ -1,27 +1,19 @@
+import { Alert, Box, Button, CircularProgress, TextField, Typography } from '@mui/material';
 import { Download, RefreshCw, Settings } from 'lucide-react';
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  TextField,
-  Typography,
-} from "@mui/material";
-import mermaid from "mermaid";
-import React, { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import remarkGfm from "remark-gfm";
-import {
-    ApiService,
-} from "../services/api";
+import mermaid from 'mermaid';
+import React, { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import remarkGfm from 'remark-gfm';
+
+import { ApiService } from '../services/api';
 
 // Initialize mermaid
 mermaid.initialize({
   startOnLoad: true,
-  theme: "default",
-  securityLevel: "loose",
-  fontFamily: "Verdana, sans-serif",
+  theme: 'default',
+  securityLevel: 'loose',
+  fontFamily: 'Verdana, sans-serif',
   suppressErrorRendering: true,
 });
 
@@ -37,21 +29,17 @@ type InsightPanelProps = {
 const MarkdownComponents = {
   // eslint-disable-next-line
   code({ node, inline, className, children, ...props }: any) {
-    const match = /language-(\w+)/.exec(className || "");
-    const language = match && match[1] ? match[1] : "";
+    const match = /language-(\w+)/.exec(className || '');
+    const language = match && match[1] ? match[1] : '';
 
     // Handle Mermaid diagrams specially
-    if (language === "mermaid") {
+    if (language === 'mermaid') {
       return <MermaidDiagram chart={String(children)} />;
     }
 
     return !inline && language ? (
-      <SyntaxHighlighter
-        language={language}
-        PreTag="div"
-        {...props}
-      >
-        {String(children).replace(/\n$/, "")}
+      <SyntaxHighlighter language={language} PreTag="div" {...props}>
+        {String(children).replace(/\n$/, '')}
       </SyntaxHighlighter>
     ) : (
       <code className={className} {...props}>
@@ -62,8 +50,8 @@ const MarkdownComponents = {
   // eslint-disable-next-line
   table({ children, ...props }: any) {
     return (
-      <Box sx={{ overflowX: "auto", my: 2 }}>
-        <table style={{ borderCollapse: "collapse", width: "100%" }} {...props}>
+      <Box sx={{ overflowX: 'auto', my: 2 }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%' }} {...props}>
           {children}
         </table>
       </Box>
@@ -74,9 +62,9 @@ const MarkdownComponents = {
     return (
       <th
         style={{
-          textAlign: "left",
-          padding: "8px",
-          borderBottom: "1px solid #ddd",
+          textAlign: 'left',
+          padding: '8px',
+          borderBottom: '1px solid #ddd',
         }}
         {...props}
       >
@@ -87,7 +75,7 @@ const MarkdownComponents = {
   // eslint-disable-next-line
   td({ children, ...props }: any) {
     return (
-      <td style={{ padding: "8px", borderBottom: "1px solid #ddd" }} {...props}>
+      <td style={{ padding: '8px', borderBottom: '1px solid #ddd' }} {...props}>
         {children}
       </td>
     );
@@ -95,7 +83,7 @@ const MarkdownComponents = {
   // eslint-disable-next-line
   a({ children, ...props }: any) {
     return (
-      <a style={{ color: "#1976d2", textDecoration: "none" }} {...props}>
+      <a style={{ color: '#1976d2', textDecoration: 'none' }} {...props}>
         {children}
       </a>
     );
@@ -103,8 +91,8 @@ const MarkdownComponents = {
   // eslint-disable-next-line
   img({ src, alt, ...props }: any) {
     return (
-      <Box sx={{ textAlign: "center", my: 2 }}>
-        <img src={src} alt={alt} style={{ maxWidth: "100%" }} {...props} />
+      <Box sx={{ textAlign: 'center', my: 2 }}>
+        <img src={src} alt={alt} style={{ maxWidth: '100%' }} {...props} />
       </Box>
     );
   },
@@ -113,7 +101,7 @@ const MarkdownComponents = {
 // Mermaid diagram component
 const MermaidDiagram = ({ chart }: { chart: string }) => {
   const ref = useRef<HTMLDivElement>(null);
-  const [svg, setSvg] = useState<string>("");
+  const [svg, setSvg] = useState<string>('');
 
   useEffect(() => {
     if (ref.current && chart && chart.trim()) {
@@ -128,34 +116,33 @@ const MermaidDiagram = ({ chart }: { chart: string }) => {
                 if (svg && svg.trim()) {
                   setSvg(svg);
                 } else {
-                  console.warn("Empty SVG returned from Mermaid");
+                  console.warn('Empty SVG returned from Mermaid');
                 }
               })
-              .catch((renderError) => {
-                console.warn("Error rendering Mermaid diagram:", renderError);
+              .catch(renderError => {
+                console.warn('Error rendering Mermaid diagram:', renderError);
               });
           } catch (error) {
-            console.warn("Exception during Mermaid rendering:", error);
+            console.warn('Exception during Mermaid rendering:', error);
           }
         }, 0);
 
         return () => clearTimeout(renderTimeout);
       } catch (error) {
-        console.warn("Error initializing Mermaid diagram:", error);
+        console.warn('Error initializing Mermaid diagram:', error);
       }
     }
   }, [chart]);
-  return (
-    <div
-      ref={ref}
-      className="mermaid-diagram"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
-  );
+  return <div ref={ref} className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
 };
 
 // Utility function to chunk data based on token count
-const chunkData = (data: any, apiService: ApiService, maxTokens = 10000, model: string): string[] => {
+const chunkData = (
+  data: any,
+  apiService: ApiService,
+  maxTokens = 10000,
+  model: string
+): string[] => {
   const dataStr = JSON.stringify(data, null, 2);
   const totalTokens = apiService.countTokens(dataStr, model);
   const chunks: string[] = [];
@@ -181,7 +168,7 @@ const chunkData = (data: any, apiService: ApiService, maxTokens = 10000, model: 
       chunks.push(dataStr.substring(start, end));
     }
   } catch (error) {
-    console.error("Error chunking data:", error);
+    console.error('Error chunking data:', error);
     // Fallback to simple character-based chunking with overlap
     const basicChunkSize = Math.ceil(dataStr.length / numChunks);
     const overlapSize = Math.ceil(basicChunkSize / 5); // 1/5 overlap
@@ -219,28 +206,26 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
 
   // Settings state
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState<string>(
-    localStorage.getItem("openaiBaseUrl") || "",
+    localStorage.getItem('openaiBaseUrl') || ''
   );
   const [openaiApiKey, setOpenaiApiKey] = useState<string>(
-    localStorage.getItem("openaiApiKey") || "",
+    localStorage.getItem('openaiApiKey') || ''
   );
-  const [openaiModel, setOpenaiModel] = useState<string>(
-    localStorage.getItem("openaiModel") || "",
-  );
+  const [openaiModel, setOpenaiModel] = useState<string>(localStorage.getItem('openaiModel') || '');
   const [contextLength, setContextLength] = useState<string>(
-    localStorage.getItem("contextLength") || "64000",
+    localStorage.getItem('contextLength') || '64000'
   );
   const [reportLanguage, setReportLanguage] = useState<string>(
-    localStorage.getItem("reportLanguage") || "English",
+    localStorage.getItem('reportLanguage') || 'English'
   );
 
   // Save settings to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem("openaiBaseUrl", openaiBaseUrl);
-    localStorage.setItem("openaiApiKey", openaiApiKey);
-    localStorage.setItem("openaiModel", openaiModel);
-    localStorage.setItem("contextLength", contextLength);
-    localStorage.setItem("reportLanguage", reportLanguage);
+    localStorage.setItem('openaiBaseUrl', openaiBaseUrl);
+    localStorage.setItem('openaiApiKey', openaiApiKey);
+    localStorage.setItem('openaiModel', openaiModel);
+    localStorage.setItem('contextLength', contextLength);
+    localStorage.setItem('reportLanguage', reportLanguage);
   }, [openaiBaseUrl, openaiApiKey, openaiModel, contextLength, reportLanguage]);
 
   // Save report to localStorage whenever it changes
@@ -261,12 +246,12 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
       return;
     }
 
-    const blob = new Blob([content], { type: "text/markdown" });
+    const blob = new Blob([content], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const a = document.createElement('a');
     a.href = url;
-    a.download = `insight-report-${flowId || "unknown"}-${
-      new Date().toISOString().split("T")[0]
+    a.download = `insight-report-${flowId || 'unknown'}-${
+      new Date().toISOString().split('T')[0]
     }.md`;
     document.body.appendChild(a);
     a.click();
@@ -276,12 +261,12 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
 
   const generateInsightReport = async () => {
     if (!flowId) {
-      setError("No job ID provided");
+      setError('No job ID provided');
       return;
     }
 
     if (!openaiApiKey) {
-      setError("OpenAI API key is required");
+      setError('OpenAI API key is required');
       return;
     }
 
@@ -334,12 +319,12 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         combinedData,
         apiService,
         Math.floor((modelContextLength * 5) / 6),
-        modelToUse,
+        modelToUse
       );
 
       // Calculate max tokens per chunk based on the context length
       const maxTokensPerChunk = Math.floor(
-        Math.floor((modelContextLength * 5) / 6) / dataChunks.length,
+        Math.floor((modelContextLength * 5) / 6) / dataChunks.length
       );
 
       // Count tokens in the prompt to ensure it doesn't exceed limits
@@ -347,15 +332,13 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
 
       // 5. Generate reports for each chunk concurrently
       const chunkPrompts = dataChunks.map((chunk, index) => {
-        return `${promptWithLanguage}\n\nChunk ${index + 1} of ${
-          dataChunks.length
-        }:\n${chunk}`;
+        return `${promptWithLanguage}\n\nChunk ${index + 1} of ${dataChunks.length}:\n${chunk}`;
       });
 
       // If there's only one chunk, use streaming directly to avoid generating the report twice
       if (dataChunks.length === 1) {
         setIsStreaming(true);
-        let streamedContent = "";
+        let streamedContent = '';
         let found_markdown_marker = false;
 
         await apiService.generateReport(
@@ -365,29 +348,24 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
           modelToUse,
           maxTokensPerChunk,
           true, // Enable streaming
-          (chunk) => {
+          chunk => {
             streamedContent += chunk;
             if (!found_markdown_marker) {
-              const pos = streamedContent.indexOf("```markdown");
+              const pos = streamedContent.indexOf('```markdown');
               if (pos !== -1) {
                 found_markdown_marker = true;
-                const cleanedContent = streamedContent.slice(
-                  pos + "```markdown".length,
-                );
+                const cleanedContent = streamedContent.slice(pos + '```markdown'.length);
                 streamedContent = cleanedContent;
                 setReportStream(streamedContent);
               }
             } else {
               setReportStream(streamedContent);
             }
-          },
+          }
         );
 
         // Clean the final content when streaming is complete
-        const finalContent = cleanMarkdown(
-          streamedContent,
-          found_markdown_marker,
-        );
+        const finalContent = cleanMarkdown(streamedContent, found_markdown_marker);
         setReport(finalContent);
         setIsStreaming(false);
         setShowSettings(false);
@@ -395,14 +373,14 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
       }
 
       // Only proceed with non-streaming generation for multiple chunks
-      const chunkReportsPromises = chunkPrompts.map((chunkPrompt) =>
+      const chunkReportsPromises = chunkPrompts.map(chunkPrompt =>
         apiService.generateReport(
           chunkPrompt,
           openaiApiKey,
           openaiBaseUrl,
           modelToUse,
-          maxTokensPerChunk,
-        ),
+          maxTokensPerChunk
+        )
       );
 
       const chunkReports = await Promise.all(chunkReportsPromises);
@@ -413,17 +391,11 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         Please merge these reports into a cohesive, comprehensive analysis, eliminating redundancies
         and ensuring consistent insights.
         
-        ${chunkReports
-          .map((report, index) => `Report ${index + 1}:\n${report}`)
-          .join("\n\n")}
+        ${chunkReports.map((report, index) => `Report ${index + 1}:\n${report}`).join('\n\n')}
         
         Return the merged analysis in markdown format.
         Just give result markdown without any other text, wrap it with \`\`\`markdown.
-        ${
-          reportLanguage
-            ? `\nPlease write the report in ${reportLanguage}.`
-            : ""
-        }
+        ${reportLanguage ? `\nPlease write the report in ${reportLanguage}.` : ''}
         
         for example:
         \`\`\`markdown
@@ -436,7 +408,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
       const mergePromptTokens = apiService.countTokens(mergePrompt, modelToUse);
 
       setIsStreaming(true);
-      let streamedContent = "";
+      let streamedContent = '';
       let found_markdown_marker = false;
 
       await apiService.generateReport(
@@ -446,38 +418,31 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         modelToUse,
         maxTokensPerChunk,
         true, // Enable streaming
-        (chunk) => {
+        chunk => {
           streamedContent += chunk;
           // Still try to find markdown marker and clean up if found
           if (!found_markdown_marker) {
-            const pos = streamedContent.indexOf("```markdown");
+            const pos = streamedContent.indexOf('```markdown');
             if (pos !== -1) {
               found_markdown_marker = true;
-              const cleanedContent = streamedContent.slice(
-                pos + "```markdown".length,
-              );
+              const cleanedContent = streamedContent.slice(pos + '```markdown'.length);
               streamedContent = cleanedContent;
               setReportStream(streamedContent);
             }
           } else {
             setReportStream(streamedContent);
           }
-        },
+        }
       );
 
       // Clean the final content when streaming is complete
-      const finalContent = cleanMarkdown(
-        streamedContent,
-        found_markdown_marker,
-      );
+      const finalContent = cleanMarkdown(streamedContent, found_markdown_marker);
       setReport(finalContent);
       setIsStreaming(false);
       setShowSettings(false);
     } catch (error) {
-      console.error("Error generating report:", error);
-      setError(
-        error instanceof Error ? error.message : "Unknown error occurred",
-      );
+      console.error('Error generating report:', error);
+      setError(error instanceof Error ? error.message : 'Unknown error occurred');
       setIsStreaming(false);
     } finally {
       setLoading(false);
@@ -485,12 +450,9 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
   };
 
   // Helper function to clean up markdown output
-  const cleanMarkdown = (
-    markdown: string,
-    found_markdown_marker: boolean,
-  ): string => {
+  const cleanMarkdown = (markdown: string, found_markdown_marker: boolean): string => {
     // First check for the starting markdown marker
-    const markdown_marker_end = "```";
+    const markdown_marker_end = '```';
     let cleaned = markdown;
 
     // Remove the ending markdown marker if present
@@ -516,13 +478,13 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
       return (
         <Box
           sx={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: "300px",
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '300px',
             gap: 2,
-            maxHeight: "calc(80vh - 90px)",
+            maxHeight: 'calc(80vh - 90px)',
           }}
         >
           <Button
@@ -532,7 +494,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
             disabled={loading}
             startIcon={loading && <CircularProgress size={20} />}
           >
-            {loading ? "Generating..." : "Generate Report"}
+            {loading ? 'Generating...' : 'Generate Report'}
           </Button>
           <Button variant="text" onClick={() => setShowSettings(true)}>
             Settings
@@ -547,14 +509,12 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
       <Box
         sx={{
           p: 2,
-          overflow: "auto",
-          height: "80%",
-          maxHeight: "calc(80vh - 90px)",
+          overflow: 'auto',
+          height: '80%',
+          maxHeight: 'calc(80vh - 90px)',
         }}
       >
-        <Box
-          sx={{ display: "flex", justifyContent: "flex-end", mb: 2, gap: 1 }}
-        >
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 1 }}>
           <Button
             variant="outlined"
             onClick={exportReport}
@@ -569,15 +529,9 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
             onClick={generateInsightReport}
             size="small"
             disabled={loading}
-            startIcon={
-              loading ? <CircularProgress size={16} /> : <RefreshCw size={16} />
-            }
+            startIcon={loading ? <CircularProgress size={16} /> : <RefreshCw size={16} />}
           >
-            {loading
-              ? isStreaming
-                ? "Streaming..."
-                : "Regenerating..."
-              : "Regenerate"}
+            {loading ? (isStreaming ? 'Streaming...' : 'Regenerating...') : 'Regenerate'}
           </Button>
           <Button
             variant="outlined"
@@ -598,60 +552,57 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         </Box>
         <Box
           sx={{
-            "& h1, & h2, & h3, & h4, & h5, & h6": {
+            '& h1, & h2, & h3, & h4, & h5, & h6': {
               mt: 2,
               mb: 1,
-              fontWeight: "medium",
+              fontWeight: 'medium',
             },
-            "& p": {
+            '& p': {
               my: 1,
               lineHeight: 1.6,
             },
-            "& ul, & ol": {
+            '& ul, & ol': {
               paddingLeft: 3,
             },
-            "& li": {
+            '& li': {
               mb: 0.5,
             },
-            "& blockquote": {
-              borderLeft: "4px solid #e0e0e0",
+            '& blockquote': {
+              borderLeft: '4px solid #e0e0e0',
               my: 1,
               pl: 2,
               py: 0.5,
-              backgroundColor: "#f5f5f5",
+              backgroundColor: '#f5f5f5',
             },
-            "& pre": {
+            '& pre': {
               mt: 1,
               mb: 2,
             },
-            "& .mermaid-diagram": {
-              textAlign: "center",
-              margin: "16px 0",
+            '& .mermaid-diagram': {
+              textAlign: 'center',
+              margin: '16px 0',
             },
-            "& .mermaid-error": {
-              margin: "16px 0",
-              padding: "8px",
-              backgroundColor: "#f9f9f9",
-              borderRadius: "4px",
-              border: "1px solid #eee",
-              overflow: "auto",
+            '& .mermaid-error': {
+              margin: '16px 0',
+              padding: '8px',
+              backgroundColor: '#f9f9f9',
+              borderRadius: '4px',
+              border: '1px solid #eee',
+              overflow: 'auto',
             },
-            "& .mermaid-error pre": {
+            '& .mermaid-error pre': {
               margin: 0,
               padding: 0,
             },
-            "& .mermaid-error code": {
-              fontFamily: "monospace",
-              fontSize: "0.9em",
-              color: "#666",
+            '& .mermaid-error code': {
+              fontFamily: 'monospace',
+              fontSize: '0.9em',
+              color: '#666',
             },
           }}
         >
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={MarkdownComponents}
-          >
-            {displayContent || ""}
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
+            {displayContent || ''}
           </ReactMarkdown>
         </Box>
       </Box>
@@ -666,16 +617,16 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         </Typography>
         <Box
           sx={{
-            display: "flex",
-            flexDirection: "column",
+            display: 'flex',
+            flexDirection: 'column',
             gap: 2,
-            maxWidth: "600px",
+            maxWidth: '600px',
           }}
         >
           <TextField
             label="OpenAI API Base URL"
             value={openaiBaseUrl}
-            onChange={(e) => setOpenaiBaseUrl(e.target.value)}
+            onChange={e => setOpenaiBaseUrl(e.target.value)}
             fullWidth
             margin="normal"
             helperText=""
@@ -683,7 +634,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
           <TextField
             label="OpenAI API Key"
             value={openaiApiKey}
-            onChange={(e) => setOpenaiApiKey(e.target.value)}
+            onChange={e => setOpenaiApiKey(e.target.value)}
             fullWidth
             margin="normal"
             type="password"
@@ -691,7 +642,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
           <TextField
             label="OpenAI Model"
             value={openaiModel}
-            onChange={(e) => setOpenaiModel(e.target.value)}
+            onChange={e => setOpenaiModel(e.target.value)}
             fullWidth
             margin="normal"
             helperText=""
@@ -699,7 +650,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
           <TextField
             label="Model Context Length (tokens)"
             value={contextLength}
-            onChange={(e) => setContextLength(e.target.value)}
+            onChange={e => setContextLength(e.target.value)}
             fullWidth
             margin="normal"
             type="number"
@@ -709,21 +660,21 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
           <TextField
             label="Report Language"
             value={reportLanguage}
-            onChange={(e) => setReportLanguage(e.target.value)}
+            onChange={e => setReportLanguage(e.target.value)}
             fullWidth
             margin="normal"
             helperText="Specify the language for the generated report (e.g., English, Spanish, French)"
           />
-          <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
             <Button
               variant="contained"
               color="primary"
               onClick={() => {
-                localStorage.setItem("openaiBaseUrl", openaiBaseUrl);
-                localStorage.setItem("openaiApiKey", openaiApiKey);
-                localStorage.setItem("openaiModel", openaiModel);
-                localStorage.setItem("contextLength", contextLength);
-                localStorage.setItem("reportLanguage", reportLanguage);
+                localStorage.setItem('openaiBaseUrl', openaiBaseUrl);
+                localStorage.setItem('openaiApiKey', openaiApiKey);
+                localStorage.setItem('openaiModel', openaiModel);
+                localStorage.setItem('contextLength', contextLength);
+                localStorage.setItem('reportLanguage', reportLanguage);
                 setShowSettings(false);
               }}
             >
@@ -741,33 +692,33 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
   return (
     <div
       style={{
-        width: "100%",
-        height: "calc(80vh - 70px)",
-        position: "relative",
-        backgroundColor: "transparent",
-        fontFamily: "Verdana, sans-serif",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-start",
-        margin: "20px 0",
-        maxWidth: "100%",
-        overflow: "hidden",
+        width: '100%',
+        height: 'calc(80vh - 70px)',
+        position: 'relative',
+        backgroundColor: 'transparent',
+        fontFamily: 'Verdana, sans-serif',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        margin: '20px 0',
+        maxWidth: '100%',
+        overflow: 'hidden',
       }}
     >
       {error && (
-        <Alert severity="error" sx={{ m: 2, width: "100%" }}>
+        <Alert severity="error" sx={{ m: 2, width: '100%' }}>
           {error}
         </Alert>
       )}
 
       <Box
         sx={{
-          width: "100%",
-          height: "100%",
-          backgroundColor: "white",
-          borderRadius: "4px",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-          overflow: "auto",
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'white',
+          borderRadius: '4px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          overflow: 'auto',
         }}
       >
         {showSettings ? renderSettings() : renderReport()}

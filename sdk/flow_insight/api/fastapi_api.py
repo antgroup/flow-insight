@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -8,11 +8,25 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel as PydanticBaseModel
 
 from flow_insight.api.base import APIInterface
-from flow_insight.engine import InsightEngine, DebugCommand, Breakpoint
+from flow_insight.engine import Breakpoint, DebugCommand, InsightEngine
+from flow_insight.model import (
+    BatchNodePhysicalStatsEvent,
+    BatchServicePhysicalStatsEvent,
+    CallBeginEvent,
+    CallEndEvent,
+    CallSubmitEvent,
+    ContextEvent,
+    DebuggerInfoEvent,
+    ObjectGetEvent,
+    ObjectPutEvent,
+    PromptRegisterEvent,
+    RecordType,
+    ResourceUsageEvent,
+)
 from flow_insight.storage.snapshot.base import StorageType
-from flow_insight.model import RecordType, CallSubmitEvent, CallBeginEvent, CallEndEvent, ObjectGetEvent, ObjectPutEvent, ContextEvent, ResourceUsageEvent, DebuggerInfoEvent, BatchServicePhysicalStatsEvent, BatchNodePhysicalStatsEvent, PromptRegisterEvent
 
 logger = logging.getLogger(__name__)
+
 
 class RequestData(PydanticBaseModel):
     flow_id: str = ""
@@ -28,9 +42,11 @@ class RequestData(PydanticBaseModel):
     record_type: str = ""
     record: Dict[str, Any] = {}
 
+
 def rest_response(result: bool, msg: str, **kwargs) -> Dict[str, Any]:
     """Create a standardized REST response."""
     return {"result": result, "msg": msg, **kwargs}
+
 
 class FastAPIInsightServer(APIInterface):
     def __init__(self, storage_type: StorageType = StorageType.MEMORY):
@@ -49,7 +65,7 @@ class FastAPIInsightServer(APIInterface):
         self.app.get("/get_active_debug_sessions")(self.get_active_debug_sessions)
         self.app.post("/debug_cmd")(self.debug_cmd)
         self.app.post("/emit")(self.emit_record)
-        
+
         # Data visualization routes
         self.app.get("/get_call_graph_data")(self.get_call_graph_data)
         self.app.get("/get_flame_graph_data")(self.get_flame_graph_data)
@@ -132,16 +148,18 @@ class FastAPIInsightServer(APIInterface):
             sessions = await self.engine.get_debug_sessions(
                 flow_id, service_name, instance_id, method_name, filter_active
             )
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Debug sessions retrieved successfully.",
-                data=[session.model_dump() for session in sessions]
-            ))
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Debug sessions retrieved successfully.",
+                    data=[session.model_dump() for session in sessions],
+                )
+            )
         except Exception as e:
             logger.error(f"Error retrieving debug sessions: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error retrieving debug sessions: {str(e)}"
-            ))
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving debug sessions: {str(e)}")
+            )
 
     async def get_breakpoints(self, request: Request) -> JSONResponse:
         """Get breakpoints for a debug session."""
@@ -151,16 +169,18 @@ class FastAPIInsightServer(APIInterface):
 
         try:
             breakpoints = await self.engine.get_breakpoints(flow_id, span_id)
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Breakpoints retrieved successfully.",
-                data=[bp.model_dump() for bp in breakpoints]
-            ))
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Breakpoints retrieved successfully.",
+                    data=[bp.model_dump() for bp in breakpoints],
+                )
+            )
         except Exception as e:
             logger.error(f"Error retrieving breakpoints: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error retrieving breakpoints: {str(e)}"
-            ))
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving breakpoints: {str(e)}")
+            )
 
     async def set_breakpoints(self, request: Request) -> JSONResponse:
         """Set breakpoints for a debug session."""
@@ -168,20 +188,20 @@ class FastAPIInsightServer(APIInterface):
         flow_id = data.get("flow_id", "")
         span_id = data.get("span_id", "")
         breakpoints_data = data.get("breakpoints", [])
-        
+
         try:
-            breakpoints = [Breakpoint(line=bp["line"], source=bp["source"]) for bp in breakpoints_data]
+            breakpoints = [
+                Breakpoint(line=bp["line"], source=bp["source"]) for bp in breakpoints_data
+            ]
             result = await self.engine.set_breakpoints(flow_id, span_id, breakpoints)
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Breakpoints set successfully.",
-                data=result
-            ))
+            return JSONResponse(
+                rest_response(result=True, msg="Breakpoints set successfully.", data=result)
+            )
         except Exception as e:
             logger.error(f"Error setting breakpoints: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error setting breakpoints: {str(e)}"
-            ))
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error setting breakpoints: {str(e)}")
+            )
 
     async def activate_debug_session(self, request: Request) -> JSONResponse:
         """Activate a debug session."""
@@ -196,16 +216,14 @@ class FastAPIInsightServer(APIInterface):
             result = await self.engine.activate_debug_session(
                 flow_id, service_name, instance_id, method_name, span_id
             )
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Debug session activated successfully.",
-                data=result
-            ))
+            return JSONResponse(
+                rest_response(result=True, msg="Debug session activated successfully.", data=result)
+            )
         except Exception as e:
             logger.error(f"Error activating debug session: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error activating debug session: {str(e)}"
-            ))
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error activating debug session: {str(e)}")
+            )
 
     async def debug_cmd(self, request: Request) -> JSONResponse:
         """Send a debug command."""
@@ -218,16 +236,14 @@ class FastAPIInsightServer(APIInterface):
         try:
             command = DebugCommand(command_str)
             result = await self.engine.debug_cmd(flow_id, span_id, command, args)
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Debug command executed successfully.",
-                data=result
-            ))
+            return JSONResponse(
+                rest_response(result=True, msg="Debug command executed successfully.", data=result)
+            )
         except Exception as e:
             logger.error(f"Error executing debug command: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error executing debug command: {str(e)}"
-            ))
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error executing debug command: {str(e)}")
+            )
 
     async def deactivate_debug_session(self, request: Request) -> JSONResponse:
         """Deactivate a debug session."""
@@ -237,15 +253,14 @@ class FastAPIInsightServer(APIInterface):
 
         try:
             await self.engine.deactivate_debug_session(flow_id, span_id)
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Debug session deactivated successfully."
-            ))
+            return JSONResponse(
+                rest_response(result=True, msg="Debug session deactivated successfully.")
+            )
         except Exception as e:
             logger.error(f"Error deactivating debug session: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error deactivating debug session: {str(e)}"
-            ))
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error deactivating debug session: {str(e)}")
+            )
 
     async def get_active_debug_sessions(self, request: Request) -> JSONResponse:
         """Get active debug sessions."""
@@ -254,16 +269,18 @@ class FastAPIInsightServer(APIInterface):
 
         try:
             active_sessions = await self.engine.get_active_debug_sessions(flow_id)
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Active debug sessions retrieved successfully.",
-                data=active_sessions
-            ))
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Active debug sessions retrieved successfully.",
+                    data=active_sessions,
+                )
+            )
         except Exception as e:
             logger.error(f"Error retrieving active debug sessions: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error retrieving active debug sessions: {str(e)}"
-            ))
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving active debug sessions: {str(e)}")
+            )
 
     async def get_call_graph_data(self, request: Request) -> JSONResponse:
         """Get call graph data for visualization."""
@@ -273,16 +290,18 @@ class FastAPIInsightServer(APIInterface):
 
         try:
             graph_data = await self.engine.get_call_graph_data(flow_id, stack_mode)
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Call graph data retrieved successfully.",
-                data=graph_data.model_dump()
-            ))
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Call graph data retrieved successfully.",
+                    data=graph_data.model_dump(),
+                )
+            )
         except Exception as e:
             logger.error(f"Error retrieving call graph data: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error retrieving call graph data: {str(e)}"
-            ))
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving call graph data: {str(e)}")
+            )
 
     async def get_flame_graph_data(self, request: Request) -> JSONResponse:
         """Get flame graph data for visualization."""
@@ -291,16 +310,18 @@ class FastAPIInsightServer(APIInterface):
 
         try:
             flame_data = await self.engine.get_flame_graph_data(flow_id)
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Flame graph data retrieved successfully.",
-                data=flame_data.model_dump()
-            ))
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Flame graph data retrieved successfully.",
+                    data=flame_data.model_dump(),
+                )
+            )
         except Exception as e:
             logger.error(f"Error retrieving flame graph data: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error retrieving flame graph data: {str(e)}"
-            )) 
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving flame graph data: {str(e)}")
+            )
 
     async def get_physical_view_data(self, request: Request) -> JSONResponse:
         """Get physical view data for visualization."""
@@ -309,32 +330,48 @@ class FastAPIInsightServer(APIInterface):
 
         try:
             physical_view_data = await self.engine.get_physical_view_data(flow_id)
-            return JSONResponse(rest_response(
-                result=True,
-                msg="Physical view data retrieved successfully.",
-                data=physical_view_data.model_dump()
-            ))
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Physical view data retrieved successfully.",
+                    data=physical_view_data.model_dump(),
+                )
+            )
         except Exception as e:
             logger.error(f"Error retrieving physical view data: {str(e)}")
-            return JSONResponse(rest_response(
-                result=False, msg=f"Error retrieving physical view data: {str(e)}"
-            ))
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving physical view data: {str(e)}")
+            )
 
     async def get_context(self, request: Request) -> JSONResponse:
         """Get the context."""
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", "")
         context = await self.engine.get_context(flow_id)
-        return JSONResponse(rest_response(result=True, msg="Context retrieved successfully.", data=[c.model_dump() for c in context]))
+        return JSONResponse(
+            rest_response(
+                result=True,
+                msg="Context retrieved successfully.",
+                data=[c.model_dump() for c in context],
+            )
+        )
 
     async def get_resource_usage(self, request: Request) -> JSONResponse:
         """Get the resource usage."""
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", "")
         resource_usage = await self.engine.get_resource_usage(flow_id)
-        return JSONResponse(rest_response(result=True, msg="Resource usage retrieved successfully.", data=[r.model_dump() for r in resource_usage]))
+        return JSONResponse(
+            rest_response(
+                result=True,
+                msg="Resource usage retrieved successfully.",
+                data=[r.model_dump() for r in resource_usage],
+            )
+        )
 
     async def get_prompt(self, request: Request) -> JSONResponse:
         """Get the prompt."""
         prompt = await self.engine.get_prompt()
-        return JSONResponse(rest_response(result=True, msg="Prompt retrieved successfully.", data=prompt))
+        return JSONResponse(
+            rest_response(result=True, msg="Prompt retrieved successfully.", data=prompt)
+        )

@@ -5,54 +5,50 @@ import {
   ThemeProvider,
   createTheme,
   Typography,
-} from "@mui/material";
-import React, { useCallback, useEffect, useState, useRef } from "react";
-import { ApiService } from "../services/api";
-import { ElementData, GraphData, PhysicalViewData, FlameGraphData } from "../types";
-import GraphPage from "./GraphPage";
+} from '@mui/material';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+
+import { ApiService } from '../services/api';
+import { ElementData, GraphData, PhysicalViewData, FlameGraphData } from '../types';
+import GraphPage from './GraphPage';
 
 // Define the props interface
 type FlowInsightProps = {
   baseUrl: string;
   flowId?: string;
-  initialViewType?: "logical" | "call_stack" | "physical" | "flame" | "analysis";
+  initialViewType?: 'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis';
   autoRefresh?: boolean;
   refreshInterval?: number;
   authToken?: string;
   onElementClick?: (data: ElementData) => void;
   colorScheme?: Record<string, string>;
-}
+};
 
 // Default theme that can be overridden
 const defaultTheme = createTheme({
   palette: {
     primary: {
-      main: "#3f51b5",
+      main: '#3f51b5',
     },
     secondary: {
-      main: "#f50057",
+      main: '#f50057',
     },
   },
   typography: {
-    fontFamily: [
-      "Roboto",
-      "'Helvetica Neue'",
-      "Arial",
-      "sans-serif",
-    ].join(","),
+    fontFamily: ['Roboto', "'Helvetica Neue'", 'Arial', 'sans-serif'].join(','),
   },
 });
 
 /**
  * FlowInsight Component
- * 
+ *
  * Main entry point for the Flow Insight library. This component wraps the ServiceGraph
  * component and handles the connection to the backend.
  */
 const FlowInsight: React.FC<FlowInsightProps> = ({
   baseUrl,
   flowId,
-  initialViewType = "logical",
+  initialViewType = 'logical',
   autoRefresh = false,
   refreshInterval = 2000,
   authToken,
@@ -75,7 +71,7 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
       const service = new ApiService({ baseUrl, authToken });
       setApiService(service);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to initialize API service");
+      setError(err instanceof Error ? err.message : 'Failed to initialize API service');
     }
   }, [baseUrl, authToken]);
 
@@ -105,7 +101,7 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
         setFlameData(flameGraphData);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch data");
+      setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
       setLoading(false);
     }
@@ -136,23 +132,25 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
   }, [autoRefresh, apiService, fetchAllData, refreshInterval]);
 
   // Handle element click
-  const handleElementClick = useCallback((data: ElementData, skip_zoom = false) => {
-    if (data && data.id) {
-      setSelectedElementId(data.id);
-    }
-    
-    if (onElementClick) {
-      onElementClick(data);
-    }
-  }, [onElementClick]);
+  const handleElementClick = useCallback(
+    // eslint-disable-next-line
+    (data: ElementData, skip_zoom = false) => {
+      if (data && data.id) {
+        setSelectedElementId(data.id);
+      }
+
+      if (onElementClick) {
+        onElementClick(data);
+      }
+    },
+    [onElementClick]
+  );
 
   if (error) {
     return (
       <ThemeProvider theme={defaultTheme}>
         <CssBaseline />
-        <Box p={2}>
-          {error && <Typography color="error">Error: {error}</Typography>}
-        </Box>
+        <Box p={2}>{error && <Typography color="error">Error: {error}</Typography>}</Box>
       </ThemeProvider>
     );
   }
@@ -161,12 +159,7 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
     return (
       <ThemeProvider theme={defaultTheme}>
         <CssBaseline />
-        <Box
-          display="flex"
-          justifyContent="center"
-          alignItems="center"
-          height="100vh"
-        >
+        <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
           <CircularProgress />
         </Box>
       </ThemeProvider>
@@ -176,26 +169,26 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
   return (
     <ThemeProvider theme={defaultTheme}>
       <CssBaseline />
-        <Box sx={{ height: "100%", width: "100%" }}>
-          {graphData && (
-            <GraphPage
-              graphData={graphData}
-              stackGraphData={stackGraphData}
-              physicalViewData={physicalViewData}
-              flameData={flameData}
-              flowId={flowId}
-              initialViewType={initialViewType}
-              autoRefresh={autoRefresh}
-              onElementClick={handleElementClick}
-              selectedElementId={selectedElementId}
-              onUpdate={fetchAllData}
-              colorScheme={colorScheme}
-              apiService={apiService!}
-            />
-          )}
-        </Box>
+      <Box sx={{ height: '100%', width: '100%' }}>
+        {graphData && (
+          <GraphPage
+            graphData={graphData}
+            stackGraphData={stackGraphData}
+            physicalViewData={physicalViewData}
+            flameData={flameData}
+            flowId={flowId}
+            initialViewType={initialViewType}
+            autoRefresh={autoRefresh}
+            onElementClick={handleElementClick}
+            selectedElementId={selectedElementId}
+            onUpdate={fetchAllData}
+            colorScheme={colorScheme}
+            apiService={apiService!}
+          />
+        )}
+      </Box>
     </ThemeProvider>
   );
 };
 
-export default FlowInsight; 
+export default FlowInsight;

@@ -1,11 +1,7 @@
-import * as d3 from "d3";
-import React, {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-} from "react";
-import { GraphData, PhysicalViewData, FlameGraphData } from "../types";
+import * as d3 from 'd3';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+
+import { GraphData, PhysicalViewData, FlameGraphData } from '../types';
 
 type FlameVisualizationProps = {
   flameData: FlameGraphData;
@@ -18,18 +14,18 @@ type FlameVisualizationProps = {
   graphData: GraphData;
   physicalViewData?: PhysicalViewData | null;
   colorMode?:
-    | "warm"
-    | "cold"
-    | "red"
-    | "orange"
-    | "yellow"
-    | "green"
-    | "pastelgreen"
-    | "blue"
-    | "aqua"
-    | "allocation"
-    | "differential"
-    | "nodejs";
+    | 'warm'
+    | 'cold'
+    | 'red'
+    | 'orange'
+    | 'yellow'
+    | 'green'
+    | 'pastelgreen'
+    | 'blue'
+    | 'aqua'
+    | 'allocation'
+    | 'differential'
+    | 'nodejs';
 };
 
 type FlameNode = {
@@ -97,11 +93,11 @@ const generateHash = (name: string): number => {
 const generateColorVector = (name: string): number => {
   let vector = 0;
   if (name) {
-    const nameArr = name.split("`");
+    const nameArr = name.split('`');
     if (nameArr.length > 1) {
       name = nameArr[nameArr.length - 1]; // drop module name if present
     }
-    name = name.split("(")[0]; // drop extra info
+    name = name.split('(')[0]; // drop extra info
     vector = generateHash(name);
   }
   return vector;
@@ -113,35 +109,35 @@ const calculateColor = (hue: string, vector: number): string => {
   let g: number;
   let b: number;
 
-  if (hue === "red") {
+  if (hue === 'red') {
     r = 200 + Math.round(55 * vector);
     g = 50 + Math.round(80 * vector);
     b = g;
-  } else if (hue === "orange") {
+  } else if (hue === 'orange') {
     r = 190 + Math.round(65 * vector);
     g = 90 + Math.round(65 * vector);
     b = 0;
-  } else if (hue === "yellow") {
+  } else if (hue === 'yellow') {
     r = 175 + Math.round(55 * vector);
     g = r;
     b = 50 + Math.round(20 * vector);
-  } else if (hue === "green") {
+  } else if (hue === 'green') {
     r = 50 + Math.round(60 * vector);
     g = 200 + Math.round(55 * vector);
     b = r;
-  } else if (hue === "pastelgreen") {
+  } else if (hue === 'pastelgreen') {
     r = 163 + Math.round(75 * vector);
     g = 195 + Math.round(49 * vector);
     b = 72 + Math.round(149 * vector);
-  } else if (hue === "blue") {
+  } else if (hue === 'blue') {
     r = 91 + Math.round(126 * vector);
     g = 156 + Math.round(76 * vector);
     b = 221 + Math.round(26 * vector);
-  } else if (hue === "aqua") {
+  } else if (hue === 'aqua') {
     r = 50 + Math.round(60 * vector);
     g = 165 + Math.round(55 * vector);
     b = g;
-  } else if (hue === "cold") {
+  } else if (hue === 'cold') {
     r = 0 + Math.round(55 * (1 - vector));
     g = 0 + Math.round(230 * (1 - vector));
     b = 200 + Math.round(55 * vector);
@@ -156,11 +152,7 @@ const calculateColor = (hue: string, vector: number): string => {
 };
 
 // Helper function to interpolate between two colors
-const pickHex = (
-  color1: number[],
-  color2: number[],
-  weight: number,
-): number[] => {
+const pickHex = (color1: number[], color2: number[], weight: number): number[] => {
   const w1 = weight;
   const w2 = 1 - w1;
   return [
@@ -171,10 +163,7 @@ const pickHex = (
 };
 
 // Color mapper for allocation view
-const allocationColorMapper = (
-  d: PartitionHierarchyNode,
-  originalColor: string,
-): string => {
+const allocationColorMapper = (d: PartitionHierarchyNode, originalColor: string): string => {
   if (d.data.highlight) {
     return originalColor;
   }
@@ -187,10 +176,7 @@ const allocationColorMapper = (
 };
 
 // Color mapper for Node.js view
-const nodeJsColorMapper = (
-  d: PartitionHierarchyNode,
-  originalColor: string,
-): string => {
+const nodeJsColorMapper = (d: PartitionHierarchyNode, originalColor: string): string => {
   let color = originalColor;
 
   const extras = (d.data as any).extras || {};
@@ -198,7 +184,7 @@ const nodeJsColorMapper = (
 
   // Non-JS JIT frames (V8 builtins) are greyed out
   if (v8_jit && !javascript) {
-    color = "#dadada";
+    color = '#dadada';
   }
   // JavaScript frames are colored based on optimization level
   if (javascript) {
@@ -226,10 +212,7 @@ const nodeJsColorMapper = (
 };
 
 // Color mapper for differential view
-const differentialColorMapper = (
-  d: PartitionHierarchyNode,
-  originalColor: string,
-): string => {
+const differentialColorMapper = (d: PartitionHierarchyNode, originalColor: string): string => {
   if (d.data.highlight) {
     return originalColor;
   }
@@ -264,22 +247,22 @@ const differentialColorMapper = (
   return `rgb(${r},${g},${b})`;
 };
 
-const colorMapper = (d: PartitionHierarchyNode, colorMode = "warm") => {
+const colorMapper = (d: PartitionHierarchyNode, colorMode = 'warm') => {
   // Get the root node to find the max value
   const root = d.ancestors().pop() || d;
   const maxValue = root.value || 0;
 
   // Handle different color modes
   switch (colorMode) {
-    case "allocation":
-      return allocationColorMapper(d, "#E600E6");
-    case "differential":
-      return differentialColorMapper(d, "#E600E6");
-    case "nodejs":
-      return nodeJsColorMapper(d, "#E600E6");
-    case "cold":
+    case 'allocation':
+      return allocationColorMapper(d, '#E600E6');
+    case 'differential':
+      return differentialColorMapper(d, '#E600E6');
+    case 'nodejs':
+      return nodeJsColorMapper(d, '#E600E6');
+    case 'cold':
       const vector = generateColorVector(d.data.name);
-      return calculateColor("cold", vector);
+      return calculateColor('cold', vector);
     default:
       // For all other modes (warm, red, orange, yellow, green, pastelgreen, blue, aqua)
       // Use the value-based approach with the specified color mode
@@ -294,24 +277,10 @@ export type FlameVisualizationHandle = {
   exportSvg: () => void;
 };
 
-const FlameVisualization = forwardRef<
-  FlameVisualizationHandle,
-  FlameVisualizationProps
->(
+const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizationProps>(
   (
-    {
-      flameData,
-      onElementClick,
-      selectedElementId,
-      flowId,
-      onUpdate,
-      updating,
-      searchTerm,
-      graphData,
-      physicalViewData,
-      colorMode = "warm",
-    },
-    ref,
+    { flameData, onElementClick, searchTerm, graphData, physicalViewData, colorMode = 'warm' },
+    ref
   ) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const tooltipRef = useRef<HTMLDivElement | null>(null);
@@ -327,7 +296,7 @@ const FlameVisualization = forwardRef<
         path.unshift(current.data.name);
         current = current.parent;
       }
-      return path.join("->");
+      return path.join('->');
     };
 
     // Wrap createFlameGraph in useCallback
@@ -337,10 +306,8 @@ const FlameVisualization = forwardRef<
       let cellHeight = 18; // cell height
       let selection: any = null; // selection
       let tooltip: any = null; // tooltip
-      let title = ""; // graph title
-      let sort:
-        | boolean
-        | ((a: PartitionHierarchyNode, b: PartitionHierarchyNode) => number) =
+      let title = ''; // graph title
+      let sort: boolean | ((a: PartitionHierarchyNode, b: PartitionHierarchyNode) => number) =
         false;
       let inverted = false; // invert the graph direction
       let clickHandler: ((d: PartitionHierarchyNode) => void) | null = null;
@@ -378,8 +345,8 @@ const FlameVisualization = forwardRef<
         };
 
         if (node.children) {
-          coords.children = node.children.map((child) =>
-            storeInitialCoords(child as PartitionHierarchyNode),
+          coords.children = node.children.map(child =>
+            storeInitialCoords(child as PartitionHierarchyNode)
           );
         }
 
@@ -400,10 +367,7 @@ const FlameVisualization = forwardRef<
         // Recursively reset children
         if (node.children && coords.children) {
           for (let i = 0; i < node.children.length; i++) {
-            resetNodes(
-              node.children[i] as PartitionHierarchyNode,
-              coords.children[i],
-            );
+            resetNodes(node.children[i] as PartitionHierarchyNode, coords.children[i]);
           }
         }
       };
@@ -411,10 +375,10 @@ const FlameVisualization = forwardRef<
       const getName = (d: PartitionHierarchyNode) => {
         const name = d.data.name;
         if (!name) {
-          return "";
+          return '';
         }
-        if (name === "_main") {
-          return "main";
+        if (name === '_main') {
+          return 'main';
         }
 
         // Check if the name follows the expected format: service_name:instance_id.func
@@ -449,7 +413,7 @@ const FlameVisualization = forwardRef<
         while (parent) {
           parent.data.hide = false; // Ensure the ancestor path is visible
           // eslint-disable-next-line
-          parent.children?.forEach((sibling) => {
+          parent.children?.forEach(sibling => {
             if (sibling !== child) {
               (sibling as PartitionHierarchyNode).data.hide = true;
               // Hide all descendants of hidden siblings
@@ -464,7 +428,7 @@ const FlameVisualization = forwardRef<
         // Show the selected node and its descendants
         node.data.hide = false;
         if (node.children) {
-          node.children.forEach((child) => {
+          node.children.forEach(child => {
             (child as PartitionHierarchyNode).data.hide = false;
           });
         }
@@ -500,7 +464,7 @@ const FlameVisualization = forwardRef<
           resetNodes(root, nodeHierarchy);
           update();
         }
-        if (d.data.name === "_main") {
+        if (d.data.name === '_main') {
           return;
         }
 
@@ -520,11 +484,7 @@ const FlameVisualization = forwardRef<
         }
 
         // Scale the node and its descendants
-        const scaleSubtree = (
-          node: PartitionHierarchyNode,
-          baseX0: number,
-          baseX1: number,
-        ) => {
+        const scaleSubtree = (node: PartitionHierarchyNode, baseX0: number, baseX1: number) => {
           // For the root node of subtree, use the exact base coordinates
           node.x0 = baseX0;
           node.x1 = baseX1;
@@ -532,6 +492,7 @@ const FlameVisualization = forwardRef<
           // Handle children sequentially if they exist
           if (node.children && node.children.length > 0) {
             let currentX = node.x0; // Start from parent's x0
+            // eslint-disable-next-line
             node.children.forEach((child, index) => {
               const childNode = child as PartitionHierarchyNode;
               const childWidth = (childNode.x1 - childNode.x0) * scaleFactor;
@@ -555,16 +516,12 @@ const FlameVisualization = forwardRef<
         scaleSubtree(d, root.x0, root.x1);
 
         update();
-        if (typeof clickHandler === "function") {
+        if (typeof clickHandler === 'function') {
           clickHandler(d);
         }
       };
 
-      const searchMatch = (
-        d: PartitionHierarchyNode,
-        term: string,
-        ignoreCase = false,
-      ) => {
+      const searchMatch = (d: PartitionHierarchyNode, term: string, ignoreCase = false) => {
         if (!term) {
           return false;
         }
@@ -573,7 +530,7 @@ const FlameVisualization = forwardRef<
           term = term.toLowerCase();
           label = label.toLowerCase();
         }
-        return typeof label !== "undefined" && label && label.includes(term);
+        return typeof label !== 'undefined' && label && label.includes(term);
       };
 
       const searchTree = (d: PartitionHierarchyNode, term: string) => {
@@ -582,12 +539,9 @@ const FlameVisualization = forwardRef<
         const matchingPaths = new Set<string>();
 
         // First pass to find all matching nodes and their paths
-        const findMatches = (
-          node: PartitionHierarchyNode,
-          path: string[] = [],
-        ) => {
+        const findMatches = (node: PartitionHierarchyNode, path: string[] = []) => {
           const currentPath = [...path, node.data.name];
-          const pathKey = currentPath.join("->");
+          const pathKey = currentPath.join('->');
 
           const isMatch = searchMatch(node, term);
           if (isMatch) {
@@ -599,24 +553,21 @@ const FlameVisualization = forwardRef<
 
             // Add all parent paths to the matching paths
             for (let i = 1; i < currentPath.length; i++) {
-              matchingPaths.add(currentPath.slice(0, i).join("->"));
+              matchingPaths.add(currentPath.slice(0, i).join('->'));
             }
           }
 
           if (node.children) {
-            node.children.forEach((child) => {
+            node.children.forEach(child => {
               findMatches(child as PartitionHierarchyNode, currentPath);
             });
           }
         };
 
         // Second pass to hide or show nodes based on matching paths
-        const applyVisibility = (
-          node: PartitionHierarchyNode,
-          path: string[] = [],
-        ) => {
+        const applyVisibility = (node: PartitionHierarchyNode, path: string[] = []) => {
           const currentPath = [...path, node.data.name];
-          const pathKey = currentPath.join("->");
+          const pathKey = currentPath.join('->');
 
           // Clear previous highlighting/dimming
           node.data.highlight = false;
@@ -626,7 +577,7 @@ const FlameVisualization = forwardRef<
           node.data.hide = !matchingPaths.has(pathKey);
 
           if (node.children) {
-            node.children.forEach((child) => {
+            node.children.forEach(child => {
               applyVisibility(child as PartitionHierarchyNode, currentPath);
             });
           }
@@ -644,14 +595,14 @@ const FlameVisualization = forwardRef<
         d.data.dimmed = false;
         d.data.hide = false; // Make sure to unhide all nodes when clearing
         if (d.children) {
-          d.children.forEach((child) => {
+          d.children.forEach(child => {
             clear(child as PartitionHierarchyNode);
           });
         }
       };
 
       const doSort = (a: PartitionHierarchyNode, b: PartitionHierarchyNode) => {
-        if (typeof sort === "function") {
+        if (typeof sort === 'function') {
           return sort(a, b);
         } else if (sort) {
           return d3.ascending(getName(a), getName(b));
@@ -667,18 +618,11 @@ const FlameVisualization = forwardRef<
 
       const filterNodes = (root: PartitionHierarchyNode) => {
         // Filter out nodes that are marked as hidden
-        return root.descendants().filter((node) => !node.data.hide);
+        return root.descendants().filter(node => !node.data.hide);
       };
 
       const reappraiseNode = (root: PartitionHierarchyNode) => {
-        let node,
-          children,
-          grandChildren,
-          childrenValue,
-          i,
-          j,
-          child,
-          childValue;
+        let node, children, grandChildren, childrenValue, i, j, child, childValue;
         const stack: PartitionHierarchyNode[] = [];
         const included: PartitionHierarchyNode[][] = [];
         const excluded: PartitionHierarchyNode[][] = [];
@@ -739,8 +683,7 @@ const FlameVisualization = forwardRef<
           }
           if (children[0] && children[0].parent) {
             (children[0].parent as PartitionHierarchyNode).customValue =
-              ((children[0].parent as PartitionHierarchyNode).customValue ||
-                0) + childrenValue;
+              ((children[0].parent as PartitionHierarchyNode).customValue || 0) + childrenValue;
           }
         }
 
@@ -774,7 +717,7 @@ const FlameVisualization = forwardRef<
 
           // Store current coordinates before partition layout
           const nodeMap = new Map<string, { x0: number; x1: number }>();
-          root.descendants().forEach((d) => {
+          root.descendants().forEach(d => {
             if (d.x0 !== undefined && d.x1 !== undefined) {
               const pathId = generatePathId(d);
               (d as any).pathId = pathId;
@@ -788,7 +731,7 @@ const FlameVisualization = forwardRef<
           }
 
           // Configure partition layout with correct dimensions
-          const maxDepth = d3.max(root.descendants(), (d) => d.depth) || 0;
+          const maxDepth = d3.max(root.descendants(), d => d.depth) || 0;
           const totalHeight = (maxDepth + 1) * cellHeight;
 
           // Apply partition layout only if coordinates haven't been set
@@ -797,7 +740,7 @@ const FlameVisualization = forwardRef<
           }
 
           // Restore scaled coordinates
-          root.descendants().forEach((d) => {
+          root.descendants().forEach(d => {
             const pathId = generatePathId(d);
             const stored = nodeMap.get(pathId);
             if (stored) {
@@ -807,7 +750,7 @@ const FlameVisualization = forwardRef<
           });
 
           let maxX = 0;
-          root.children?.forEach((d) => {
+          root.children?.forEach(d => {
             if (d.x1 > maxX) {
               maxX = d.x1;
             }
@@ -822,18 +765,18 @@ const FlameVisualization = forwardRef<
           const descendants = filterNodes(root);
 
           // Ensure all descendants have pathId
-          descendants.forEach((d) => {
+          descendants.forEach(d => {
             if (!(d as any).pathId) {
               (d as any).pathId = generatePathId(d);
             }
           });
 
-          const svg = d3.select(this).select("svg");
-          svg.attr("width", width);
+          const svg = d3.select(this).select('svg');
+          svg.attr('width', width);
 
           let g = svg
-            .selectAll<SVGGElement, PartitionHierarchyNode>("g")
-            .data(descendants, (d) => generatePathId(d));
+            .selectAll<SVGGElement, PartitionHierarchyNode>('g')
+            .data(descendants, d => generatePathId(d));
 
           // Set height on first update
           if (!height || resetHeightOnZoom) {
@@ -841,7 +784,7 @@ const FlameVisualization = forwardRef<
             if (minHeight && height < minHeight) {
               height = minHeight;
             }
-            svg.attr("height", height);
+            svg.attr('height', height);
           }
 
           // Create a proper y scale for vertical positioning
@@ -852,108 +795,106 @@ const FlameVisualization = forwardRef<
 
           // Calculate the maximum time span for scaling
           g.attr(
-            "transform",
-            (d) =>
+            'transform',
+            d =>
               `translate(${d.x0},${
-                inverted
-                  ? yScale(d.depth)
-                  : (height || totalHeight) - yScale(d.depth) - cellHeight
-              })`,
+                inverted ? yScale(d.depth) : (height || totalHeight) - yScale(d.depth) - cellHeight
+              })`
           );
 
-          g.select("rect").attr("width", frameWidth);
+          g.select('rect').attr('width', frameWidth);
 
           // Enter new nodes with correct positioning
           const node = g
             .enter()
-            .append("svg:g")
+            .append('svg:g')
             .attr(
-              "transform",
-              (d) =>
+              'transform',
+              d =>
                 `translate(${d.x0},${
                   inverted
                     ? yScale(d.depth)
                     : (height || totalHeight) - yScale(d.depth) - cellHeight
-                })`,
+                })`
             );
 
           node
-            .append("svg:rect")
-            .attr("width", frameWidth)
-            .attr("height", cellHeight)
-            .attr("fill", colorMapperWrapper);
+            .append('svg:rect')
+            .attr('width', frameWidth)
+            .attr('height', cellHeight)
+            .attr('fill', colorMapperWrapper);
 
           if (!tooltip) {
-            node.append("svg:title");
+            node.append('svg:title');
           }
 
           node
-            .append("foreignObject")
-            .attr("width", frameWidth)
-            .attr("height", cellHeight)
-            .append("xhtml:div")
-            .attr("class", "d3-flame-graph-label")
-            .style("display", "block")
+            .append('foreignObject')
+            .attr('width', frameWidth)
+            .attr('height', cellHeight)
+            .append('xhtml:div')
+            .attr('class', 'd3-flame-graph-label')
+            .style('display', 'block')
             .text(getName);
           // Re-select to see the new elements
           g = svg
-            .selectAll<SVGGElement, PartitionHierarchyNode>("g")
-            .data(descendants, (d) => generatePathId(d));
+            .selectAll<SVGGElement, PartitionHierarchyNode>('g')
+            .data(descendants, d => generatePathId(d));
 
-          g.attr("width", frameWidth)
-            .attr("height", cellHeight)
-            .attr("name", getName)
-            .attr("class", (d) => {
+          g.attr('width', frameWidth)
+            .attr('height', cellHeight)
+            .attr('name', getName)
+            .attr('class', d => {
               if (d.data.highlight) {
-                return "highlight";
+                return 'highlight';
               }
               if (d.data.dimmed) {
-                return "dimmed";
+                return 'dimmed';
               }
-              return "";
+              return '';
             });
 
-          g.select("rect")
-            .attr("height", cellHeight)
-            .attr("fill", colorMapperWrapper)
-            .attr("class", (d) => {
+          g.select('rect')
+            .attr('height', cellHeight)
+            .attr('fill', colorMapperWrapper)
+            .attr('class', d => {
               if (d.data.highlight) {
-                return "highlight";
+                return 'highlight';
               }
               if (d.data.dimmed) {
-                return "dimmed";
+                return 'dimmed';
               }
-              return "";
+              return '';
             });
 
-          g.select("foreignObject")
-            .attr("width", frameWidth)
-            .attr("height", cellHeight)
-            .select("div")
-            .attr("class", "d3-flame-graph-label")
-            .style("display", "block")
+          g.select('foreignObject')
+            .attr('width', frameWidth)
+            .attr('height', cellHeight)
+            .select('div')
+            .attr('class', 'd3-flame-graph-label')
+            .style('display', 'block')
             .text(getName);
 
-          g.on("click", (event, d) => {
+          g.on('click', (event, d) => {
             event.stopPropagation();
             zoom(d);
           });
 
           g.exit().remove();
 
-          g.on("mouseover", (event, d) => {
+          g.on('mouseover', (event, d) => {
             if (tooltip) {
               tooltip.show(d, this);
             }
-            if (typeof hoverHandler === "function") {
+            if (typeof hoverHandler === 'function') {
               hoverHandler(d);
             }
-          }).on("mouseout", () => {
+          }).on('mouseout', () => {
             if (tooltip) {
               tooltip.hide();
             }
             if (detailsElement) {
-              detailsElement.textContent = "";
+              detailsElement.textContent = '';
             }
           });
         });
@@ -963,10 +904,10 @@ const FlameVisualization = forwardRef<
         selection.datum((data: FlameNode) => {
           const root = d3
             .hierarchy(data, getChildren)
-            .sum((d) => (d.customValue !== undefined ? d.customValue : 0));
+            .sum(d => (d.customValue !== undefined ? d.customValue : 0));
 
           // Generate path-based IDs for all nodes
-          root.descendants().forEach((node) => {
+          root.descendants().forEach(node => {
             (node as any).pathId = generatePathId(node);
           });
 
@@ -992,33 +933,33 @@ const FlameVisualization = forwardRef<
         // Create chart svg
         selection.each(function (this: Element) {
           // eslint-disable-line
-          if (d3.select(this).select("svg").size() === 0) {
+          if (d3.select(this).select('svg').size() === 0) {
             const svg = d3
               .select(this)
-              .append("svg:svg")
-              .attr("width", width)
-              .attr("class", "partition d3-flame-graph")
-              .style("margin", "0")
-              .style("display", "block");
+              .append('svg:svg')
+              .attr('width', width)
+              .attr('class', 'partition d3-flame-graph')
+              .style('margin', '0')
+              .style('display', 'block');
 
             if (height) {
               if (minHeight && height < minHeight) {
                 height = minHeight;
               }
-              svg.attr("height", height);
+              svg.attr('height', height);
             }
 
             svg
-              .append("svg:text")
-              .attr("class", "title")
-              .attr("text-anchor", "start")
-              .attr("y", "25")
-              .attr("x", "20")
-              .attr("fill", "#808080")
+              .append('svg:text')
+              .attr('class', 'title')
+              .attr('text-anchor', 'start')
+              .attr('y', '25')
+              .attr('x', '20')
+              .attr('fill', '#808080')
               .text(title);
 
             // Only call tooltip if it's a function
-            if (tooltip && typeof tooltip === "function") {
+            if (tooltip && typeof tooltip === 'function') {
               svg.call(tooltip);
             }
           }
@@ -1088,9 +1029,7 @@ const FlameVisualization = forwardRef<
       // eslint-disable-next-line
       // eslint-disable-next-line
       chart.sort = function (
-        _:
-          | boolean
-          | ((a: PartitionHierarchyNode, b: PartitionHierarchyNode) => number),
+        _: boolean | ((a: PartitionHierarchyNode, b: PartitionHierarchyNode) => number)
       ) {
         if (!arguments.length) {
           return sort;
@@ -1145,9 +1084,7 @@ const FlameVisualization = forwardRef<
       };
 
       // eslint-disable-next-line
-      chart.onClick = function (
-        _: ((d: PartitionHierarchyNode) => void) | null,
-      ) {
+      chart.onClick = function (_: ((d: PartitionHierarchyNode) => void) | null) {
         if (!arguments.length) {
           return clickHandler;
         }
@@ -1156,9 +1093,7 @@ const FlameVisualization = forwardRef<
       };
 
       // eslint-disable-next-line
-      chart.onHover = function (
-        _: ((d: PartitionHierarchyNode) => void) | null,
-      ) {
+      chart.onHover = function (_: ((d: PartitionHierarchyNode) => void) | null) {
         if (!arguments.length) {
           return hoverHandler;
         }
@@ -1172,7 +1107,7 @@ const FlameVisualization = forwardRef<
         }
 
         // If search term is empty, clear the search
-        if (!term || term.trim() === "") {
+        if (!term || term.trim() === '') {
           chart.clear();
           return;
         }
@@ -1197,7 +1132,7 @@ const FlameVisualization = forwardRef<
         }
 
         if (detailsElement) {
-          detailsElement.textContent = "";
+          detailsElement.textContent = '';
         }
 
         selection.each((root: PartitionHierarchyNode) => {
@@ -1230,11 +1165,11 @@ const FlameVisualization = forwardRef<
           return chart;
         }
 
-        if (tooltip && typeof tooltip.hide === "function") {
+        if (tooltip && typeof tooltip.hide === 'function') {
           tooltip.hide();
         }
 
-        selection.selectAll("svg").remove();
+        selection.selectAll('svg').remove();
         return chart;
       };
 
@@ -1249,45 +1184,45 @@ const FlameVisualization = forwardRef<
       }
 
       // Clear previous visualization
-      d3.select(container).selectAll("*").remove();
+      d3.select(container).selectAll('*').remove();
 
       // Create container elements
       const d3Container = d3.select(container);
 
       // Create details element
       const detailsElement = d3Container
-        .append("div")
-        .attr("class", "flame-details")
-        .style("padding", "5px")
-        .style("font-family", "Verdana")
-        .style("font-size", "12px");
+        .append('div')
+        .attr('class', 'flame-details')
+        .style('padding', '5px')
+        .style('font-family', 'Verdana')
+        .style('font-size', '12px');
 
       detailsRef.current = detailsElement.node() as HTMLDivElement;
 
       // Create tooltip
       const tooltip = d3Container
-        .append("div")
-        .attr("class", "d3-flame-graph-tip")
-        .style("position", "fixed")
-        .style("visibility", "hidden")
-        .style("pointer-events", "none")
-        .style("z-index", "100000")
-        .style("background", "rgba(0, 0, 0, 0.8)")
-        .style("color", "white")
-        .style("padding", "8px")
-        .style("border-radius", "4px")
-        .style("font-size", "12px")
-        .style("max-width", "300px")
-        .style("word-wrap", "break-word");
+        .append('div')
+        .attr('class', 'd3-flame-graph-tip')
+        .style('position', 'fixed')
+        .style('visibility', 'hidden')
+        .style('pointer-events', 'none')
+        .style('z-index', '100000')
+        .style('background', 'rgba(0, 0, 0, 0.8)')
+        .style('color', 'white')
+        .style('padding', '8px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('max-width', '300px')
+        .style('word-wrap', 'break-word');
 
       tooltipRef.current = tooltip.node() as HTMLDivElement;
 
       // Create SVG with a group for zoom behavior
       const svg = d3Container
-        .append("svg")
-        .attr("class", "partition d3-flame-graph")
-        .style("margin", "0")
-        .style("display", "block");
+        .append('svg')
+        .attr('class', 'partition d3-flame-graph')
+        .style('margin', '0')
+        .style('display', 'block');
 
       svgRef.current = svg.node() as SVGSVGElement;
       // Transform data
@@ -1320,18 +1255,13 @@ const FlameVisualization = forwardRef<
             if (physicalViewData && physicalViewData.physicalView) {
               // Look through all nodes in physicalViewData
               // eslint-disable-next-line
-              for (const [_, nodeData] of Object.entries(
-                physicalViewData.physicalView,
-              )) {
+              for (const [_, nodeData] of Object.entries(physicalViewData.physicalView)) {
                 if (nodeData.services && nodeData.services[instanceId]) {
                   const physicalService = nodeData.services[instanceId];
                   // Use type assertion to access potential extended properties
                   const extendedService = physicalService as any;
                   // If the service has gpuDevices directly
-                  if (
-                    extendedService.gpuDevices &&
-                    Array.isArray(extendedService.gpuDevices)
-                  ) {
+                  if (extendedService.gpuDevices && Array.isArray(extendedService.gpuDevices)) {
                     serviceGpuDevices = extendedService.gpuDevices;
                   }
                 }
@@ -1340,7 +1270,7 @@ const FlameVisualization = forwardRef<
 
             if (graphData) {
               const method = graphData.methods.find(
-                (m) => m.name === funcName && m.instanceId === instanceId,
+                m => m.name === funcName && m.instanceId === instanceId
               );
 
               if (method) {
@@ -1348,7 +1278,7 @@ const FlameVisualization = forwardRef<
                 onElementClick(
                   {
                     id: method.id,
-                    type: "method",
+                    type: 'method',
                     name: method.name,
                     gpuDevices: serviceGpuDevices,
                     data: {
@@ -1358,7 +1288,7 @@ const FlameVisualization = forwardRef<
                     },
                     serviceName: serviceName,
                   },
-                  true,
+                  true
                 );
                 return;
               }
@@ -1367,7 +1297,7 @@ const FlameVisualization = forwardRef<
             onElementClick(
               {
                 id: instanceId,
-                type: "method",
+                type: 'method',
                 name: funcName,
                 instanceId: instanceId,
                 gpuDevices: serviceGpuDevices,
@@ -1377,19 +1307,19 @@ const FlameVisualization = forwardRef<
                   count: d.data.count,
                 },
               },
-              true,
+              true
             );
           } else {
             // This is a regular function
             if (graphData) {
-              const func = graphData.functions.find((f) => f.name === nodeName);
+              const func = graphData.functions.find(f => f.name === nodeName);
 
               if (func) {
                 // If we found the function in graphData, use that data
                 onElementClick(
                   {
                     id: func.id,
-                    type: "function",
+                    type: 'function',
                     name: func.name,
                     gpuDevices: [],
                     data: {
@@ -1398,7 +1328,7 @@ const FlameVisualization = forwardRef<
                       count: d.data.count,
                     },
                   },
-                  true,
+                  true
                 );
                 return;
               }
@@ -1408,7 +1338,7 @@ const FlameVisualization = forwardRef<
             onElementClick(
               {
                 id: nodeName,
-                type: "function",
+                type: 'function',
                 name: nodeName,
                 gpuDevices: [],
                 data: {
@@ -1417,7 +1347,7 @@ const FlameVisualization = forwardRef<
                   count: d.data.count,
                 },
               },
-              true,
+              true
             );
           }
         });
@@ -1457,22 +1387,18 @@ const FlameVisualization = forwardRef<
             instanceId = matchInstanceId;
           }
 
-          let durationLabel = "Duration";
+          let durationLabel = 'Duration';
           if (d.data.isRunning) {
-            durationLabel = "Duration (running)";
+            durationLabel = 'Duration (running)';
           }
 
-          tooltip.style("visibility", "visible").html(`
+          tooltip.style('visibility', 'visible').html(`
             <div style="font-family: Verdana, sans-serif;">
               <strong>${displayName}</strong><br/>
-              ${instanceId ? `Instance ID: ${instanceId}<br/>` : ""}
+              ${instanceId ? `Instance ID: ${instanceId}<br/>` : ''}
               ${durationLabel}: ${formattedValue}s<br/>
-              ${d.data.count ? `Count: ${d.data.count}<br/>` : ""}
-              ${
-                d.parent
-                  ? `Percentage in parent: ${percentageOfParent.toFixed(1)}%`
-                  : ""
-              }
+              ${d.data.count ? `Count: ${d.data.count}<br/>` : ''}
+              ${d.parent ? `Percentage in parent: ${percentageOfParent.toFixed(1)}%` : ''}
             </div>
           `);
 
@@ -1506,33 +1432,33 @@ const FlameVisualization = forwardRef<
               ? event.clientY - tooltipHeight - offset.y
               : event.clientY + offset.y;
 
-            tooltip.style("left", `${left}px`).style("top", `${top}px`);
+            tooltip.style('left', `${left}px`).style('top', `${top}px`);
 
             // Store current position for future references
             tooltip.datum({ x: left, y: top });
           };
 
           // Clean up existing event listener if any
-          document.removeEventListener("mousemove", handleMouseMove);
+          document.removeEventListener('mousemove', handleMouseMove);
 
           // Add the new event listener to document instead of element for better tracking
-          document.addEventListener("mousemove", handleMouseMove);
+          document.addEventListener('mousemove', handleMouseMove);
 
           // Position the tooltip at a reasonable initial position
           const rect = element.getBoundingClientRect();
           handleMouseMove(
-            new MouseEvent("mousemove", {
+            new MouseEvent('mousemove', {
               clientX: rect.left + rect.width / 2,
               clientY: rect.top + rect.height / 2,
               bubbles: true,
-            }),
+            })
           );
 
           // Update hide method to remove document event listener
           tooltipHandler.hide = () => {
-            document.removeEventListener("mousemove", handleMouseMove);
+            document.removeEventListener('mousemove', handleMouseMove);
             if (tooltipRef.current) {
-              d3.select(tooltipRef.current).style("visibility", "hidden");
+              d3.select(tooltipRef.current).style('visibility', 'hidden');
             }
           };
         },
@@ -1540,7 +1466,7 @@ const FlameVisualization = forwardRef<
           if (!tooltipRef.current) {
             return;
           }
-          d3.select(tooltipRef.current).style("visibility", "hidden");
+          d3.select(tooltipRef.current).style('visibility', 'hidden');
         },
       };
 
@@ -1555,7 +1481,7 @@ const FlameVisualization = forwardRef<
       chartRef.current = chart;
 
       // Add CSS for flame graph
-      const style = document.createElement("style");
+      const style = document.createElement('style');
       style.textContent = `
       .d3-flame-graph rect {
         stroke: #474747;
@@ -1626,7 +1552,7 @@ const FlameVisualization = forwardRef<
           if (flameChartRef.current) {
             flameChartRef.current.destroy();
           }
-          d3.select(container).selectAll("*").remove();
+          d3.select(container).selectAll('*').remove();
         }
         document.head.removeChild(style);
       };
@@ -1634,7 +1560,7 @@ const FlameVisualization = forwardRef<
     }, [flameData, colorMode]);
 
     useEffect(() => {
-      if (searchTerm && searchTerm.trim() !== "") {
+      if (searchTerm && searchTerm.trim() !== '') {
         chartRef.current?.search(searchTerm);
       } else {
         chartRef.current?.clear();
@@ -1642,20 +1568,15 @@ const FlameVisualization = forwardRef<
     }, [searchTerm, flameData]);
 
     const transformFlameData = (data: FlameGraphData): FlameNode => {
-      if (
-        !data ||
-        !data.aggregated ||
-        !data.parentStartTimes ||
-        !Array.isArray(data.aggregated)
-      ) {
-        console.warn("Invalid flame graph data format:", data);
-        return { name: "_root", customValue: 0, children: [] };
+      if (!data || !data.aggregated || !data.parentStartTimes || !Array.isArray(data.aggregated)) {
+        console.warn('Invalid flame graph data format:', data);
+        return { name: '_root', customValue: 0, children: [] };
       }
 
       // Find max value for normalization
       let maxValue = 0;
       let minValue = Infinity;
-      data.aggregated.forEach((node) => {
+      data.aggregated.forEach(node => {
         if (node.value && node.value > maxValue) {
           maxValue = node.value;
         }
@@ -1673,21 +1594,15 @@ const FlameVisualization = forwardRef<
       const nodeMap = new Map<string, FlameNode>();
 
       // First pass: create all nodes with normalized values
-      data.aggregated.forEach((node) => {
+      data.aggregated.forEach(node => {
         // Store the original value for display
         let originalValue = node.value || 0;
 
         // For nodes with original value of 0, try to calculate from startTime if available
-        if (
-          originalValue === 0 &&
-          node.totalInParent &&
-          node.totalInParent.length > 0
-        ) {
+        if (originalValue === 0 && node.totalInParent && node.totalInParent.length > 0) {
           // Find the earliest startTime across all parents
           const earliestStartTime = Math.min(
-            ...node.totalInParent
-              .filter((entry) => entry.startTime > 0)
-              .map((entry) => entry.startTime),
+            ...node.totalInParent.filter(entry => entry.startTime > 0).map(entry => entry.startTime)
           );
 
           if (earliestStartTime > 0 && isFinite(earliestStartTime)) {
@@ -1729,14 +1644,14 @@ const FlameVisualization = forwardRef<
       // Add this before the second pass:
       const addedAsChild = new Set<string>();
       const mainNode: FlameNode = {
-        name: "_main",
+        name: '_main',
         customValue: 0, // Will be calculated based on children
         originalValue: 0,
         children: [],
-        serviceName: "_main",
+        serviceName: '_main',
         totalInParent: [],
       };
-      nodeMap.set("_main", mainNode);
+      nodeMap.set('_main', mainNode);
 
       const fillParent = (
         nodeMap: Map<string, FlameNode>,
@@ -1746,7 +1661,7 @@ const FlameVisualization = forwardRef<
         startTime: number,
         duration: number,
         count: number,
-        isRunning: boolean,
+        isRunning: boolean
       ) => {
         addedAsChild.add(nodeData.name);
         const parentNode = nodeMap.get(callerNodeId);
@@ -1779,7 +1694,7 @@ const FlameVisualization = forwardRef<
           return;
         } else {
           const startTimes = data.parentStartTimes.find(
-            (item) => item.calleeId === callerNodeId,
+            item => item.calleeId === callerNodeId
           )?.startTimes;
           if (startTimes) {
             for (const { callerId, startTime } of startTimes) {
@@ -1812,7 +1727,7 @@ const FlameVisualization = forwardRef<
                   startTime,
                   originalValue,
                   1,
-                  true,
+                  true
                 );
               }
             }
@@ -1821,21 +1736,12 @@ const FlameVisualization = forwardRef<
       };
 
       // Second pass: build the hierarchy
-      nodeMap.forEach((nodeData) => {
+      nodeMap.forEach(nodeData => {
         const parentData = nodeData.totalInParent || [];
 
         // If this node has parents, add it as a child to each parent
         parentData.forEach(({ callerNodeId, duration, count, startTime }) => {
-          fillParent(
-            nodeMap,
-            data,
-            nodeData,
-            callerNodeId,
-            startTime,
-            duration,
-            count,
-            false,
-          );
+          fillParent(nodeMap, data, nodeData, callerNodeId, startTime, duration, count, false);
         });
       });
 
@@ -1856,23 +1762,14 @@ const FlameVisualization = forwardRef<
           };
           if (!nodeMap.has(calleeId)) {
             nodeMap.set(calleeId, nodeDataCopy);
-            fillParent(
-              nodeMap,
-              data,
-              nodeDataCopy,
-              callerId,
-              startTime,
-              originalValue,
-              1,
-              true,
-            );
+            fillParent(nodeMap, data, nodeDataCopy, callerId, startTime, originalValue, 1, true);
           }
         });
       });
 
       while (true) {
         let changed = false;
-        nodeMap.forEach((node) => {
+        nodeMap.forEach(node => {
           const copyNode = (nodeData: FlameNode): FlameNode => {
             return {
               ...nodeData,
@@ -1889,10 +1786,7 @@ const FlameVisualization = forwardRef<
                 newChildren.push(copyNode(child));
               }
             }
-            if (
-              nodeData.children &&
-              nodeData.children.length !== newChildren.length
-            ) {
+            if (nodeData.children && nodeData.children.length !== newChildren.length) {
               changed = true;
             }
             nodeData.children = newChildren;
@@ -1914,16 +1808,13 @@ const FlameVisualization = forwardRef<
       mainNode.children = [
         ...(mainNode.children || []),
         ...Array.from(nodeMap.values()).filter(
-          (node) =>
-            !addedAsChild.has(node.name) &&
-            node.name !== "_main" &&
-            !childrens.has(node.name),
+          node => !addedAsChild.has(node.name) && node.name !== '_main' && !childrens.has(node.name)
         ),
       ];
       // Calculate total value of all children
       let totalChildrenValue = 0;
       if (mainNode.children) {
-        mainNode.children.forEach((child) => {
+        mainNode.children.forEach(child => {
           totalChildrenValue += child.customValue || 0;
         });
       }
@@ -1942,7 +1833,7 @@ const FlameVisualization = forwardRef<
 
         // Recursively process children
         if (node.children && node.children.length > 0) {
-          node.children.forEach((child) => ensureNodesVisible(child));
+          node.children.forEach(child => ensureNodesVisible(child));
         }
       };
 
@@ -1965,24 +1856,22 @@ const FlameVisualization = forwardRef<
       const svgCopy = svgElement.cloneNode(true) as SVGSVGElement;
 
       // Set the proper dimensions and styling
-      svgCopy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      svgCopy.setAttribute("width", svgElement.clientWidth.toString());
-      svgCopy.setAttribute("height", svgElement.clientHeight.toString());
+      svgCopy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      svgCopy.setAttribute('width', svgElement.clientWidth.toString());
+      svgCopy.setAttribute('height', svgElement.clientHeight.toString());
 
       // Convert to a string
       const serializer = new XMLSerializer();
       const svgString = serializer.serializeToString(svgCopy);
 
       // Create a blob from the SVG string
-      const blob = new Blob([svgString], { type: "image/svg+xml" });
+      const blob = new Blob([svgString], { type: 'image/svg+xml' });
       const url = URL.createObjectURL(blob);
 
       // Create a download link and trigger the download
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
-      a.download = `ray-flame-visualization-${new Date()
-        .toISOString()
-        .slice(0, 10)}.svg`;
+      a.download = `ray-flame-visualization-${new Date().toISOString().slice(0, 10)}.svg`;
       document.body.appendChild(a);
       a.click();
 
@@ -2000,21 +1889,21 @@ const FlameVisualization = forwardRef<
       <div
         ref={containerRef}
         style={{
-          width: "100%",
-          height: "500px",
-          position: "relative",
-          backgroundColor: "transparent",
-          fontFamily: "Verdana, sans-serif",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "flex-start",
-          margin: "120px 0 20px 0",
-          maxWidth: "80%",
-          overflow: "hidden", // Prevent scrollbars during zoom/pan
+          width: '100%',
+          height: '500px',
+          position: 'relative',
+          backgroundColor: 'transparent',
+          fontFamily: 'Verdana, sans-serif',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          margin: '120px 0 20px 0',
+          maxWidth: '80%',
+          overflow: 'hidden', // Prevent scrollbars during zoom/pan
         }}
       />
     );
-  },
+  }
 );
 
 export default FlameVisualization;

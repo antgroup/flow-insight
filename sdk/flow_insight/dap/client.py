@@ -1,7 +1,7 @@
-import logging
-import json
 import asyncio
-from typing import Dict, Any, List, Optional, Callable
+import json
+import logging
+from typing import Any, Callable, Dict, List, Optional
 
 
 class DAPClient:
@@ -30,9 +30,7 @@ class DAPClient:
             bool: True if connection was successful, False otherwise.
         """
         try:
-            self.reader, self.writer = await asyncio.open_connection(
-                self.host, self.port
-            )
+            self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
             self.running = True
 
             # Start task to read responses
@@ -60,7 +58,7 @@ class DAPClient:
             self.writer.close()
             try:
                 await self.writer.wait_closed()
-            except:
+            except Exception:
                 pass
             self.writer = None
             self.reader = None
@@ -97,9 +95,7 @@ class DAPClient:
 
                 if content:
                     # Process in a separate task to avoid blocking the read loop
-                    asyncio.create_task(
-                        self._process_message(json.loads(content.decode("utf-8")))
-                    )
+                    asyncio.create_task(self._process_message(json.loads(content.decode("utf-8"))))
 
         except asyncio.CancelledError:
             # Expected when task is cancelled during disconnect
@@ -293,9 +289,7 @@ class DAPClient:
         # Use a longer timeout for attach command (30 seconds)
         return await self._send_request_and_wait("attach", args, timeout=0.1)
 
-    async def set_breakpoints(
-        self, source: Dict[str, str], lines: List[int]
-    ) -> Dict[str, Any]:
+    async def set_breakpoints(self, source: Dict[str, str], lines: List[int]) -> Dict[str, Any]:
         """
         Set breakpoints in a source file.
 

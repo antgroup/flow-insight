@@ -1,5 +1,6 @@
 from flow_insight.storage.snapshot.base import SnapshotStorageBackend
 
+
 class MemoryStorageBackend(SnapshotStorageBackend):
     def __init__(self):
         self._data = {}

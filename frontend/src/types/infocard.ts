@@ -1,10 +1,9 @@
-import { Service, Method, FunctionNode } from "./index";
+import { Service, Method, FunctionNode } from './index';
 
 export type BaseNode = {
   id: string;
   name: string;
 };
-
 
 export type Node = Service | Method | FunctionNode;
 
@@ -24,7 +23,7 @@ export type FoldedSections = {
   Devices: boolean;
   Callers: boolean;
   Callees: boolean;
-  "Data Dependencies": boolean;
+  'Data Dependencies': boolean;
 };
 
 export type CardPosition = {

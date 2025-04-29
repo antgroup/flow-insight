@@ -1,4 +1,3 @@
-import { ArrowDown, ArrowUp, Bug, Circle, Pause, Play, SkipForward } from 'lucide-react';
 import {
   Box,
   Button,
@@ -14,14 +13,14 @@ import {
   Stack,
   TextField,
   Typography,
-} from "@mui/material";
-import React, { useEffect, useRef, useState } from "react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { removeSlashes } from "slashes";
-import { Breakpoint, DebugSession } from "../types";
-import {
-  ApiService,
-} from "../services/api";
+} from '@mui/material';
+import { ArrowDown, ArrowUp, Circle, Pause, Play, SkipForward } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { removeSlashes } from 'slashes';
+
+import { ApiService } from '../services/api';
+import { Breakpoint, DebugSession } from '../types';
 
 // Add this type definition to handle NodeJS.Timeout issue
 type TimeoutType = ReturnType<typeof setTimeout>;
@@ -48,7 +47,6 @@ const SourceCodeView: React.FC<{
   currentLine,
   isLoading,
   switchFrame,
-  onLineClick,
   selectedSourceFile,
   selectedSession,
   flowId,
@@ -59,17 +57,16 @@ const SourceCodeView: React.FC<{
 
   useEffect(() => {
     if (flowId && selectedSession) {
-      apiService?.getBreakpoints(flowId, selectedSession)
-        .then((breakpoints) => {
+      apiService
+        ?.getBreakpoints(flowId, selectedSession)
+        .then(breakpoints => {
           const currentBreakpoints = breakpoints
-            .filter(
-              (bp: Breakpoint) => bp.sourceFile === selectedSourceFile.path,
-            )
+            .filter((bp: Breakpoint) => bp.sourceFile === selectedSourceFile.path)
             .map((bp: Breakpoint) => bp.line);
           setBreakpoints(currentBreakpoints);
         })
-        .catch((error) => {
-          console.error("Failed to get breakpoints:", error);
+        .catch(error => {
+          console.error('Failed to get breakpoints:', error);
         });
     }
     // eslint-disable-next-line
@@ -79,7 +76,7 @@ const SourceCodeView: React.FC<{
   useEffect(() => {
     if (currentLine && codeContainerRef.current && switchFrame) {
       const lineElement = codeContainerRef.current.querySelector(
-        `[data-line-number="${currentLine}"]`,
+        `[data-line-number="${currentLine}"]`
       );
       if (lineElement) {
         // Get the current scroll position
@@ -92,14 +89,11 @@ const SourceCodeView: React.FC<{
         const lineRelativeTop = lineRect.top - containerRect.top;
 
         const targetScrollTop =
-          currentScrollTop +
-          lineRelativeTop -
-          containerHeight / 2 +
-          lineRect.height / 2;
+          currentScrollTop + lineRelativeTop - containerHeight / 2 + lineRect.height / 2;
 
         codeContainerRef.current.scrollTo({
           top: targetScrollTop,
-          behavior: "smooth",
+          behavior: 'smooth',
         });
       }
     }
@@ -116,7 +110,7 @@ const SourceCodeView: React.FC<{
 
       if (newBreakpoints.includes(lineNumber)) {
         // Remove the breakpoint
-        newBreakpoints = newBreakpoints.filter((line) => line !== lineNumber);
+        newBreakpoints = newBreakpoints.filter(line => line !== lineNumber);
       } else {
         // Add the breakpoint
         newBreakpoints.push(lineNumber);
@@ -126,11 +120,11 @@ const SourceCodeView: React.FC<{
       const response = await apiService?.sendDebugCommand(
         flowId,
         selectedSession,
-        "set_breakpoints",
+        'set_breakpoints',
         {
           source: selectedSourceFile,
           lines: newBreakpoints,
-        },
+        }
       );
 
       if (response && response.result) {
@@ -149,7 +143,7 @@ const SourceCodeView: React.FC<{
         }
       }
     } catch (error) {
-      console.error("Failed to set breakpoints:", error);
+      console.error('Failed to set breakpoints:', error);
     }
   };
 
@@ -157,10 +151,10 @@ const SourceCodeView: React.FC<{
     return (
       <Box
         sx={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100%",
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100%',
         }}
       >
         <CircularProgress size={24} />
@@ -173,16 +167,13 @@ const SourceCodeView: React.FC<{
       <Box
         sx={{
           p: 2,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100%",
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100%',
         }}
       >
-        <Typography
-          variant="body2"
-          sx={{ color: "text.secondary", fontStyle: "italic" }}
-        >
+        <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
           No source code available
         </Typography>
       </Box>
@@ -194,17 +185,17 @@ const SourceCodeView: React.FC<{
     wrapLines: true,
     lineProps: (lineNumber: number) => {
       const style = {
-        display: "block",
-        width: "100%",
-        cursor: "pointer",
-        position: "relative" as const,
+        display: 'block',
+        width: '100%',
+        cursor: 'pointer',
+        position: 'relative' as const,
       };
 
       // Add data attribute for line number
       const props = {
         style,
         onClick: () => handleLineClick(lineNumber),
-        "data-line-number": lineNumber,
+        'data-line-number': lineNumber,
       };
 
       // Highlight current execution line
@@ -213,18 +204,18 @@ const SourceCodeView: React.FC<{
           ...props,
           style: {
             ...style,
-            backgroundColor: "rgba(255, 255, 0, 0.2)",
-            display: "flex",
-            alignItems: "center",
-            "&::before": {
+            backgroundColor: 'rgba(255, 255, 0, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            '&::before': {
               content: '""',
-              position: "absolute",
-              left: "-20px",
-              width: "0",
-              height: "0",
-              borderTop: "6px solid transparent",
-              borderBottom: "6px solid transparent",
-              borderLeft: "10px solid #ffd700",
+              position: 'absolute',
+              left: '-20px',
+              width: '0',
+              height: '0',
+              borderTop: '6px solid transparent',
+              borderBottom: '6px solid transparent',
+              borderLeft: '10px solid #ffd700',
             },
           },
         };
@@ -236,8 +227,8 @@ const SourceCodeView: React.FC<{
           ...props,
           style: {
             ...style,
-            backgroundColor: "rgba(255, 23, 68, 0.08)",
-            borderLeft: "3px solid #ff1744",
+            backgroundColor: 'rgba(255, 23, 68, 0.08)',
+            borderLeft: '3px solid #ff1744',
           },
         };
       }
@@ -248,18 +239,18 @@ const SourceCodeView: React.FC<{
       <Box
         component="span"
         sx={{
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-start",
-          position: "relative",
-          pl: "18px",
-          "&:hover": {
-            color: "primary.main",
-            textDecoration: "underline",
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          position: 'relative',
+          pl: '18px',
+          '&:hover': {
+            color: 'primary.main',
+            textDecoration: 'underline',
           },
         }}
-        onClick={(e) => {
+        onClick={e => {
           e.stopPropagation();
           handleLineClick(lineNumber);
         }}
@@ -268,12 +259,12 @@ const SourceCodeView: React.FC<{
           <Circle
             size={16}
             style={{
-              color: "#ff1744",
-              position: "absolute",
-              left: "0px",
+              color: '#ff1744',
+              position: 'absolute',
+              left: '0px',
               zIndex: 100000,
-              animation: "none",
-              filter: "drop-shadow(0px 0px 1px rgba(0,0,0,0.3))",
+              animation: 'none',
+              filter: 'drop-shadow(0px 0px 1px rgba(0,0,0,0.3))',
             }}
           />
         )}
@@ -283,17 +274,17 @@ const SourceCodeView: React.FC<{
   };
 
   return (
-    <Box sx={{ position: "relative", height: "100%" }}>
+    <Box sx={{ position: 'relative', height: '100%' }}>
       <Box
         ref={codeContainerRef}
         sx={{
-          height: "100%",
-          overflow: "auto",
+          height: '100%',
+          overflow: 'auto',
           borderRadius: 1,
-          "& pre": {
+          '& pre': {
             margin: 0,
-            fontSize: "0.75rem",
-            minHeight: "100%",
+            fontSize: '0.75rem',
+            minHeight: '100%',
           },
         }}
       >
@@ -303,11 +294,11 @@ const SourceCodeView: React.FC<{
           showLineNumbers={true}
           customStyle={{
             margin: 0,
-            padding: "12px",
-            whiteSpace: "pre",
-            wordWrap: "normal",
-            overflowX: "auto",
-            minHeight: "100%",
+            padding: '12px',
+            whiteSpace: 'pre',
+            wordWrap: 'normal',
+            overflowX: 'auto',
+            minHeight: '100%',
           }}
         >
           {sourceCode}
@@ -317,7 +308,12 @@ const SourceCodeView: React.FC<{
   );
 };
 
-const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiService, expanded }) => {
+const DebugPanel: React.FC<DebugPanelProps> = ({
+  flowId,
+  selectedElement,
+  apiService,
+  expanded,
+}) => {
   const [sessions, setSessions] = useState<DebugSession[]>([]);
   const [activeSessions, setActiveSessions] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -326,7 +322,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
   const [selectedThread, setSelectedThread] = useState<number | null>(null);
   const [stackFrames, setStackFrames] = useState<any[]>([]);
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null);
-  const [evaluateExpression, setEvaluateExpression] = useState<string>("");
+  const [evaluateExpression, setEvaluateExpression] = useState<string>('');
   const [evaluateResult, setEvaluateResult] = useState<string | null>(null);
   const [loadingEvaluate, setLoadingEvaluate] = useState<boolean>(false);
   const [sourceCode, setSourceCode] = useState<string | null>(null);
@@ -339,21 +335,19 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
   const [isInitializing, setIsInitializing] = useState<boolean>(false);
   const [pollInterval, setPollInterval] = useState<TimeoutType | null>(null);
   const [currentLine, setCurrentLine] = useState<number | null>(null);
-  const [processCmdType, setProcessCmdType] = useState<string>("");
+  const [processCmdType, setProcessCmdType] = useState<string>('');
   const [switchFrame, setSwitchFrame] = useState<boolean>(false);
 
   // Check if apiService is provided
   if (!apiService) {
-    console.error("ApiService is not provided to DebugPanel");
+    console.error('ApiService is not provided to DebugPanel');
     return null;
   }
 
   // eslint-disable-next-line
   useEffect(() => {
     if (stackFrames && selectedFrame) {
-      const currentLine = stackFrames.find(
-        (frame: any) => frame.id === selectedFrame,
-      )?.line;
+      const currentLine = stackFrames.find((frame: any) => frame.id === selectedFrame)?.line;
       setCurrentLine(currentLine);
     }
   }, [stackFrames, selectedFrame]);
@@ -361,7 +355,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
   // eslint-disable-next-line
   useEffect(() => {
     if (
-      processCmdType !== "" &&
+      processCmdType !== '' &&
       selectedSession &&
       selectedThread &&
       selectedFrame &&
@@ -371,13 +365,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
       checkDebugSessionPaused(selectedSession, processCmdType);
     }
     // eslint-disable-next-line
-  }, [
-    processCmdType,
-    selectedSession,
-    selectedThread,
-    selectedFrame,
-    selectedSourceFile,
-  ]);
+  }, [processCmdType, selectedSession, selectedThread, selectedFrame, selectedSourceFile]);
 
   // Fetch debug sessions when a node is selected
   // eslint-disable-next-line
@@ -385,6 +373,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     if (expanded && selectedElement && flowId) {
       fetchDebugSessions();
     }
+    // eslint-disable-next-line
   }, [selectedElement, flowId, expanded]);
 
   // Fetch active debug sessions
@@ -406,14 +395,14 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
       const funcName = selectedElement.name;
 
       // If it's a method, get the service name and instance id
-      if (selectedElement.type === "method" && selectedElement.instanceId) {
+      if (selectedElement.type === 'method' && selectedElement.instanceId) {
         serviceInfo = [selectedElement.serviceName, selectedElement.instanceId];
       }
 
       const sessions = await apiService.getDebugSessions(flowId, serviceInfo, funcName);
       setSessions(sessions);
     } catch (error) {
-      console.error("Failed to fetch debug sessions:", error);
+      console.error('Failed to fetch debug sessions:', error);
     }
   };
 
@@ -431,11 +420,11 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         : [];
       const funcName = selectedElement?.name;
       const currentActiveSessions = sessions.find(
-        (session) =>
+        session =>
           session.spanId === selectedSession &&
           session.serviceInfo[0] === serviceInfo[0] &&
           session.serviceInfo[1] === serviceInfo[1] &&
-          session.funcName === funcName,
+          session.funcName === funcName
       );
       if (!currentActiveSessions) {
         setSelectedSession(null);
@@ -445,14 +434,11 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         setSelectedFrame(null);
       }
     } catch (error) {
-      console.error("Failed to fetch active debug sessions:", error);
+      console.error('Failed to fetch active debug sessions:', error);
     }
   };
 
-  const checkDebugSessionPaused = async (
-    session: string,
-    processCmdType: string,
-  ) => {
+  const checkDebugSessionPaused = async (session: string, processCmdType: string) => {
     if (pollInterval) {
       clearInterval(pollInterval);
     }
@@ -467,16 +453,16 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         const isReady = await isDebugCommandValid(
           selectedThread || undefined,
           frames[0].id || undefined,
-          session,
+          session
         );
         if (isReady) {
           // Program is paused and ready for debugging
           const isStep =
-            processCmdType === "step_over" ||
-            processCmdType === "step_into" ||
-            processCmdType === "step_out" ||
-            processCmdType === "continue" ||
-            processCmdType === "pause";
+            processCmdType === 'step_over' ||
+            processCmdType === 'step_into' ||
+            processCmdType === 'step_out' ||
+            processCmdType === 'continue' ||
+            processCmdType === 'pause';
           clearInterval(interval);
           // Only fetch source code if it's a different file
           if (selectedThread) {
@@ -484,13 +470,13 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
               !sourceCode ||
               !selectedSourceFile ||
               selectedSourceFile.path !== frames[0].source.path ||
-              processCmdType === "switch"
+              processCmdType === 'switch'
             ) {
               await fetchSourceCode(
                 session,
                 selectedThread,
                 isStep ? frames[0].id : selectedFrame,
-                isStep ? frames[0].source : selectedSourceFile,
+                isStep ? frames[0].source : selectedSourceFile
               );
             }
             if (isStep) {
@@ -509,10 +495,10 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
           setTimeout(() => {
             setSwitchFrame(false);
           }, 100);
-          setProcessCmdType("");
+          setProcessCmdType('');
         }
       } catch (error) {
-        console.error("Error during debug session initialization:", error);
+        console.error('Error during debug session initialization:', error);
       }
     };
     check();
@@ -541,7 +527,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         flowId,
         session.serviceInfo,
         session.funcName,
-        session.spanId,
+        session.spanId
       );
 
       if (result) {
@@ -552,7 +538,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         // Try to pause the execution
         if (threadIds) {
           for (const threadId of threadIds) {
-            await apiService.sendDebugCommand(flowId, session.spanId, "pause", {
+            await apiService.sendDebugCommand(flowId, session.spanId, 'pause', {
               thread_id: threadId,
             });
           }
@@ -563,13 +549,13 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
           if (threadIds) {
             await fetchStackTrace(session.spanId, threadIds[0]);
           }
-          setProcessCmdType("switch");
+          setProcessCmdType('switch');
         }, 100);
       } else {
         setIsInitializing(false);
       }
     } catch (error) {
-      console.error("Failed to activate debug session:", error);
+      console.error('Failed to activate debug session:', error);
       setIsInitializing(false);
     }
   };
@@ -595,7 +581,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         }
       }
     } catch (error) {
-      console.error("Failed to deactivate debug session:", error);
+      console.error('Failed to deactivate debug session:', error);
     } finally {
       setLoading(false);
     }
@@ -608,7 +594,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     }
 
     try {
-      const response = await apiService.sendDebugCommand(flowId, spanId, "get_threads", {});
+      const response = await apiService.sendDebugCommand(flowId, spanId, 'get_threads', {});
       if (response && response.result) {
         if (response.result.success === false) {
           await handleSessionUnavailable(spanId);
@@ -618,17 +604,14 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         if (response.result.body) {
           setThreads(response.result.body.threads || []);
           // Select the first thread by default if none is selected
-          if (
-            response.result.body.threads &&
-            response.result.body.threads.length > 0
-          ) {
+          if (response.result.body.threads && response.result.body.threads.length > 0) {
             setSelectedThread(response.result.body.threads[0].id);
             return response.result.body.threads.map((thread: any) => thread.id);
           }
         }
       }
     } catch (error) {
-      console.error("Failed to fetch threads:", error);
+      console.error('Failed to fetch threads:', error);
       // If we can't fetch threads, assume session is unavailable and remove it
       await handleSessionUnavailable(spanId);
       return null;
@@ -644,7 +627,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
 
     try {
       // Remove the task from active sessions
-      setActiveSessions((prev) => prev.filter((id) => id !== spanId));
+      setActiveSessions(prev => prev.filter(id => id !== spanId));
 
       // Clear session data if this was the selected session
       if (selectedSession === spanId) {
@@ -657,7 +640,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
 
       await fetchActiveDebugSessions();
     } catch (error) {
-      console.error("Error handling unavailable session:", error);
+      console.error('Error handling unavailable session:', error);
     }
   };
 
@@ -666,7 +649,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     spanId: string,
     threadId: number,
     frameId: number,
-    source: any,
+    source: any
   ): Promise<string | null> => {
     if (!flowId || !source) {
       return null;
@@ -675,32 +658,29 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     setLoadingSourceCode(true);
     try {
       // 1. Open the file
-      const openResponse = await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
+      const openResponse = await apiService.sendDebugCommand(flowId, spanId, 'evaluate', {
         expression: `_f_visual_debug_var_ = open("${source.path}")`,
         thread_id: threadId,
         frame_id: frameId,
       });
 
       if (!openResponse?.result?.success) {
-        console.error(
-          "Failed to open source file:",
-          openResponse?.result?.message,
-        );
+        console.error('Failed to open source file:', openResponse?.result?.message);
         setLoadingSourceCode(false);
         return null;
       }
 
       // 2. Read the file content
-      const readResponse = await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
-        expression: "_content_visual_debug_var_ = _f_visual_debug_var_.read()",
+      const readResponse = await apiService.sendDebugCommand(flowId, spanId, 'evaluate', {
+        expression: '_content_visual_debug_var_ = _f_visual_debug_var_.read()',
         thread_id: threadId,
         frame_id: frameId,
       });
 
       if (!readResponse?.result?.success) {
         // Try to close the file even if reading failed
-        await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
-          expression: "_f_visual_debug_var_.close()",
+        await apiService.sendDebugCommand(flowId, spanId, 'evaluate', {
+          expression: '_f_visual_debug_var_.close()',
           thread_id: threadId,
           frame_id: frameId,
         });
@@ -709,15 +689,15 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         return null;
       }
 
-      const lengthResponse = await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
-        expression: "len(_content_visual_debug_var_)",
+      const lengthResponse = await apiService.sendDebugCommand(flowId, spanId, 'evaluate', {
+        expression: 'len(_content_visual_debug_var_)',
         thread_id: threadId,
         frame_id: frameId,
       });
 
       if (!lengthResponse?.result?.body?.result) {
-        await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
-          expression: "_f_visual_debug_var_.close()",
+        await apiService.sendDebugCommand(flowId, spanId, 'evaluate', {
+          expression: '_f_visual_debug_var_.close()',
           thread_id: threadId,
           frame_id: frameId,
         });
@@ -726,31 +706,26 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
       }
 
       const length = parseInt(lengthResponse.result.body.result);
-      let content = "";
+      let content = '';
       let start_pos = 0;
       while (start_pos < length) {
-        const sliceResponse = await apiService.sendDebugCommand(
-          flowId,
-          spanId,
-          "evaluate",
-          {
-            expression:
-              "_content_visual_debug_var_[" +
-              start_pos.toString() +
-              ":" +
-              (start_pos + 20000).toString() +
-              "]",
-            thread_id: threadId,
-            frame_id: frameId,
-          },
-        );
+        const sliceResponse = await apiService.sendDebugCommand(flowId, spanId, 'evaluate', {
+          expression:
+            '_content_visual_debug_var_[' +
+            start_pos.toString() +
+            ':' +
+            (start_pos + 20000).toString() +
+            ']',
+          thread_id: threadId,
+          frame_id: frameId,
+        });
         content += sliceResponse.result.body.result.slice(1, -1);
         start_pos += 20000;
       }
 
       // 3. Close the file
-      await apiService.sendDebugCommand(flowId, spanId, "evaluate", {
-        expression: "_f_visual_debug_var_.close()",
+      await apiService.sendDebugCommand(flowId, spanId, 'evaluate', {
+        expression: '_f_visual_debug_var_.close()',
         thread_id: threadId,
         frame_id: frameId,
       });
@@ -763,7 +738,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         return processedSource;
       }
     } catch (error) {
-      console.error("Failed to fetch source code:", error);
+      console.error('Failed to fetch source code:', error);
     } finally {
       setLoadingSourceCode(false);
     }
@@ -771,21 +746,15 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
   };
 
   // Fetch stack trace for a thread
-  const getCallFrame = async (
-    spanId: string,
-    threadId: number,
-  ): Promise<any> => {
+  const getCallFrame = async (spanId: string, threadId: number): Promise<any> => {
     if (!flowId) {
       return null;
     }
 
     try {
-      const response = await apiService.sendDebugCommand(
-        flowId,
-        spanId,
-        "get_stack_trace",
-        { thread_id: threadId },
-      );
+      const response = await apiService.sendDebugCommand(flowId, spanId, 'get_stack_trace', {
+        thread_id: threadId,
+      });
 
       if (response && response.result) {
         if (response.result.success === false) {
@@ -797,7 +766,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         }
       }
     } catch (error) {
-      console.error("Failed to fetch stack trace:", error);
+      console.error('Failed to fetch stack trace:', error);
       return null;
     }
     return null;
@@ -806,19 +775,16 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
   // Fetch stack trace for a thread
   const fetchStackTrace = async (
     spanId: string,
-    threadId: number,
+    threadId: number
   ): Promise<[number | null, any | null]> => {
     if (!flowId) {
       return [null, null];
     }
 
     try {
-      const response = await apiService.sendDebugCommand(
-        flowId,
-        spanId,
-        "get_stack_trace",
-        { thread_id: threadId },
-      );
+      const response = await apiService.sendDebugCommand(flowId, spanId, 'get_stack_trace', {
+        thread_id: threadId,
+      });
 
       if (response && response.result) {
         if (response.result.success === false) {
@@ -828,10 +794,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         if (response.result.body) {
           setStackFrames(response.result.body.stackFrames || []);
           // Always select the first frame by default when frames are loaded
-          if (
-            response.result.body.stackFrames &&
-            response.result.body.stackFrames.length > 0
-          ) {
+          if (response.result.body.stackFrames && response.result.body.stackFrames.length > 0) {
             const frameId = response.result.body.stackFrames[0].id;
             setSelectedFrame(frameId);
 
@@ -845,7 +808,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         }
       }
     } catch (error) {
-      console.error("Failed to fetch stack trace:", error);
+      console.error('Failed to fetch stack trace:', error);
       return [null, null];
     }
     return [null, null];
@@ -860,7 +823,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     const [frameId, source] = await fetchStackTrace(selectedSession, threadId);
     setSelectedFrame(frameId);
     setSelectedSourceFile(source);
-    setProcessCmdType("switch");
+    setProcessCmdType('switch');
     setSelectedThread(threadId);
   };
 
@@ -873,17 +836,14 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     setSelectedFrame(frameId);
 
     // Set the selected source file when a frame is selected
-    const frame = stackFrames.find((f) => f.id === frameId);
+    const frame = stackFrames.find(f => f.id === frameId);
     if (frame && frame.source) {
       // Only update source file and fetch source code if it's a different file
-      if (
-        !selectedSourceFile ||
-        selectedSourceFile.path !== frame.source.path
-      ) {
+      if (!selectedSourceFile || selectedSourceFile.path !== frame.source.path) {
         setSelectedSourceFile(frame.source);
       }
     }
-    setProcessCmdType("switch");
+    setProcessCmdType('switch');
   };
 
   // Handle evaluating expressions
@@ -894,22 +854,15 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
 
     setLoadingEvaluate(true);
     try {
-      const response = await apiService.sendDebugCommand(
-        flowId,
-        selectedSession,
-        "evaluate",
-        {
-          expression: evaluateExpression,
-          frame_id: selectedFrame,
-          thread_id: selectedThread,
-        },
-      );
+      const response = await apiService.sendDebugCommand(flowId, selectedSession, 'evaluate', {
+        expression: evaluateExpression,
+        frame_id: selectedFrame,
+        thread_id: selectedThread,
+      });
 
       if (response && response.result) {
         if (response.result.success === false) {
-          setEvaluateResult(
-            `Error: ${response.result.message || "Evaluation failed"}`,
-          );
+          setEvaluateResult(`Error: ${response.result.message || 'Evaluation failed'}`);
           return;
         }
 
@@ -918,19 +871,15 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         }
       }
     } catch (error) {
-      console.error("Failed to evaluate expression:", error);
-      setEvaluateResult("Error evaluating expression");
+      console.error('Failed to evaluate expression:', error);
+      setEvaluateResult('Error evaluating expression');
     } finally {
       setLoadingEvaluate(false);
     }
   };
 
   // Handle debug control commands with feedback
-  const executeDebugCommand = async (
-    command: string,
-    threadId?: number,
-    message?: string,
-  ) => {
+  const executeDebugCommand = async (command: string, threadId?: number) => {
     if (!flowId || !selectedSession) {
       return;
     }
@@ -941,12 +890,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
         args.thread_id = threadId;
       }
 
-      const response = await apiService.sendDebugCommand(
-        flowId,
-        selectedSession,
-        command,
-        args,
-      );
+      const response = await apiService.sendDebugCommand(flowId, selectedSession, command, args);
 
       if (response && response.result) {
         if (response.result.success === false) {
@@ -965,7 +909,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
   const isDebugCommandValid = async (
     threadId?: number,
     frameId?: number,
-    session?: string,
+    session?: string
   ): Promise<boolean> => {
     if (!flowId) {
       return false;
@@ -978,22 +922,17 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
       // Use an empty evaluate command to check if code is paused
       const response = await apiService.sendDebugCommand(
         flowId,
-        session || selectedSession || "",
-        "evaluate",
+        session || selectedSession || '',
+        'evaluate',
         {
-          expression: "1",
+          expression: '1',
           thread_id: realThreadId,
           frame_id: realFrameId,
-        },
+        }
       );
 
-      if (
-        response &&
-        response.result &&
-        response.result.body &&
-        response.result.body.result
-      ) {
-        const isPausedState = response.result.body.result === "1";
+      if (response && response.result && response.result.body && response.result.body.result) {
+        const isPausedState = response.result.body.result === '1';
 
         return isPausedState;
       }
@@ -1005,16 +944,12 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
 
   // Debug control commands with feedback
   const handleContinue = async () => {
-    await executeDebugCommand(
-      "continue",
-      undefined,
-      "Execution continued until next breakpoint or end of program",
-    );
+    await executeDebugCommand('continue', undefined);
     setCanContinue(false);
     setCanPause(true);
     setCanStep(false);
     setIsPaused(false);
-    setProcessCmdType("continue");
+    setProcessCmdType('continue');
   };
 
   const handlePause = async () => {
@@ -1026,12 +961,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     setCanStep(false);
     setIsPaused(false);
 
-    await executeDebugCommand(
-      "pause",
-      selectedThread,
-      "Execution paused - you can now inspect the current state",
-    );
-    setProcessCmdType("pause");
+    await executeDebugCommand('pause', selectedThread);
+    setProcessCmdType('pause');
   };
 
   const handleStepOver = async () => {
@@ -1043,12 +974,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     setCanStep(false);
     setIsPaused(false);
 
-    await executeDebugCommand(
-      "step_over",
-      selectedThread,
-      "Stepped over current line - execution proceeds to next line",
-    );
-    setProcessCmdType("step_over");
+    await executeDebugCommand('step_over', selectedThread);
+    setProcessCmdType('step_over');
   };
 
   const handleStepInto = async () => {
@@ -1060,12 +987,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     setCanStep(false);
     setIsPaused(false);
 
-    await executeDebugCommand(
-      "step_into",
-      selectedThread,
-      "Stepped into function call - now inside function body",
-    );
-    setProcessCmdType("step_into");
+    await executeDebugCommand('step_into', selectedThread);
+    setProcessCmdType('step_into');
   };
 
   const handleStepOut = async () => {
@@ -1077,63 +1000,34 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
     setCanStep(false);
     setIsPaused(false);
 
-    await executeDebugCommand(
-      "step_out",
-      selectedThread,
-      "Stepped out of current function - execution returns to caller",
-    );
-    setProcessCmdType("step_out");
+    await executeDebugCommand('step_out', selectedThread);
+    setProcessCmdType('step_out');
   };
 
   const renderDebugControls = () => (
     <Stack direction="row" spacing={0.5} sx={{ mb: 1 }}>
       <span>
-        <IconButton
-          size="small"
-          onClick={handleContinue}
-          color="primary"
-          disabled={!canContinue}
-        >
+        <IconButton size="small" onClick={handleContinue} color="primary" disabled={!canContinue}>
           <Play size={16} />
         </IconButton>
       </span>
       <span>
-        <IconButton
-          size="small"
-          onClick={handlePause}
-          color="primary"
-          disabled={!canPause}
-        >
+        <IconButton size="small" onClick={handlePause} color="primary" disabled={!canPause}>
           <Pause size={16} />
         </IconButton>
       </span>
       <span>
-        <IconButton
-          size="small"
-          onClick={handleStepOver}
-          color="primary"
-          disabled={!canStep}
-        >
+        <IconButton size="small" onClick={handleStepOver} color="primary" disabled={!canStep}>
           <SkipForward size={16} />
         </IconButton>
       </span>
       <span>
-        <IconButton
-          size="small"
-          onClick={handleStepInto}
-          color="primary"
-          disabled={!canStep}
-        >
+        <IconButton size="small" onClick={handleStepInto} color="primary" disabled={!canStep}>
           <ArrowDown size={16} />
         </IconButton>
       </span>
       <span>
-        <IconButton
-          size="small"
-          onClick={handleStepOut}
-          color="primary"
-          disabled={!canStep}
-        >
+        <IconButton size="small" onClick={handleStepOut} color="primary" disabled={!canStep}>
           <ArrowUp size={16} />
         </IconButton>
       </span>
@@ -1143,23 +1037,22 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
   return (
     <Box
       sx={{
-        position: "absolute",
+        position: 'absolute',
         top: 140,
         left: 200,
         zIndex: 99999,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
       }}
     >
-
       <Collapse in={expanded}>
         <Box
           sx={{
-            width: "95vw",
+            width: '95vw',
             maxWidth: 1200,
             p: 2,
-            background: "transparent",
+            background: 'transparent',
           }}
         >
           {isInitializing ? (
@@ -1168,20 +1061,20 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
               sx={{
                 p: 2,
                 borderRadius: 2,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
                 height: 200,
               }}
             >
               <CircularProgress size={40} sx={{ mb: 2 }} />
-              <Typography variant="body1" sx={{ textAlign: "center" }}>
+              <Typography variant="body1" sx={{ textAlign: 'center' }}>
                 Initializing debug session...
               </Typography>
               <Typography
                 variant="body2"
-                sx={{ textAlign: "center", color: "text.secondary", mt: 1 }}
+                sx={{ textAlign: 'center', color: 'text.secondary', mt: 1 }}
               >
                 Waiting for program to pause at a breakpoint
               </Typography>
@@ -1189,10 +1082,10 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
           ) : (
             <Box
               sx={{
-                display: "grid",
-                gridTemplateColumns: "1fr 350px",
+                display: 'grid',
+                gridTemplateColumns: '1fr 350px',
                 gap: 2,
-                background: "transparent",
+                background: 'transparent',
               }}
             >
               {/* Source Code Card - Left side */}
@@ -1201,43 +1094,36 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                 sx={{
                   p: 2,
                   borderRadius: 2,
-                  height: "564px", // Matches right side: (180px * 3) + (gap * 2)
-                  position: "relative",
-                  background: "white",
-                  display: "flex",
-                  flexDirection: "column",
-                  overflow: "hidden",
+                  height: '564px', // Matches right side: (180px * 3) + (gap * 2)
+                  position: 'relative',
+                  background: 'white',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
                 }}
               >
                 <Typography
                   variant="h6"
                   sx={{
                     mb: 2,
-                    fontSize: "1rem",
-                    fontWeight: "bold",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
+                    fontSize: '1rem',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
                   }}
                 >
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <span>Source Code</span>
                     {loadingSourceCode && <CircularProgress size={16} />}
                   </Box>
                   <Box>{renderDebugControls()}</Box>
                 </Typography>
-                <Box sx={{ p: 1, flexGrow: 1, overflow: "auto" }}>
+                <Box sx={{ p: 1, flexGrow: 1, overflow: 'auto' }}>
                   {selectedSourceFile && selectedSession && (
                     <Box sx={{ mb: 1 }}>
-                      <Typography
-                        variant="caption"
-                        sx={{ display: "block", mb: 0.5 }}
-                      >
-                        File:{" "}
-                        <Chip
-                          size="small"
-                          label={selectedSourceFile.path.split("/").pop()}
-                        />
+                      <Typography variant="caption" sx={{ display: 'block', mb: 0.5 }}>
+                        File: <Chip size="small" label={selectedSourceFile.path.split('/').pop()} />
                         {currentLine && (
                           <Chip
                             size="small"
@@ -1252,10 +1138,10 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                   {loadingSourceCode ? (
                     <Box
                       sx={{
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        height: "300px",
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        height: '300px',
                       }}
                     >
                       <CircularProgress size={32} />
@@ -1280,11 +1166,11 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
               {/* Right Side Cards Stack */}
               <Box
                 sx={{
-                  display: "flex",
-                  flexDirection: "column",
+                  display: 'flex',
+                  flexDirection: 'column',
                   gap: 2,
-                  background: "transparent",
-                  height: "564px", // Same as left side
+                  background: 'transparent',
+                  height: '564px', // Same as left side
                 }}
               >
                 {/* Sessions Card */}
@@ -1293,35 +1179,35 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                   sx={{
                     p: 2,
                     borderRadius: 2,
-                    height: "180px",
-                    position: "relative",
-                    background: "white",
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden",
+                    height: '180px',
+                    position: 'relative',
+                    background: 'white',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
                   }}
                 >
                   <Typography
                     variant="h6"
                     sx={{
                       mb: 2,
-                      fontSize: "1rem",
-                      fontWeight: "bold",
-                      display: "flex",
-                      alignItems: "center",
+                      fontSize: '1rem',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
                       gap: 1,
                     }}
                   >
                     Debug Sessions
                   </Typography>
-                  <Box sx={{ flexGrow: 1, overflow: "auto" }}>
+                  <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
                     <List dense disablePadding>
                       {sessions.length === 0 ? (
                         <ListItem>
                           <ListItemText primary="No debug sessions available" />
                         </ListItem>
                       ) : (
-                        sessions.map((session) => (
+                        sessions.map(session => (
                           <ListItem
                             key={session.spanId}
                             disablePadding
@@ -1331,14 +1217,9 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                                   size="small"
                                   variant="outlined"
                                   color="error"
-                                  onClick={() =>
-                                    handleDeactivate(session.spanId)
-                                  }
-                                  disabled={
-                                    isInitializing &&
-                                    selectedSession === session.spanId
-                                  }
-                                  sx={{ py: 0, px: 1, minWidth: "auto" }}
+                                  onClick={() => handleDeactivate(session.spanId)}
+                                  disabled={isInitializing && selectedSession === session.spanId}
+                                  sx={{ py: 0, px: 1, minWidth: 'auto' }}
                                 >
                                   Stop
                                 </Button>
@@ -1349,7 +1230,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                                   color="primary"
                                   onClick={() => handleActivate(session)}
                                   disabled={isInitializing}
-                                  sx={{ py: 0, px: 1, minWidth: "auto" }}
+                                  sx={{ py: 0, px: 1, minWidth: 'auto' }}
                                 >
                                   Start
                                 </Button>
@@ -1359,54 +1240,36 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                             <ListItemButton
                               selected={selectedSession === session.spanId}
                               onClick={async () => {
-                                if (
-                                  activeSessions.includes(session.spanId) &&
-                                  !isInitializing
-                                ) {
+                                if (activeSessions.includes(session.spanId) && !isInitializing) {
                                   setSelectedSession(session.spanId);
 
-                                  const threadIds = await fetchThreads(
-                                    session.spanId,
-                                  );
+                                  const threadIds = await fetchThreads(session.spanId);
                                   if (threadIds) {
-                                    await fetchStackTrace(
-                                      session.spanId,
-                                      threadIds[0],
-                                    );
+                                    await fetchStackTrace(session.spanId, threadIds[0]);
                                   }
-                                  setProcessCmdType("switch");
+                                  setProcessCmdType('switch');
                                 }
                               }}
-                              disabled={
-                                !activeSessions.includes(session.spanId) ||
-                                isInitializing
-                              }
+                              disabled={!activeSessions.includes(session.spanId) || isInitializing}
                               dense
                               sx={{ borderRadius: 1 }}
                             >
                               <ListItemText
                                 primary={`${session.funcName}`}
-                                secondary={`${session.spanId.substring(
-                                  0,
-                                  8,
-                                )}...`}
+                                secondary={`${session.spanId.substring(0, 8)}...`}
                                 primaryTypographyProps={{
                                   style: {
-                                    fontWeight: activeSessions.includes(
-                                      session.spanId,
-                                    )
-                                      ? "bold"
-                                      : "normal",
-                                    color: activeSessions.includes(
-                                      session.spanId,
-                                    )
-                                      ? "#1976d2"
-                                      : "inherit",
-                                    fontSize: "0.875rem",
+                                    fontWeight: activeSessions.includes(session.spanId)
+                                      ? 'bold'
+                                      : 'normal',
+                                    color: activeSessions.includes(session.spanId)
+                                      ? '#1976d2'
+                                      : 'inherit',
+                                    fontSize: '0.875rem',
                                   },
                                 }}
                                 secondaryTypographyProps={{
-                                  style: { fontSize: "0.75rem" },
+                                  style: { fontSize: '0.75rem' },
                                 }}
                               />
                             </ListItemButton>
@@ -1423,22 +1286,22 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                   sx={{
                     p: 2,
                     borderRadius: 2,
-                    height: "180px",
-                    position: "relative",
-                    background: "white",
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden",
+                    height: '180px',
+                    position: 'relative',
+                    background: 'white',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
                   }}
                 >
                   <Typography
                     variant="h6"
                     sx={{
                       mb: 2,
-                      fontSize: "1rem",
-                      fontWeight: "bold",
-                      display: "flex",
-                      alignItems: "center",
+                      fontSize: '1rem',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
                       gap: 1,
                     }}
                   >
@@ -1447,22 +1310,18 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                       <CircularProgress size={16} />
                     )}
                   </Typography>
-                  <Box sx={{ flexGrow: 1, overflow: "auto" }}>
+                  <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
                     {selectedSession && (
                       <React.Fragment>
                         <Typography
                           variant="caption"
-                          sx={{ fontWeight: "bold", display: "block", mb: 0.5 }}
+                          sx={{ fontWeight: 'bold', display: 'block', mb: 0.5 }}
                         >
                           Threads
                         </Typography>
                         <List dense disablePadding sx={{ mb: 2 }}>
-                          {threads.map((thread) => (
-                            <ListItem
-                              key={thread.id}
-                              disablePadding
-                              sx={{ mb: 0.5 }}
-                            >
+                          {threads.map(thread => (
+                            <ListItem key={thread.id} disablePadding sx={{ mb: 0.5 }}>
                               <ListItemButton
                                 selected={selectedThread === thread.id}
                                 onClick={() => handleThreadSelect(thread.id)}
@@ -1472,7 +1331,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                                 <ListItemText
                                   primary={thread.name}
                                   primaryTypographyProps={{
-                                    style: { fontSize: "0.8rem" },
+                                    style: { fontSize: '0.8rem' },
                                   }}
                                 />
                               </ListItemButton>
@@ -1485,20 +1344,16 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                             <Typography
                               variant="caption"
                               sx={{
-                                fontWeight: "bold",
-                                display: "block",
+                                fontWeight: 'bold',
+                                display: 'block',
                                 mb: 0.5,
                               }}
                             >
                               Stack Frames
                             </Typography>
                             <List dense disablePadding>
-                              {stackFrames.map((frame) => (
-                                <ListItem
-                                  key={frame.id}
-                                  disablePadding
-                                  sx={{ m: 0 }}
-                                >
+                              {stackFrames.map(frame => (
+                                <ListItem key={frame.id} disablePadding sx={{ m: 0 }}>
                                   <ListItemButton
                                     selected={selectedFrame === frame.id}
                                     onClick={() => handleFrameSelect(frame.id)}
@@ -1506,22 +1361,22 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                                     sx={{
                                       borderRadius: 1,
                                       py: 0,
-                                      minHeight: "24px",
+                                      minHeight: '24px',
                                     }}
                                   >
                                     <ListItemText
                                       primary={
-                                        frame.name.split(":")[0] +
-                                        " - " +
-                                        frame.source.path.split("/").pop() +
-                                        ":" +
+                                        frame.name.split(':')[0] +
+                                        ' - ' +
+                                        frame.source.path.split('/').pop() +
+                                        ':' +
                                         frame.line
                                       }
                                       primaryTypographyProps={{
-                                        style: { fontSize: "0.75rem" },
+                                        style: { fontSize: '0.75rem' },
                                       }}
                                       secondaryTypographyProps={{
-                                        style: { fontSize: "0.7rem" },
+                                        style: { fontSize: '0.7rem' },
                                       }}
                                     />
                                   </ListItemButton>
@@ -1541,57 +1396,55 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                   sx={{
                     p: 2,
                     borderRadius: 2,
-                    height: "180px",
-                    position: "relative",
-                    background: "white",
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden",
+                    height: '180px',
+                    position: 'relative',
+                    background: 'white',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
                   }}
                 >
                   <Typography
                     variant="h6"
                     sx={{
                       mb: 2,
-                      fontSize: "1rem",
-                      fontWeight: "bold",
-                      display: "flex",
-                      alignItems: "center",
+                      fontSize: '1rem',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
                       gap: 1,
                     }}
                   >
                     Evaluate Expression
                     {loadingEvaluate && <CircularProgress size={16} />}
                   </Typography>
-                  <Box sx={{ flexGrow: 1, overflow: "auto" }}>
+                  <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
                     {loadingEvaluate ? (
                       <Box
                         sx={{
-                          display: "flex",
-                          justifyContent: "center",
-                          alignItems: "center",
-                          height: "100%",
+                          display: 'flex',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          height: '100%',
                         }}
                       >
                         <CircularProgress size={24} />
                       </Box>
                     ) : selectedFrame && selectedSession && isPaused ? (
                       <React.Fragment>
-                        <Box sx={{ display: "flex", mb: 1 }}>
+                        <Box sx={{ display: 'flex', mb: 1 }}>
                           <TextField
                             size="small"
                             fullWidth
                             variant="outlined"
                             value={evaluateExpression}
-                            onChange={(e) =>
-                              setEvaluateExpression(e.target.value)
-                            }
+                            onChange={e => setEvaluateExpression(e.target.value)}
                             placeholder="Enter expression..."
                             sx={{
                               mr: 1,
-                              "& .MuiOutlinedInput-root": {
-                                fontSize: "0.8rem",
-                                "& fieldset": { borderRadius: 1.5 },
+                              '& .MuiOutlinedInput-root': {
+                                fontSize: '0.8rem',
+                                '& fieldset': { borderRadius: 1.5 },
                               },
                             }}
                           />
@@ -1602,11 +1455,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                             disabled={loadingEvaluate}
                             sx={{ py: 0.5 }}
                           >
-                            {loadingEvaluate ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              "Run"
-                            )}
+                            {loadingEvaluate ? <CircularProgress size={16} /> : 'Run'}
                           </Button>
                         </Box>
                         {evaluateResult !== null && (
@@ -1615,14 +1464,14 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                             sx={{
                               p: 1,
                               mt: 1,
-                              bgcolor: "grey.50",
+                              bgcolor: 'grey.50',
                               borderRadius: 1.5,
                             }}
                           >
                             <Typography
                               variant="body2"
                               fontFamily="monospace"
-                              sx={{ fontSize: "0.75rem" }}
+                              sx={{ fontSize: '0.75rem' }}
                             >
                               {evaluateResult}
                             </Typography>
@@ -1633,19 +1482,19 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ flowId, selectedElement, apiSer
                       <Box
                         sx={{
                           p: 2,
-                          display: "flex",
-                          justifyContent: "center",
-                          alignItems: "center",
+                          display: 'flex',
+                          justifyContent: 'center',
+                          alignItems: 'center',
                           height: 150,
                         }}
                       >
                         <Typography
                           variant="body2"
-                          sx={{ color: "text.secondary", fontStyle: "italic" }}
+                          sx={{ color: 'text.secondary', fontStyle: 'italic' }}
                         >
                           {!isPaused
-                            ? "Code execution is running. Pause it to evaluate expressions."
-                            : "Please select one stack frame first"}
+                            ? 'Code execution is running. Pause it to evaluate expressions.'
+                            : 'Please select one stack frame first'}
                         </Typography>
                       </Box>
                     )}

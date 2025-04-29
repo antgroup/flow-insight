@@ -1,7 +1,9 @@
 from enum import Enum
 
+
 class StorageType(Enum):
     MEMORY = "memory"
+
 
 class SnapshotStorageBackend:
     def __init__(self):
