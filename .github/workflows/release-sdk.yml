@@ -1,0 +1,132 @@
+name: Flow Insight SDK PyPI Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Enter branch name to build wheels from (default: main)'
+        required: false
+        type: string
+        default: 'main'
+  push:
+    tags:
+      - 'flow-insight-*'
+
+jobs:
+  build_linux_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: [39, 310, 311, 312]
+        arch: [x86_64]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        env:
+          CIBW_BUILD: cp${{ matrix.python-version }}-manylinux_${{ matrix.arch }}*
+        with:
+          package-dir: ./sdk
+          output-dir: ./sdk/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./sdk/dist/*.whl
+
+  build_macos_wheels13:
+    name: Build macOS wheels (${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-13]
+        python-version: [39, 310, 311, 312]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        env:
+          CIBW_BUILD: cp${{ matrix.python-version }}-macosx_*
+          MACOSX_DEPLOYMENT_TARGET: 13.0
+        with:
+          package-dir: ./sdk
+          output-dir: ./sdk/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./sdk/dist/*.whl
+          
+  build_macos_wheels14:
+    name: Build macOS wheels (${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-14]
+        python-version: [39, 310, 311, 312]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        env:
+          CIBW_BUILD: cp${{ matrix.python-version }}-macosx_*
+          MACOSX_DEPLOYMENT_TARGET: 14.0
+        with:
+          package-dir: ./sdk
+          output-dir: ./sdk/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./sdk/dist/*.whl
+
+  upload_pypi:
+    needs: [build_macos_wheels13, build_macos_wheels14, build_linux_wheels]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cibw-*
+          path: sdk/dist
+          merge-multiple: true
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/dist
+          skip-existing: true
+
+  upload_test_pypi:
+    needs: [build_macos_wheels13, build_macos_wheels14, build_linux_wheels]
+    runs-on: ubuntu-latest
+    environment: testpypi-publish
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cibw-*
+          path: sdk/dist
+          merge-multiple: true
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/dist
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true 

@@ -7,7 +7,7 @@ name = "flow-insight"
 version = "0.1.0"
 description = "A monitoring and visualization tool for distributed applications"
 authors = [
-    {name = "Flow Insight Team", email = "info@flowinsight.io"}
+    {name = "Ant Ray Team", email = ""}
 ]
 readme = "README.md"
 requires-python = ">=3.7"
@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/flowinsight/flow-insight"
+Homepage = "https://github.com/antgroup/flow-insight"
 
 [tool.setuptools]
 packages = ["flow_insight"] 
