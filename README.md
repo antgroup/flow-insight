@@ -227,7 +227,7 @@ The `InsightClient` provides both synchronous and asynchronous methods:
 
 The SDK supports multiple storage backends:
 - [x] In-memory storage for development
-- [] Prometheus based Persistent storage for production
+- [ ] Prometheus based Persistent storage for production
 
 ## 📚 Documentation
 
