@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flow-insight"
+version = "0.1.0"
+description = "A monitoring and visualization tool for distributed applications"
+authors = [
+    {name = "Flow Insight Team", email = "info@flowinsight.io"}
+]
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "Apache Software License"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "aiohttp>=3.7.0",
+    "requests>=2.25.0",
+    "fastapi>=0.95.0",
+    "uvicorn>=0.22.0",
+    "httpx>=0.24.0",
+    "pydantic>=2.0.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/flowinsight/flow-insight"
+
+[tool.setuptools]
+packages = ["flow_insight"] 

@@ -2,6 +2,9 @@ node_modules/
 package-lock.json
 yarn.lock
 dist/
+build/
+*.egg-info
+__pycache__/
 
 # Logs and temporary files
 *.log
