@@ -1500,7 +1500,7 @@ const PhysicalVisualization = forwardRef<PhysicalVisualizationHandle, PhysicalVi
             style={{
               position: 'absolute',
               top: '10px',
-              right: '100px',
+              right: '350px',
               padding: '10px',
               display: 'flex',
               flexDirection: 'row',

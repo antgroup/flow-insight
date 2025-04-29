@@ -8,6 +8,13 @@ import remarkGfm from 'remark-gfm';
 
 import { ApiService } from '../services/api';
 
+// Add TypeScript declaration for the window object
+declare global {
+  interface Window {
+    exportAnalysisReport?: () => void;
+  }
+}
+
 // Initialize mermaid
 mermaid.initialize({
   startOnLoad: true,
@@ -234,6 +241,17 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
       localStorage.setItem(`insight-report-${flowId}`, report);
     }
   }, [flowId, report]);
+
+  // Make exportReport function available globally for GraphPage to use
+  useEffect(() => {
+    // Expose the export function to the GraphPage component
+    window.exportAnalysisReport = exportReport;
+
+    // Clean up when component unmounts
+    return () => {
+      delete window.exportAnalysisReport;
+    };
+  }, [report, reportStream, isStreaming]); // Update when these dependencies change
 
   // Function to export the report as markdown
   const exportReport = () => {
@@ -517,15 +535,6 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 1 }}>
           <Button
             variant="outlined"
-            onClick={exportReport}
-            size="small"
-            startIcon={<Download size={16} />}
-            disabled={!displayContent}
-          >
-            Export
-          </Button>
-          <Button
-            variant="outlined"
             onClick={generateInsightReport}
             size="small"
             disabled={loading}
@@ -619,8 +628,8 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
           sx={{
             display: 'flex',
             flexDirection: 'column',
-            gap: 2,
-            maxWidth: '600px',
+            gap: 1,
+            maxWidth: '500px',
           }}
         >
           <TextField
@@ -628,15 +637,16 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
             value={openaiBaseUrl}
             onChange={e => setOpenaiBaseUrl(e.target.value)}
             fullWidth
-            margin="normal"
-            helperText=""
+            size="small"
+            margin="dense"
           />
           <TextField
             label="OpenAI API Key"
             value={openaiApiKey}
             onChange={e => setOpenaiApiKey(e.target.value)}
             fullWidth
-            margin="normal"
+            size="small"
+            margin="dense"
             type="password"
           />
           <TextField
@@ -644,31 +654,33 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
             value={openaiModel}
             onChange={e => setOpenaiModel(e.target.value)}
             fullWidth
-            margin="normal"
-            helperText=""
+            size="small"
+            margin="dense"
           />
           <TextField
             label="Model Context Length (tokens)"
             value={contextLength}
             onChange={e => setContextLength(e.target.value)}
             fullWidth
-            margin="normal"
+            size="small"
+            margin="dense"
             type="number"
             inputProps={{ min: 1000 }}
-            helperText=""
           />
           <TextField
             label="Report Language"
             value={reportLanguage}
             onChange={e => setReportLanguage(e.target.value)}
             fullWidth
-            margin="normal"
-            helperText="Specify the language for the generated report (e.g., English, Spanish, French)"
+            size="small"
+            margin="dense"
+            helperText="Specify language for the report (e.g., English, Spanish)"
           />
-          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
             <Button
               variant="contained"
               color="primary"
+              size="small"
               onClick={() => {
                 localStorage.setItem('openaiBaseUrl', openaiBaseUrl);
                 localStorage.setItem('openaiApiKey', openaiApiKey);
@@ -680,7 +692,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
             >
               Save & Close
             </Button>
-            <Button variant="text" onClick={() => setShowSettings(false)}>
+            <Button variant="text" size="small" onClick={() => setShowSettings(false)}>
               Cancel
             </Button>
           </Box>

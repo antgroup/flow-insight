@@ -1,10 +1,11 @@
-import { FlowInsight } from '@ant-ray/flow-insight';
+import { FlowInsight } from '@aeonsule/flow-insight';
 
 
 function App() {
   return (
     <FlowInsight 
         baseUrl='/'
+        flowId='demo-flow'
     />
   );
 }

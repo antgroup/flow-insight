@@ -254,6 +254,14 @@ const GraphPage: React.FC<GraphPageProps> = ({
       case 'flame':
         flameVisualizationRef.current?.exportSvg();
         break;
+      case 'analysis':
+        // Export analysis report via global function set by Analysis component
+        if (window.exportAnalysisReport && typeof window.exportAnalysisReport === 'function') {
+          window.exportAnalysisReport();
+        } else {
+          console.warn('Export not supported for analysis view - exportAnalysisReport not found');
+        }
+        break;
       default:
         console.warn('Export not supported for this view type');
     }
@@ -409,7 +417,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 {(currentViewType === 'logical' ||
                   currentViewType === 'call_stack' ||
                   currentViewType === 'physical' ||
-                  currentViewType === 'flame') && (
+                  currentViewType === 'flame' ||
+                  currentViewType === 'analysis') && (
                   <Tooltip title="Export as SVG">
                     <IconButton
                       onClick={handleExportSvg}

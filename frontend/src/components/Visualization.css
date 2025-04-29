@@ -405,10 +405,9 @@ g.cluster:hover rect {
 
 /* Resource selector styles */
 .resource-selector {
-  padding: 8px 30px;
+  padding: 8px 350px;
   background-color: #ffffff;
   border-bottom: 1px solid #e1e4e8;
-  width: 50%;
   margin: 0;
 }
 

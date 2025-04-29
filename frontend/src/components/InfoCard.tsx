@@ -461,7 +461,7 @@ const InfoCard = ({ data, graphData, isOpen }: InfoCardProps) => {
         const callInputs = findCallInputs(data.id, graphData);
         const dataInputs = findDataInputs(data.id, graphData);
         const callOutputs = findCallOutputs(data.id, graphData);
-        const service = findNodeById(data.id, graphData) as Service;
+        const service = findNodeById(data.instanceId, graphData) as Service;
 
         return (
           <React.Fragment>
