@@ -29,6 +29,7 @@ export class ApiService {
   private cacheTime: number = 2000; // 2 seconds in milliseconds
   private maxCacheSize: number = 100; // Maximum number of cached items
   private maxTTL: number = 60000; // Maximum time to live: 1 minute (60000 ms)
+  private inFlightRequests: Map<string, Promise<any>> = new Map();
 
   constructor(config: ApiConfig) {
     this.apiConfig = config;
@@ -82,24 +83,42 @@ export class ApiService {
       if (cachedData && (now - cachedData.timestamp) < this.cacheTime) {
         return cachedData.data;
       }
-      
-      // If cache expired or doesn't exist, proceed with the request
-      const result = await this.makeRequest<T>(url, options, data);
-      
-      // Store the result in cache
-      this.cache.set(cacheKey, {
-        data: result,
-        timestamp: now
-      });
-      
-      // Check if cache size exceeds max and remove oldest if needed
-      if (this.cache.size > this.maxCacheSize) {
-        const oldestKey = Array.from(this.cache.entries())
-          .sort((a, b) => a[1].timestamp - b[1].timestamp)[0][0];
-        this.cache.delete(oldestKey);
+
+      // Check if there's already an in-flight request for this cache key
+      if (this.inFlightRequests.has(cacheKey)) {
+        // Return the promise of the in-flight request
+        return this.inFlightRequests.get(cacheKey)!;
       }
       
-      return result;
+      // Create the request promise
+      const requestPromise = this.makeRequest<T>(url, options, data).then(result => {
+        // Store the result in cache
+        this.cache.set(cacheKey, {
+          data: result,
+          timestamp: now
+        });
+        
+        // Check if cache size exceeds max and remove oldest if needed
+        if (this.cache.size > this.maxCacheSize) {
+          const oldestKey = Array.from(this.cache.entries())
+            .sort((a, b) => a[1].timestamp - b[1].timestamp)[0][0];
+          this.cache.delete(oldestKey);
+        }
+        
+        // Remove from in-flight requests
+        this.inFlightRequests.delete(cacheKey);
+        
+        return result;
+      }).catch(error => {
+        // Remove from in-flight requests on error
+        this.inFlightRequests.delete(cacheKey);
+        throw error;
+      });
+      
+      // Store the request promise in the in-flight requests map
+      this.inFlightRequests.set(cacheKey, requestPromise);
+      
+      return requestPromise;
     }
     
     // For non-GET requests, skip caching
