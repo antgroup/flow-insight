@@ -190,17 +190,17 @@ const GraphPage: React.FC<GraphPageProps> = ({
         const now = Date.now();
         // Keep the start time (flow creation time) but update the end time
         setTimelineRange(prevRange => [prevRange[0], now]);
-        // If we're viewing the latest data, update the current timestamp too
-        if (isLatestTime) {
-          setCurrentTimestamp(now);
-        }
+        // When auto-refresh is enabled, always update the timestamp to the latest
+        setCurrentTimestamp(now);
+        // Ensure isLatestTime remains true during auto-refresh
+        setIsLatestTime(true);
       }, 5000);
 
       return () => {
         clearInterval(intervalId);
       };
     }
-  }, [autoRefresh, isLatestTime]);
+  }, [autoRefresh]);
 
   // eslint-disable-next-line
   const fetchDatas = async (isLatestTime?: boolean, timestamp?: number) => {
@@ -275,7 +275,14 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
   const handleUpdate = useCallback(async () => {
     setUpdating(true);
-    await fetchDatas();
+
+    // Always get latest data and update timeline when manually updating
+    const now = Date.now();
+    setTimelineRange(prevRange => [prevRange[0], now]);
+    setCurrentTimestamp(now);
+    setIsLatestTime(true);
+
+    await fetchDatas(true);
     setUpdating(false);
   }, [fetchDatas]);
 
@@ -301,6 +308,15 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
   const handleAutoRefreshChange = useCallback((enabled: boolean) => {
     setAutoRefresh(enabled);
+
+    // When enabling auto-refresh, set to latest time
+    if (enabled) {
+      const now = Date.now();
+      setCurrentTimestamp(now);
+      setIsLatestTime(true);
+      // Update the end of timeline range to now
+      setTimelineRange(prevRange => [prevRange[0], now]);
+    }
   }, []);
 
   // Toggle drawer states
@@ -639,6 +655,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             autoRefresh={autoRefresh}
             setViewType={setCurrentViewType}
             apiService={activeApiService}
+            currentTimestamp={currentTimestamp}
           />
         )}
         {currentViewType === 'call_stack' && (
@@ -657,6 +674,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             autoRefresh={autoRefresh}
             setViewType={setCurrentViewType}
             apiService={activeApiService}
+            currentTimestamp={currentTimestamp}
           />
         )}
         {graphData && currentViewType === 'physical' && (
@@ -694,6 +712,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 // eslint-disable-next-line
                 graphData={graphData!}
                 physicalViewData={physicalViewData || undefined}
+                currentTimestamp={currentTimestamp}
               />
             ) : (
               <div className="loading-container">
@@ -736,13 +755,18 @@ const GraphPage: React.FC<GraphPageProps> = ({
             variant="caption"
             sx={{ alignSelf: 'flex-end', color: isLatestTime ? 'primary.main' : 'text.secondary' }}
           >
-            {isLatestTime ? 'Live' : formatTime(currentTimestamp)}
+            {autoRefresh
+              ? 'Live (Auto Refresh)'
+              : isLatestTime
+                ? 'Live'
+                : formatTime(currentTimestamp)}
           </Typography>
           <Slider
-            value={currentTimestamp}
+            value={autoRefresh ? timelineRange[1] : currentTimestamp}
             min={timelineRange[0]}
             max={timelineRange[1]}
             onChange={handleTimelineChange}
+            disabled={autoRefresh}
             aria-labelledby="timeline-slider"
             sx={{
               width: '100%',
@@ -750,6 +774,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 width: 16,
                 height: 16,
                 backgroundColor: isLatestTime ? 'primary.main' : 'grey.500',
+              },
+              '& .Mui-disabled': {
+                color: 'primary.main',
               },
             }}
             valueLabelDisplay="auto"

@@ -48,8 +48,8 @@ from flow_insight.storage.snapshot.snapshot import SnapshotStorage
 
 
 class InsightEngine:
-    def __init__(self, storage_type: StorageType):
-        self._persist_storage = PersistStorage(PersistStorageType.DISK)
+    def __init__(self, storage_type: StorageType, persist_storage_config: dict):
+        self._persist_storage = PersistStorage(PersistStorageType.DISK, persist_storage_config)
         self._debug_sessions = defaultdict(dict)
         self._snapshots = {"latest": SnapshotStorage(storage_type)}
         self._flow_creation_time = {}
@@ -360,29 +360,9 @@ class InsightEngine:
         asyncio.create_task(self._persist_storage.record_event(event))
 
     async def replay(self, flow_id: str, end_time: int):
-        # find latest snapshot
-        latest_snapshot_ref = None
-        latest_timestamp = -1
-        for label, snapshot in self._snapshots.items():
-            if label == "latest":
-                continue
-            timestamp = int(label)
-            if timestamp <= end_time:
-                latest_snapshot_ref = snapshot
-                latest_timestamp = timestamp
-                continue
-            break
-
-        if latest_snapshot_ref is None:
-            self._snapshots[str(end_time)] = self._snapshots["latest"].take_snapshot()
-            return self._snapshots[str(end_time)]
-        else:
-            latest_snapshot = latest_snapshot_ref.take_snapshot()
-
-        events = await self._persist_storage.query_events(flow_id, latest_timestamp, end_time)
-        events.extend(
-            await self._persist_storage.query_events(internal_flow_id, latest_timestamp, end_time)
-        )
+        latest_snapshot = SnapshotStorage(StorageType.MEMORY)
+        events = await self._persist_storage.query_events(flow_id, -1, end_time)
+        events.extend(await self._persist_storage.query_events(internal_flow_id, -1, end_time))
         for event in events:
             if isinstance(event, CallSubmitEvent):
                 await self.emit_call_submit(event, latest_snapshot)
@@ -408,9 +388,6 @@ class InsightEngine:
                 await self.emit_prompt(event, latest_snapshot)
             else:
                 raise ValueError(f"Unknown event type: {type(event)}")
-
-        if end_time - latest_timestamp > 30000:
-            self._snapshots[str(end_time)] = latest_snapshot
 
         return latest_snapshot
 

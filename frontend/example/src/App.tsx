@@ -1,4 +1,4 @@
-import { FlowInsight } from '@aeonsule/flow-insight';
+import { FlowInsight } from '@ant-ray/flow-insight';
 
 
 function App() {

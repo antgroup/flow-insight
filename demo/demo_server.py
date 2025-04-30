@@ -461,7 +461,7 @@ async def emit_demo_events(client):
 
 async def setup_and_run_server():
     # Create the FastAPI server
-    server = FastAPIInsightServer(storage_type=SnapshotStorageType.MEMORY)
+    server = FastAPIInsightServer(storage_type=SnapshotStorageType.MEMORY, persist_storage_config={"storage_dir": ".flow_insight/events"})
     
     # Mount the frontend static files
     frontend_dir = Path(__file__).parent.parent / "frontend" / "example" / "dist"

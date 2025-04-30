@@ -49,9 +49,11 @@ def rest_response(result: bool, msg: str, **kwargs) -> Dict[str, Any]:
 
 
 class FastAPIInsightServer(APIInterface):
-    def __init__(self, storage_type: StorageType = StorageType.MEMORY):
+    def __init__(
+        self, storage_type: StorageType = StorageType.MEMORY, persist_storage_config: dict = None
+    ):
         super().__init__()
-        self.engine = InsightEngine(storage_type)
+        self.engine = InsightEngine(storage_type, persist_storage_config)
         self.app = FastAPI(title="Flow Insight API")
         self._setup_routes()
 

@@ -36,6 +36,7 @@ type VisualizationProps = {
   autoRefresh?: boolean;
   setViewType: (viewType: 'logical' | 'physical' | 'flame' | 'call_stack') => void;
   apiService?: ApiService;
+  currentTimestamp?: number;
 };
 
 type NodeData = {
@@ -117,6 +118,7 @@ const Visualization = forwardRef<VisualizationHandle, VisualizationProps>(
       autoRefresh = false,
       setViewType,
       apiService,
+      currentTimestamp = Date.now(),
     },
     ref
   ) => {
@@ -858,7 +860,7 @@ const Visualization = forwardRef<VisualizationHandle, VisualizationProps>(
           if (subgraph.includes(flow.source) && subgraph.includes(flow.target)) {
             let label = `${flow.count} times`;
             if (viewType === 'call_stack') {
-              const duration = Date.now() / 1000 - flow.startTime;
+              const duration = currentTimestamp / 1000 - flow.startTime;
               label = `${flow.count} times [since last call:  ${duration.toFixed(2)}s]`;
             }
             subG.setEdge(
@@ -1305,7 +1307,7 @@ const Visualization = forwardRef<VisualizationHandle, VisualizationProps>(
               if (!isDataFlow) {
                 let label = `${flow.count} times`;
                 if (viewType === 'call_stack') {
-                  const duration = Date.now() / 1000 - flow.startTime;
+                  const duration = currentTimestamp / 1000 - flow.startTime;
                   label = `${flow.count} times [since last call:  ${duration.toFixed(2)}s]`;
                 }
 

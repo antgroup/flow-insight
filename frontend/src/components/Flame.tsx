@@ -26,6 +26,7 @@ type FlameVisualizationProps = {
     | 'allocation'
     | 'differential'
     | 'nodejs';
+  currentTimestamp?: number;
 };
 
 type FlameNode = {
@@ -279,7 +280,15 @@ export type FlameVisualizationHandle = {
 
 const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizationProps>(
   (
-    { flameData, onElementClick, searchTerm, graphData, physicalViewData, colorMode = 'warm' },
+    {
+      flameData,
+      onElementClick,
+      searchTerm,
+      graphData,
+      physicalViewData,
+      colorMode = 'warm',
+      currentTimestamp = Date.now(),
+    },
     ref
   ) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -1606,7 +1615,7 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
           );
 
           if (earliestStartTime > 0 && isFinite(earliestStartTime)) {
-            originalValue = Date.now() / 1000 - earliestStartTime;
+            originalValue = currentTimestamp / 1000 - earliestStartTime;
           }
         }
 
@@ -1700,7 +1709,7 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
             for (const { callerId, startTime } of startTimes) {
               let originalValue = 0;
               if (startTime > 0) {
-                originalValue = Date.now() / 1000 - startTime; // Convert to seconds since startTime is in seconds
+                originalValue = currentTimestamp / 1000 - startTime; // Convert to seconds since startTime is in seconds
               }
               const parentDataCopy: FlameNode = {
                 name: callerNodeId,
@@ -1749,7 +1758,7 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
         startTimes.forEach(({ callerId, startTime }) => {
           let originalValue = 0;
           if (startTime > 0) {
-            originalValue = Date.now() / 1000 - startTime; // Convert to seconds since startTime is in seconds
+            originalValue = currentTimestamp / 1000 - startTime; // Convert to seconds since startTime is in seconds
           }
           const nodeDataCopy: FlameNode = {
             name: calleeId,
