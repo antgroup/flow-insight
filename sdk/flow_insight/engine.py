@@ -52,7 +52,7 @@ class InsightEngine:
         self._persist_storage = PersistStorage(PersistStorageType.DISK)
         self._debug_sessions = defaultdict(dict)
         self._snapshots = {"latest": SnapshotStorage(storage_type)}
-        asyncio.create_task(self._persist_storage.clean())
+        self._flow_creation_time = {}
 
     async def get_debug_sessions(
         self,
@@ -182,7 +182,7 @@ class InsightEngine:
         return PhysicalViewData(services=services_stats, nodes=node_physical_stats)
 
     async def get_call_graph_data(
-        self, flow_id, stack_mode=False, snapshot: SnapshotStorage = None
+        self, flow_id, stack_mode=False, snapshot: Optional[SnapshotStorage] = None
     ):
         if snapshot is None:
             snapshot = self._snapshots["latest"]
@@ -205,7 +205,7 @@ class InsightEngine:
                 reachable_methods,
                 reachable_services,
                 reachable_funcs,
-            ) = await self.filter_call_graph_data(flow_id, call_graph)
+            ) = await self.filter_call_graph_data(flow_id, call_graph, snapshot)
 
         method_id_map = await snapshot.get_method_id_map(flow_id)
 
@@ -326,7 +326,12 @@ class InsightEngine:
 
         return filtered_graph, reachable_methods, reachable_services, reachable_funcs
 
+    async def get_flow_creation_time(self, flow_id: str):
+        return self._flow_creation_time.get(flow_id, -1)
+
     async def record_event(self, event: any):
+        if event.flow_id not in self._flow_creation_time:
+            self._flow_creation_time[event.flow_id] = event.timestamp
         if isinstance(event, CallSubmitEvent):
             await self.emit_call_submit(event)
         elif isinstance(event, CallBeginEvent):

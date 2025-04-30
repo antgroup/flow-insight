@@ -75,6 +75,7 @@ class FastAPIInsightServer(APIInterface):
 
         # Prompt routes
         self.app.get("/get_prompt")(self.get_prompt)
+        self.app.get("/get_flow_creation_time")(self.get_flow_creation_time)
 
     async def run(self, host: str, port: int):
         """Run the HTTP server."""
@@ -399,3 +400,15 @@ class FastAPIInsightServer(APIInterface):
             return JSONResponse(
                 rest_response(result=False, msg=f"Error retrieving prompt: {str(e)}")
             )
+
+    async def get_flow_creation_time(self, request: Request) -> JSONResponse:
+        """Get the flow creation time."""
+        data = await self._parse_request(request)
+        flow_id = data.get("flow_id", "")
+        return JSONResponse(
+            rest_response(
+                result=True,
+                msg="Flow creation time retrieved successfully.",
+                data=await self.engine.get_flow_creation_time(flow_id),
+            )
+        )

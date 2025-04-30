@@ -147,6 +147,24 @@ const GraphPage: React.FC<GraphPageProps> = ({
     }
   }, [routeFlowId]);
 
+  // Fetch flow creation time
+  useEffect(() => {
+    if (currentFlowId) {
+      (async () => {
+        try {
+          // Get flow creation time from API
+          const creationTime = await activeApiService.getFlowCreationTime(currentFlowId);
+          const now = Date.now();
+          // Update timeline range with the flow creation time
+          setTimelineRange([creationTime, now]);
+          setCurrentTimestamp(now);
+        } catch (err) {
+          console.error('Failed to fetch flow creation time:', err);
+        }
+      })();
+    }
+  }, [currentFlowId, activeApiService]);
+
   // Initial data fetch
   useEffect(() => {
     if (currentFlowId) {
@@ -170,14 +188,19 @@ const GraphPage: React.FC<GraphPageProps> = ({
     if (autoRefresh) {
       const intervalId = setInterval(() => {
         const now = Date.now();
-        setTimelineRange([now - 3600000, now]);
+        // Keep the start time (flow creation time) but update the end time
+        setTimelineRange(prevRange => [prevRange[0], now]);
+        // If we're viewing the latest data, update the current timestamp too
+        if (isLatestTime) {
+          setCurrentTimestamp(now);
+        }
       }, 5000);
 
       return () => {
         clearInterval(intervalId);
       };
     }
-  }, [autoRefresh]);
+  }, [autoRefresh, isLatestTime]);
 
   // eslint-disable-next-line
   const fetchDatas = async (isLatestTime?: boolean, timestamp?: number) => {

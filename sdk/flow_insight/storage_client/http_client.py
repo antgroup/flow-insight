@@ -10,10 +10,10 @@ class HTTPStorageClient(StorageClient):
         super().__init__()
         self._async_client = httpx.AsyncClient()
         self._sync_client = httpx.Client()
-        self.server_url = server_url
+        self._server_url = server_url
 
     async def _async_request_server(self, endpoint: str, data: dict = None, method: str = "POST"):
-        url = f"{self.server_url}/{endpoint}"
+        url = f"{self._server_url}/{endpoint}"
         if method == "POST":
             response = await self._async_client.post(url, json=data)
         elif method == "GET":
@@ -25,7 +25,7 @@ class HTTPStorageClient(StorageClient):
         return response.json() if response.content else None
 
     def _sync_request_server(self, endpoint: str, data: dict = None, method: str = "POST"):
-        url = f"{self.server_url}/{endpoint}"
+        url = f"{self._server_url}/{endpoint}"
         if method == "POST":
             response = self._sync_client.post(url, json=data)
         elif method == "GET":

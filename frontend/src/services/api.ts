@@ -786,6 +786,13 @@ export class ApiService {
     }
   }
 
+  // Get Flow Creation Time
+  public async getFlowCreationTime(flowId: string): Promise<number> {
+    const path = `get_flow_creation_time?flow_id=${flowId}`;
+    const response = await this.request<ApiResponse<number>>(path);
+    return response.data;
+  }
+
   // Convert timestamps to readable format
   public formatTimestamp(timestamp: number): string {
     return new Date(timestamp).toLocaleString();
