@@ -1,11 +1,10 @@
+import asyncio
 from collections import defaultdict
-from enum import Enum
 from typing import Any, Dict, List, Optional
 
-import pydantic
-
 from flow_insight.dap.client import DAPClient
-from flow_insight.model import (
+from flow_insight.storage.persist.base import StorageType as PersistStorageType
+from flow_insight.storage.persist.model import (
     BatchNodePhysicalStatsEvent,
     BatchServicePhysicalStatsEvent,
     CallBeginEvent,
@@ -17,107 +16,43 @@ from flow_insight.model import (
     ObjectPutEvent,
     PromptRegisterEvent,
     ResourceUsageEvent,
+    ServicePhysicalStatsRecord,
+    internal_flow_id,
 )
-from flow_insight.storage.persist.model import ServicePhysicalStatsRecord
+from flow_insight.storage.persist.persist import PersistStorage
 from flow_insight.storage.snapshot.base import StorageType
 from flow_insight.storage.snapshot.model import (
+    AggregatedFlameGraphData,
     Breakpoint,
     CallerInfo,
+    CallFlow,
+    CallGraphData,
     Context,
+    DataFlow,
+    DebugCommand,
     DebuggerInfo,
+    DebugSession,
     FlameDataAggregated,
+    FlameGraphData,
     Method,
-    NodePhysicalStats,
+    MethodInfo,
     ObjectEvent,
     ObjectInfo,
+    ParentStartTimes,
+    PhysicalViewData,
     ResourceUsage,
     Service,
+    TotalInParent,
 )
 from flow_insight.storage.snapshot.snapshot import SnapshotStorage
 
 
-class DebugSession(pydantic.BaseModel):
-    service: Optional[Service] = None
-    method: Method
-    span_id: str
-
-
-class DebugCommand(Enum):
-    CONTINUE = "continue"
-    PAUSE = "pause"
-    STEP_OVER = "step_over"
-    STEP_INTO = "step_into"
-    STEP_OUT = "step_out"
-    GET_THREADS = "get_threads"
-    GET_STACK_TRACE = "get_stack_trace"
-    SET_BREAKPOINTS = "set_breakpoints"
-    EVALUATE = "evaluate"
-
-
-class CallFlow(pydantic.BaseModel):
-    source_id: str
-    target_id: str
-    count: int
-    start_time: int
-
-
-class DataFlow(pydantic.BaseModel):
-    source_id: str
-    target_id: str
-    argpos: int
-    duration: float
-    size: float
-    timestamp: int
-
-
-class MethodInfo(pydantic.BaseModel):
-    id: str
-    method: Method
-    service: Optional[Service] = None
-
-
-class CallGraphData(pydantic.BaseModel):
-    services: List[Service]
-    methods: List[MethodInfo]
-    functions: List[MethodInfo]
-    callFlows: List[CallFlow]
-    dataFlows: List[DataFlow]
-
-
-class TotalInParent(pydantic.BaseModel):
-    caller_node_id: str
-    duration: float
-    count: int
-    start_time: int
-
-
-class AggregatedFlameGraphData(pydantic.BaseModel):
-    name: str
-    service_name: str
-    value: float
-    count: int
-    total_in_parent: List[TotalInParent]
-
-
-class ParentStartTimes(pydantic.BaseModel):
-    callee_id: str
-    start_times: List[Dict[str, Any]]
-
-
-class FlameGraphData(pydantic.BaseModel):
-    aggregated: List[AggregatedFlameGraphData]
-    parent_start_times: List[ParentStartTimes]
-
-
-class PhysicalViewData(pydantic.BaseModel):
-    services: List[ServicePhysicalStatsRecord]
-    nodes: Dict[str, NodePhysicalStats]
-
-
 class InsightEngine:
     def __init__(self, storage_type: StorageType):
-        self._snapshot_storage = SnapshotStorage(storage_type)
+        self._persist_storage = PersistStorage(PersistStorageType.DISK)
         self._debug_sessions = defaultdict(dict)
+        self._snapshots = {"latest": SnapshotStorage(storage_type)}
+        asyncio.create_task(self._persist_storage.clean())
 
     async def get_debug_sessions(
         self,
@@ -126,9 +61,12 @@ class InsightEngine:
         instance_id: Optional[str],
         method_name: Optional[str],
         filter_active: bool = False,
+        snapshot: Optional[SnapshotStorage] = None,
     ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         if service_name is None and instance_id is None and method_name is None:
-            debugger_info = await self._snapshot_storage.get_debugger_info(flow_id)
+            debugger_info = await snapshot.get_debugger_info(flow_id)
             ret = []
             for (service, method), span_ids in debugger_info.items():
                 for span_id in span_ids:
@@ -141,16 +79,28 @@ class InsightEngine:
             Service(service_name=service_name, instance_id=instance_id) if service_name else None
         )
         method = Method(name=method_name)
-        debugger_infos = await self._snapshot_storage.get_debugger_info(flow_id, service, method)
+        debugger_infos = await snapshot.get_debugger_info(flow_id, service, method)
         for span_id, debugger_info in debugger_infos.items():
             ret.append(DebugSession(service=service, method=method, span_id=span_id))
         return ret
 
-    async def get_breakpoints(self, flow_id: str, span_id: str):
-        return await self._snapshot_storage.get_breakpoints(flow_id, span_id)
+    async def get_breakpoints(
+        self, flow_id: str, span_id: str, snapshot: Optional[SnapshotStorage] = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
+        return await snapshot.get_breakpoints(flow_id, span_id)
 
-    async def set_breakpoints(self, flow_id: str, span_id: str, breakpoints: List[Breakpoint]):
-        return await self._snapshot_storage.set_breakpoints(flow_id, span_id, breakpoints)
+    async def set_breakpoints(
+        self,
+        flow_id: str,
+        span_id: str,
+        breakpoints: List[Breakpoint],
+        snapshot: Optional[SnapshotStorage] = None,
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
+        return await snapshot.set_breakpoints(flow_id, span_id, breakpoints)
 
     async def activate_debug_session(
         self,
@@ -159,14 +109,15 @@ class InsightEngine:
         instance_id: Optional[str],
         method_name: Optional[str],
         span_id: str,
+        snapshot: Optional[SnapshotStorage] = None,
     ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         service = (
             Service(service_name=service_name, instance_id=instance_id) if service_name else None
         )
         method = Method(name=method_name)
-        debugger_info = await self._snapshot_storage.get_debugger_info(
-            flow_id, service, method, span_id
-        )
+        debugger_info = await snapshot.get_debugger_info(flow_id, service, method, span_id)
         dap = DAPClient(debugger_info.debugger_host, debugger_info.debugger_port)
         await dap.connect()
         await dap.initialize()
@@ -213,18 +164,28 @@ class InsightEngine:
             return []
         return list(self._debug_sessions[flow_id].keys())
 
-    async def get_prompt(self):
-        return await self._snapshot_storage.get_prompt()
+    async def get_prompt(self, snapshot: Optional[SnapshotStorage] = None):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
+        return await snapshot.get_prompt()
 
-    async def get_physical_view_data(self, flow_id: str):
-        node_physical_stats = await self._snapshot_storage.get_node_physical_stats()
-        service_physical_stats = await self._snapshot_storage.get_service_physical_stats(flow_id)
+    async def get_physical_view_data(
+        self, flow_id: str, snapshot: Optional[SnapshotStorage] = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
+        node_physical_stats = await snapshot.get_node_physical_stats()
+        service_physical_stats = await snapshot.get_service_physical_stats(flow_id)
         services_stats = []
         for service, stats in service_physical_stats.items():
             services_stats.append(ServicePhysicalStatsRecord(service=service, stats=stats))
         return PhysicalViewData(services=services_stats, nodes=node_physical_stats)
 
-    async def get_call_graph_data(self, flow_id, stack_mode=False):
+    async def get_call_graph_data(
+        self, flow_id, stack_mode=False, snapshot: SnapshotStorage = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         graph_data = CallGraphData(
             services=[],
             methods=[],
@@ -233,11 +194,11 @@ class InsightEngine:
             dataFlows=[],
         )
 
-        call_graph = await self._snapshot_storage.get_call_graph(flow_id)
-        data_flows = await self._snapshot_storage.get_data_flows(flow_id)
-        services = await self._snapshot_storage.get_services(flow_id)
-        methods = await self._snapshot_storage.get_methods(flow_id)
-        functions = await self._snapshot_storage.get_functions(flow_id)
+        call_graph = await snapshot.get_call_graph(flow_id)
+        data_flows = await snapshot.get_data_flows(flow_id)
+        services = await snapshot.get_services(flow_id)
+        methods = await snapshot.get_methods(flow_id)
+        functions = await snapshot.get_functions(flow_id)
         if stack_mode:
             (
                 call_graph,
@@ -246,7 +207,7 @@ class InsightEngine:
                 reachable_funcs,
             ) = await self.filter_call_graph_data(flow_id, call_graph)
 
-        method_id_map = await self._snapshot_storage.get_method_id_map(flow_id)
+        method_id_map = await snapshot.get_method_id_map(flow_id)
 
         # Add actors
         for service in services:
@@ -331,12 +292,14 @@ class InsightEngine:
 
         return graph_data
 
-    async def filter_call_graph_data(self, flow_id, call_graph):
+    async def filter_call_graph_data(self, flow_id, call_graph, snapshot: SnapshotStorage = None):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         target_edges = defaultdict(set)
         reachable_methods = set()
         reachable_services = set()
         reachable_funcs = set()
-        flow_record = await self._snapshot_storage.get_flow_record(flow_id)
+        flow_record = await snapshot.get_flow_record(flow_id)
 
         # Build target edges from flow records
         for callee_id, caller_ids in flow_record.items():
@@ -363,7 +326,94 @@ class InsightEngine:
 
         return filtered_graph, reachable_methods, reachable_services, reachable_funcs
 
-    async def emit_call_submit(self, call_submit: CallSubmitEvent):
+    async def record_event(self, event: any):
+        if isinstance(event, CallSubmitEvent):
+            await self.emit_call_submit(event)
+        elif isinstance(event, CallBeginEvent):
+            await self.emit_call_begin(event)
+        elif isinstance(event, CallEndEvent):
+            await self.emit_call_end(event)
+        elif isinstance(event, ObjectGetEvent):
+            await self.emit_object_get(event)
+        elif isinstance(event, ObjectPutEvent):
+            await self.emit_object_put(event)
+        elif isinstance(event, ContextEvent):
+            await self.emit_context(event)
+        elif isinstance(event, ResourceUsageEvent):
+            await self.emit_resource_usage(event)
+        elif isinstance(event, DebuggerInfoEvent):
+            await self.emit_debugger_info(event)
+        elif isinstance(event, BatchServicePhysicalStatsEvent):
+            await self.emit_service_physical_stats(event)
+        elif isinstance(event, BatchNodePhysicalStatsEvent):
+            await self.emit_node_physical_stats(event)
+        elif isinstance(event, PromptRegisterEvent):
+            await self.emit_prompt(event)
+        else:
+            raise ValueError(f"Unknown event type: {type(event)}")
+
+        asyncio.create_task(self._persist_storage.record_event(event))
+
+    async def replay(self, flow_id: str, end_time: int):
+        # find latest snapshot
+        latest_snapshot_ref = None
+        latest_timestamp = -1
+        for label, snapshot in self._snapshots.items():
+            if label == "latest":
+                continue
+            timestamp = int(label)
+            if timestamp <= end_time:
+                latest_snapshot_ref = snapshot
+                latest_timestamp = timestamp
+                continue
+            break
+
+        if latest_snapshot_ref is None:
+            self._snapshots[str(end_time)] = self._snapshots["latest"].take_snapshot()
+            return self._snapshots[str(end_time)]
+        else:
+            latest_snapshot = latest_snapshot_ref.take_snapshot()
+
+        events = await self._persist_storage.query_events(flow_id, latest_timestamp, end_time)
+        events.extend(
+            await self._persist_storage.query_events(internal_flow_id, latest_timestamp, end_time)
+        )
+        for event in events:
+            if isinstance(event, CallSubmitEvent):
+                await self.emit_call_submit(event, latest_snapshot)
+            elif isinstance(event, CallBeginEvent):
+                await self.emit_call_begin(event, latest_snapshot)
+            elif isinstance(event, CallEndEvent):
+                await self.emit_call_end(event, latest_snapshot)
+            elif isinstance(event, ObjectGetEvent):
+                await self.emit_object_get(event, latest_snapshot)
+            elif isinstance(event, ObjectPutEvent):
+                await self.emit_object_put(event, latest_snapshot)
+            elif isinstance(event, ContextEvent):
+                await self.emit_context(event, latest_snapshot)
+            elif isinstance(event, ResourceUsageEvent):
+                await self.emit_resource_usage(event, latest_snapshot)
+            elif isinstance(event, DebuggerInfoEvent):
+                await self.emit_debugger_info(event, latest_snapshot)
+            elif isinstance(event, BatchServicePhysicalStatsEvent):
+                await self.emit_service_physical_stats(event, latest_snapshot)
+            elif isinstance(event, BatchNodePhysicalStatsEvent):
+                await self.emit_node_physical_stats(event, latest_snapshot)
+            elif isinstance(event, PromptRegisterEvent):
+                await self.emit_prompt(event, latest_snapshot)
+            else:
+                raise ValueError(f"Unknown event type: {type(event)}")
+
+        if end_time - latest_timestamp > 30000:
+            self._snapshots[str(end_time)] = latest_snapshot
+
+        return latest_snapshot
+
+    async def emit_call_submit(
+        self, call_submit: CallSubmitEvent, snapshot: Optional[SnapshotStorage] = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flow_id = call_submit.flow_id
         source_service = (
             Service(
@@ -383,10 +433,10 @@ class InsightEngine:
         target_method = Method(name=call_submit.target_method)
         start_time = call_submit.timestamp
 
-        await self._snapshot_storage.set_start_time(
+        await snapshot.set_start_time(
             flow_id, source_service, source_method, target_service, target_method, start_time
         )
-        await self._snapshot_storage.update_flow_record(
+        await snapshot.update_flow_record(
             flow_id,
             source_service,
             source_method,
@@ -394,7 +444,7 @@ class InsightEngine:
             target_method,
             lambda record: record + 1,
         )
-        await self._snapshot_storage.update_call_graph(
+        await snapshot.update_call_graph(
             flow_id,
             source_service,
             source_method,
@@ -404,24 +454,26 @@ class InsightEngine:
         )
 
         if source_service is not None:
-            await self._snapshot_storage.add_service(flow_id, source_service)
-            await self._snapshot_storage.add_methods(flow_id, source_service, source_method)
+            await snapshot.add_service(flow_id, source_service)
+            await snapshot.add_methods(flow_id, source_service, source_method)
         else:
-            await self._snapshot_storage.add_function(flow_id, source_method)
+            await snapshot.add_function(flow_id, source_method)
 
         if target_service is not None:
-            await self._snapshot_storage.add_service(flow_id, target_service)
-            await self._snapshot_storage.add_methods(flow_id, target_service, target_method)
+            await snapshot.add_service(flow_id, target_service)
+            await snapshot.add_methods(flow_id, target_service, target_method)
         else:
-            await self._snapshot_storage.add_function(flow_id, target_method)
+            await snapshot.add_function(flow_id, target_method)
 
-    async def emit_object_get(self, object_get: ObjectGetEvent):
+    async def emit_object_get(
+        self, object_get: ObjectGetEvent, snapshot: Optional[SnapshotStorage] = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flow_id = object_get.flow_id
         object_id = object_get.object_id
         timestamp = object_get.timestamp
-        object_event: ObjectEvent = await self._snapshot_storage.get_object_events(
-            flow_id, object_id
-        )
+        object_event: ObjectEvent = await snapshot.get_object_events(flow_id, object_id)
         caller_service = object_event.sender_service
         caller_method = object_event.sender_method
         callee_service = (
@@ -436,10 +488,10 @@ class InsightEngine:
         argpos = object_event.object_info.argpos
         size = object_event.object_info.size
 
-        await self._snapshot_storage.del_object_events(flow_id, object_id)
+        await snapshot.del_object_events(flow_id, object_id)
         duration = timestamp - object_event.timestamp
 
-        await self._snapshot_storage.update_data_flow(
+        await snapshot.update_data_flow(
             flow_id,
             caller_service,
             caller_method,
@@ -448,8 +500,12 @@ class InsightEngine:
             ObjectInfo(size=size, argpos=argpos, duration=duration, timestamp=timestamp),
         )
 
-    async def emit_object_put(self, object_put: ObjectPutEvent):
+    async def emit_object_put(
+        self, object_put: ObjectPutEvent, snapshot: Optional[SnapshotStorage] = None
+    ):
         """Record object transfer between methods/functions."""
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flow_id = object_put.flow_id
         service = (
             Service(
@@ -471,9 +527,13 @@ class InsightEngine:
                 timestamp=object_put.timestamp,
             ),
         )
-        await self._snapshot_storage.add_object_event(flow_id, object_event)
+        await snapshot.add_object_event(flow_id, object_event)
 
-    async def emit_context(self, context_add: ContextEvent):
+    async def emit_context(
+        self, context_add: ContextEvent, snapshot: Optional[SnapshotStorage] = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flow_id = context_add.flow_id
         if context_add.service_name is not None:
             service = Service(
@@ -481,16 +541,22 @@ class InsightEngine:
             )
             method = Method(name=context_add.method_name)
             context = Context(service=service, method=method, context=context_add.context)
-            await self._snapshot_storage.add_context(flow_id, context)
+            await snapshot.add_context(flow_id, context)
         else:
             method = Method(name=context_add.method_name)
             context = Context(service=None, method=method, context=context_add.context)
-            await self._snapshot_storage.add_context(flow_id, context)
+            await snapshot.add_context(flow_id, context)
 
-    async def get_context(self, flow_id):
-        return await self._snapshot_storage.get_contexts(flow_id)
+    async def get_context(self, flow_id, snapshot: Optional[SnapshotStorage] = None):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
+        return await snapshot.get_contexts(flow_id)
 
-    async def emit_resource_usage(self, resource_usage: ResourceUsageEvent):
+    async def emit_resource_usage(
+        self, resource_usage: ResourceUsageEvent, snapshot: SnapshotStorage = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flow_id = resource_usage.flow_id
         service = None
         if resource_usage.service_name is not None:
@@ -501,14 +567,18 @@ class InsightEngine:
         else:
             method = Method(name=resource_usage.method_name)
         resource_usage = ResourceUsage(service=service, method=method, usage=resource_usage.usage)
-        await self._snapshot_storage.add_resource_usage(flow_id, resource_usage)
+        await snapshot.add_resource_usage(flow_id, resource_usage)
 
-    async def get_resource_usage(self, flow_id):
-        return await self._snapshot_storage.get_resource_usage(flow_id)
+    async def get_resource_usage(self, flow_id, snapshot: SnapshotStorage = None):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
+        return await snapshot.get_resource_usage(flow_id)
 
-    async def get_flame_graph_data(self, flow_id):
+    async def get_flame_graph_data(self, flow_id, snapshot: SnapshotStorage = None):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flame_data = FlameGraphData(aggregated=[], parent_start_times=[])
-        flame_graph_aggregated = await self._snapshot_storage.get_flame_graph_data(flow_id)
+        flame_graph_aggregated = await snapshot.get_flame_graph_data(flow_id)
 
         visited = {}
         for func_id, func_data in flame_graph_aggregated.items():
@@ -516,13 +586,9 @@ class InsightEngine:
                 total_in_parent = visited[func_id]
             else:
                 total_in_parent = defaultdict(lambda: {"duration": 0, "count": 0})
-            start_times = await self._snapshot_storage.get_start_time(
-                flow_id, func_id[0], func_id[1]
-            )
+            start_times = await snapshot.get_start_time(flow_id, func_id[0], func_id[1])
             for current_span_id, duration in func_data.durations.items():
-                caller_infos = await self._snapshot_storage.get_caller_info(
-                    flow_id, current_span_id
-                )
+                caller_infos = await snapshot.get_caller_info(flow_id, current_span_id)
                 for caller_info in caller_infos:
                     caller_service = caller_info.service
                     caller_method = caller_info.method
@@ -563,7 +629,7 @@ class InsightEngine:
             )
 
         parent_start_times = []
-        start_times = await self._snapshot_storage.get_start_times(flow_id)
+        start_times = await snapshot.get_start_times(flow_id)
         for callee_id, start_times in start_times.items():
             if callee_id not in visited:
                 start_times = [
@@ -596,7 +662,11 @@ class InsightEngine:
 
         return flame_data
 
-    async def emit_call_end(self, call_end: CallEndEvent):
+    async def emit_call_end(
+        self, call_end: CallEndEvent, snapshot: Optional[SnapshotStorage] = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flow_id = call_end.flow_id
         target_service = (
             Service(service_name=call_end.target_service, instance_id=call_end.target_instance_id)
@@ -605,13 +675,11 @@ class InsightEngine:
         )
         target_method = Method(name=call_end.target_method)
         span_id = call_end.span_id
-        await self._snapshot_storage.del_debugger_info(
-            flow_id, target_service, target_method, span_id
-        )
+        await snapshot.del_debugger_info(flow_id, target_service, target_method, span_id)
 
-        caller_infos = await self._snapshot_storage.get_caller_info(flow_id, span_id)
+        caller_infos = await snapshot.get_caller_info(flow_id, span_id)
         for caller_info in caller_infos:
-            await self._snapshot_storage.update_flow_record(
+            await snapshot.update_flow_record(
                 flow_id,
                 caller_info.service,
                 caller_info.method,
@@ -622,7 +690,7 @@ class InsightEngine:
 
         duration = call_end.duration
 
-        await self._snapshot_storage.update_flame_graph_data(
+        await snapshot.update_flame_graph_data(
             flow_id,
             target_service,
             target_method,
@@ -634,7 +702,11 @@ class InsightEngine:
             ),
         )
 
-    async def emit_debugger_info(self, debugger_info: DebuggerInfoEvent):
+    async def emit_debugger_info(
+        self, debugger_info: DebuggerInfoEvent, snapshot: SnapshotStorage = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flow_id = debugger_info.flow_id
         service = (
             Service(service_name=debugger_info.service_name, instance_id=debugger_info.instance_id)
@@ -646,7 +718,7 @@ class InsightEngine:
         debugger_port = debugger_info.debugger_port
         debugger_enabled = debugger_info.debugger_enabled
         span_id = debugger_info.span_id
-        await self._snapshot_storage.set_debugger_info(
+        await snapshot.set_debugger_info(
             flow_id,
             service,
             method,
@@ -658,7 +730,11 @@ class InsightEngine:
             ),
         )
 
-    async def emit_call_begin(self, call_begin: CallBeginEvent):
+    async def emit_call_begin(
+        self, call_begin: CallBeginEvent, snapshot: Optional[SnapshotStorage] = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flow_id = call_begin.flow_id
         span_id = call_begin.span_id
         service = (
@@ -669,20 +745,28 @@ class InsightEngine:
             else None
         )
         method = Method(name=call_begin.source_method)
-        await self._snapshot_storage.add_caller_info(
-            flow_id, span_id, CallerInfo(service=service, method=method)
-        )
+        await snapshot.add_caller_info(flow_id, span_id, CallerInfo(service=service, method=method))
 
     async def emit_service_physical_stats(
-        self, service_physical_stats: BatchServicePhysicalStatsEvent
+        self,
+        service_physical_stats: BatchServicePhysicalStatsEvent,
+        snapshot: Optional[SnapshotStorage] = None,
     ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
         flow_id = service_physical_stats.flow_id
-        await self._snapshot_storage.batch_add_service_physical_stats(
-            flow_id, service_physical_stats.stats
-        )
+        await snapshot.batch_add_service_physical_stats(flow_id, service_physical_stats.stats)
 
-    async def emit_node_physical_stats(self, stats: BatchNodePhysicalStatsEvent):
-        await self._snapshot_storage.batch_add_node_physical_stats(stats)
+    async def emit_node_physical_stats(
+        self, stats: BatchNodePhysicalStatsEvent, snapshot: Optional[SnapshotStorage] = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
+        await snapshot.batch_add_node_physical_stats(stats)
 
-    async def emit_prompt(self, prompt: PromptRegisterEvent):
-        await self._snapshot_storage.set_prompt(prompt.prompt)
+    async def emit_prompt(
+        self, prompt: PromptRegisterEvent, snapshot: Optional[SnapshotStorage] = None
+    ):
+        if snapshot is None:
+            snapshot = self._snapshots["latest"]
+        await snapshot.set_prompt(prompt.prompt)

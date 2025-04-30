@@ -1,7 +1,12 @@
 from collections import defaultdict
 from typing import Callable, List, Optional
 
-from flow_insight.storage.persist.model import BatchNodePhysicalStats, ServicePhysicalStatsRecord
+from flow_insight.storage.persist.model import (
+    BatchNodePhysicalStats,
+    NodePhysicalStats,
+    ServicePhysicalStats,
+    ServicePhysicalStatsRecord,
+)
 from flow_insight.storage.snapshot.base import StorageType
 from flow_insight.storage.snapshot.memory_backend import MemoryStorageBackend
 from flow_insight.storage.snapshot.model import (
@@ -11,12 +16,10 @@ from flow_insight.storage.snapshot.model import (
     DebuggerInfo,
     FlameDataAggregated,
     Method,
-    NodePhysicalStats,
     ObjectEvent,
     ObjectInfo,
     ResourceUsage,
     Service,
-    ServicePhysicalStats,
 )
 
 
@@ -27,6 +30,7 @@ class SnapshotStorage:
             self._storage = MemoryStorageBackend()
         else:
             raise ValueError(f"Unsupported storage backend: {storage_backend}")
+        self._storage_backend = storage_backend
         self._storage["call_graph"] = defaultdict(
             lambda: defaultdict(lambda: {"count": 0, "start_time": 0})
         )
@@ -62,6 +66,11 @@ class SnapshotStorage:
                 )
             )
         )
+
+    def take_snapshot(self):
+        snapshot = SnapshotStorage(self._storage_backend)
+        snapshot._storage = self._storage.take_snapshot()
+        return snapshot
 
     async def get_debugger_info(
         self,

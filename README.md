@@ -71,9 +71,9 @@ function App() {
 ### Python SDK
 
 ```python
-from flow_insight.client import InsightClient
-from flow_insight.model import CallBeginEvent, CallEndEvent
-from flow_insight.storage.persist.base import StorageType
+from flow_insight import InsightClient
+from flow_insight import CallBeginEvent, CallEndEvent
+from flow_insight import StorageType
 
 # Initialize the client with server URL and storage type
 client = InsightClient(server_url="http://your-insight-server:8000", 

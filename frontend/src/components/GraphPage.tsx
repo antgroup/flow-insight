@@ -1,4 +1,12 @@
-import { Box, IconButton, ToggleButton, ToggleButtonGroup, Tooltip } from '@mui/material';
+import {
+  Box,
+  IconButton,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Slider,
+  Typography,
+} from '@mui/material';
 import { Download, RefreshCw, PanelLeft, PanelRight, Bug } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
@@ -85,6 +93,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
   // Use the provided API service or the local one
   const activeApiService = externalApiService || apiService;
 
+  const [currentTimestamp, setCurrentTimestamp] = useState<number>(Date.now());
+  const [isLatestTime, setIsLatestTime] = useState<boolean>(true);
+
   // State management similar to App.tsx
   const [infoCardData, setInfoCardData] = useState<ElementData>({
     id: 'default',
@@ -96,14 +107,23 @@ const GraphPage: React.FC<GraphPageProps> = ({
     initialSelectedElementId || null
   );
 
+  const [timelineRange, setTimelineRange] = useState<[number, number]>([
+    Date.now() - 3600000,
+    Date.now(),
+  ]);
+
   const fetchGraphData = useCallback(
-    async (id?: string, stackMode?: boolean) => {
+    async (id?: string, stackMode?: boolean, isLatestTime?: boolean, timestamp?: number) => {
       if (!id) {
         return;
       }
 
       try {
-        const graphData = await activeApiService.getGraphData(id, stackMode);
+        const graphData = await activeApiService.getGraphData(
+          id,
+          stackMode,
+          isLatestTime ? undefined : timestamp
+        );
 
         if (graphData) {
           if (stackMode) {
@@ -143,20 +163,37 @@ const GraphPage: React.FC<GraphPageProps> = ({
         }
       })();
     }
-  }, [currentFlowId, fetchGraphData]);
+  }, [currentFlowId, fetchGraphData, activeApiService]);
+
+  // Update the timeline range periodically if auto-refresh is enabled
+  useEffect(() => {
+    if (autoRefresh) {
+      const intervalId = setInterval(() => {
+        const now = Date.now();
+        setTimelineRange([now - 3600000, now]);
+      }, 5000);
+
+      return () => {
+        clearInterval(intervalId);
+      };
+    }
+  }, [autoRefresh]);
 
   // eslint-disable-next-line
-  const fetchDatas = async () => {
+  const fetchDatas = async (isLatestTime?: boolean, timestamp?: number) => {
     if (currentViewType === 'call_stack') {
-      await fetchGraphData(currentFlowId, true);
+      await fetchGraphData(currentFlowId, true, isLatestTime, timestamp);
     }
     if (currentViewType === 'logical') {
-      await fetchGraphData(currentFlowId, false);
+      await fetchGraphData(currentFlowId, false, isLatestTime, timestamp);
     }
     if (currentViewType === 'physical') {
-      await fetchGraphData(currentFlowId, false);
+      await fetchGraphData(currentFlowId, false, isLatestTime, timestamp);
       try {
-        const data = await activeApiService.getPhysicalViewData(currentFlowId!);
+        const data = await activeApiService.getPhysicalViewData(
+          currentFlowId!,
+          isLatestTime ? undefined : currentTimestamp
+        );
         setPhysicalViewData(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch physical view data');
@@ -165,9 +202,15 @@ const GraphPage: React.FC<GraphPageProps> = ({
     if (currentViewType === 'flame' || currentViewType === 'analysis') {
       await fetchGraphData(currentFlowId, false);
       try {
-        const data = await activeApiService.getPhysicalViewData(currentFlowId!);
+        const data = await activeApiService.getPhysicalViewData(
+          currentFlowId!,
+          isLatestTime ? undefined : currentTimestamp
+        );
         setPhysicalViewData(data);
-        const flameData = await activeApiService.getFlameGraphData(currentFlowId!);
+        const flameData = await activeApiService.getFlameGraphData(
+          currentFlowId!,
+          isLatestTime ? undefined : currentTimestamp
+        );
         setFlameData(flameData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch view data');
@@ -224,6 +267,15 @@ const GraphPage: React.FC<GraphPageProps> = ({
     []
   );
 
+  const handleTimelineChange = (event: Event, newValue: number | number[]) => {
+    const timestamp = newValue as number;
+    setCurrentTimestamp(timestamp);
+    setIsLatestTime(timestamp === timelineRange[1]);
+
+    const isLatest = timestamp === timelineRange[1];
+    fetchDatas(isLatest, timestamp);
+  };
+
   const handleAutoRefreshChange = useCallback((enabled: boolean) => {
     setAutoRefresh(enabled);
   }, []);
@@ -265,6 +317,11 @@ const GraphPage: React.FC<GraphPageProps> = ({
       default:
         console.warn('Export not supported for this view type');
     }
+  };
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString();
   };
 
   if (error) {
@@ -444,6 +501,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   <IconButton
                     onClick={toggleDebugPanel}
                     size="small"
+                    disabled={!isLatestTime}
                     sx={{
                       backgroundColor: debugPanelOpen ? 'grey.200' : 'white',
                       boxShadow: 1,
@@ -453,6 +511,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
                       justifyContent: 'center',
                       '&:hover': {
                         backgroundColor: 'grey.100',
+                      },
+                      '&.Mui-disabled': {
+                        backgroundColor: 'grey.300',
+                        opacity: 0.5,
                       },
                     }}
                   >
@@ -628,6 +690,57 @@ const GraphPage: React.FC<GraphPageProps> = ({
             />
           </Box>
         )}
+
+        {/* Timeline slider */}
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '40%',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{ alignSelf: 'flex-end', color: isLatestTime ? 'primary.main' : 'text.secondary' }}
+          >
+            {isLatestTime ? 'Live' : formatTime(currentTimestamp)}
+          </Typography>
+          <Slider
+            value={currentTimestamp}
+            min={timelineRange[0]}
+            max={timelineRange[1]}
+            onChange={handleTimelineChange}
+            aria-labelledby="timeline-slider"
+            sx={{
+              width: '100%',
+              '& .MuiSlider-thumb': {
+                width: 16,
+                height: 16,
+                backgroundColor: isLatestTime ? 'primary.main' : 'grey.500',
+              },
+            }}
+            valueLabelDisplay="auto"
+            valueLabelFormat={formatTime}
+          />
+          <Box sx={{ display: 'flex', width: '100%', justifyContent: 'space-between', mt: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              {formatTime(timelineRange[0])}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {formatTime(timelineRange[1])}
+            </Typography>
+          </Box>
+        </Box>
       </Box>
 
       <ElementsPanel

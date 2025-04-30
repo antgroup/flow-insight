@@ -3,19 +3,18 @@ from typing import Any, Dict, List, Optional
 
 import pydantic
 
+from flow_insight.storage.persist.model import (
+    Method,
+    NodePhysicalStats,
+    Service,
+    ServicePhysicalStatsRecord,
+    UsageModel,
+)
+
 
 class Breakpoint(pydantic.BaseModel):
     line: int
     source: str
-
-
-class Service(pydantic.BaseModel, frozen=True):
-    service_name: str
-    instance_id: str
-
-
-class Method(pydantic.BaseModel, frozen=True):
-    name: str
 
 
 class ObjectInfo(pydantic.BaseModel):
@@ -37,11 +36,6 @@ class Context(pydantic.BaseModel):
     service: Optional[Service] = None
     method: Optional[Method] = None
     context: Dict[str, Any]
-
-
-class UsageModel(pydantic.BaseModel):
-    used: float
-    base: str
 
 
 class ResourceUsage(pydantic.BaseModel):
@@ -68,61 +62,79 @@ class FlameDataAggregated(pydantic.BaseModel):
     service_name: str
 
 
-class ServiceState(str, Enum):
-    RUNNING = "running"
-    WAITING = "waiting"
-    TERMINATED = "terminated"
-    UNKNOWN = "unknown"
+class DebugSession(pydantic.BaseModel):
+    service: Optional[Service] = None
+    method: Method
+    span_id: str
 
 
-class MemoryInfo(pydantic.BaseModel):
-    rss: int
-    vms: int
-    shared: int
-    text: int
-    lib: int
-    data: int
-    dirty: int
+class DebugCommand(Enum):
+    CONTINUE = "continue"
+    PAUSE = "pause"
+    STEP_OVER = "step_over"
+    STEP_INTO = "step_into"
+    STEP_OUT = "step_out"
+    GET_THREADS = "get_threads"
+    GET_STACK_TRACE = "get_stack_trace"
+    SET_BREAKPOINTS = "set_breakpoints"
+    EVALUATE = "evaluate"
 
 
-class NodeMemoryInfo(pydantic.BaseModel):
-    total: int
-    available: int
-    used: int
+class CallFlow(pydantic.BaseModel):
+    source_id: str
+    target_id: str
+    count: int
+    start_time: int
 
 
-class DeviceInfo(pydantic.BaseModel):
-    index: int
+class DataFlow(pydantic.BaseModel):
+    source_id: str
+    target_id: str
+    argpos: int
+    duration: float
+    size: float
+    timestamp: int
+
+
+class MethodInfo(pydantic.BaseModel):
+    id: str
+    method: Method
+    service: Optional[Service] = None
+
+
+class CallGraphData(pydantic.BaseModel):
+    services: List[Service]
+    methods: List[MethodInfo]
+    functions: List[MethodInfo]
+    callFlows: List[CallFlow]
+    dataFlows: List[DataFlow]
+
+
+class TotalInParent(pydantic.BaseModel):
+    caller_node_id: str
+    duration: float
+    count: int
+    start_time: int
+
+
+class AggregatedFlameGraphData(pydantic.BaseModel):
     name: str
-    uuid: str
-    memory_total: int
-    memory_used: int
-    utilization: float
+    service_name: str
+    value: float
+    count: int
+    total_in_parent: List[TotalInParent]
 
 
-class DeviceType(str, Enum):
-    GPU = "gpu"
+class ParentStartTimes(pydantic.BaseModel):
+    callee_id: str
+    start_times: List[Dict[str, Any]]
 
 
-class ServicePhysicalStats(pydantic.BaseModel):
-    node_id: str
-    pid: int
-    state: ServiceState
-    required_resources: Dict[str, float]
-    placement_id: Optional[str] = None
-    cpu_percent: float
-    memory_info: MemoryInfo
-    devices: Dict[DeviceType, List[DeviceInfo]]
+class FlameGraphData(pydantic.BaseModel):
+    aggregated: List[AggregatedFlameGraphData]
+    parent_start_times: List[ParentStartTimes]
 
 
-class NodeResourceUsage(pydantic.BaseModel):
-    total: float
-    available: float
-
-
-class NodePhysicalStats(pydantic.BaseModel):
-    node_id: str
-    devices: Dict[DeviceType, List[DeviceInfo]]
-    resources: Dict[str, NodeResourceUsage]
-    cpu_percent: float
-    memory_info: NodeMemoryInfo
+class PhysicalViewData(pydantic.BaseModel):
+    services: List[ServicePhysicalStatsRecord]
+    nodes: Dict[str, NodePhysicalStats]

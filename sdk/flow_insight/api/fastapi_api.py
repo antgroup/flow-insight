@@ -9,7 +9,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from flow_insight.api.base import APIInterface
 from flow_insight.engine import Breakpoint, DebugCommand, InsightEngine
-from flow_insight.model import (
+from flow_insight.storage.persist.model import (
     BatchNodePhysicalStatsEvent,
     BatchServicePhysicalStatsEvent,
     CallBeginEvent,
@@ -100,39 +100,29 @@ class FastAPIInsightServer(APIInterface):
         record = data.get("record", {})
         if record_type == RecordType.CALL_SUBMIT.value:
             record = CallSubmitEvent(**record)
-            await self.engine.emit_call_submit(record)
         elif record_type == RecordType.CALL_BEGIN.value:
             record = CallBeginEvent(**record)
-            await self.engine.emit_call_begin(record)
         elif record_type == RecordType.CALL_END.value:
             record = CallEndEvent(**record)
-            await self.engine.emit_call_end(record)
         elif record_type == RecordType.OBJECT_GET.value:
             record = ObjectGetEvent(**record)
-            await self.engine.emit_object_get(record)
         elif record_type == RecordType.OBJECT_PUT.value:
             record = ObjectPutEvent(**record)
-            await self.engine.emit_object_put(record)
         elif record_type == RecordType.CONTEXT_ADD.value:
             record = ContextEvent(**record)
-            await self.engine.emit_context(record)
         elif record_type == RecordType.RESOURCE_USAGE_ADD.value:
             record = ResourceUsageEvent(**record)
-            await self.engine.emit_resource_usage(record)
         elif record_type == RecordType.DEBUGGER_INFO_ADD.value:
             record = DebuggerInfoEvent(**record)
-            await self.engine.emit_debugger_info(record)
         elif record_type == RecordType.SERVICE_PHYSICAL_STATS_ADD.value:
             record = BatchServicePhysicalStatsEvent(**record)
-            await self.engine.emit_service_physical_stats(record)
         elif record_type == RecordType.NODE_PHYSICAL_STATS_ADD.value:
             record = BatchNodePhysicalStatsEvent(**record)
-            await self.engine.emit_node_physical_stats(record)
         elif record_type == RecordType.PROMPT_REGISTER.value:
             record = PromptRegisterEvent(**record)
-            await self.engine.emit_prompt(record)
         else:
             raise ValueError(f"Invalid record type: {record_type}")
+        await self.engine.record_event(record)
         return JSONResponse(rest_response(result=True, msg="Record emitted successfully."))
 
     async def get_debug_sessions(self, request: Request) -> JSONResponse:
@@ -287,9 +277,13 @@ class FastAPIInsightServer(APIInterface):
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", "")
         stack_mode = data.get("stack_mode", "false") == "true"
+        end_time = data.get("end_time", None)
 
         try:
-            graph_data = await self.engine.get_call_graph_data(flow_id, stack_mode)
+            snapshot = None
+            if end_time is not None:
+                snapshot = await self.engine.replay(flow_id, int(end_time))
+            graph_data = await self.engine.get_call_graph_data(flow_id, stack_mode, snapshot)
             return JSONResponse(
                 rest_response(
                     result=True,
@@ -307,9 +301,13 @@ class FastAPIInsightServer(APIInterface):
         """Get flame graph data for visualization."""
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", "")
+        end_time = data.get("end_time", None)
 
         try:
-            flame_data = await self.engine.get_flame_graph_data(flow_id)
+            snapshot = None
+            if end_time is not None:
+                snapshot = await self.engine.replay(flow_id, int(end_time))
+            flame_data = await self.engine.get_flame_graph_data(flow_id, snapshot)
             return JSONResponse(
                 rest_response(
                     result=True,
@@ -327,51 +325,77 @@ class FastAPIInsightServer(APIInterface):
         """Get physical view data for visualization."""
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", "")
+        end_time = data.get("end_time", None)
 
-        try:
-            physical_view_data = await self.engine.get_physical_view_data(flow_id)
-            return JSONResponse(
-                rest_response(
-                    result=True,
-                    msg="Physical view data retrieved successfully.",
-                    data=physical_view_data.model_dump(),
-                )
+        snapshot = None
+        if end_time is not None:
+            snapshot = await self.engine.replay(flow_id, int(end_time))
+        physical_view_data = await self.engine.get_physical_view_data(flow_id, snapshot)
+        return JSONResponse(
+            rest_response(
+                result=True,
+                msg="Physical view data retrieved successfully.",
+                data=physical_view_data.model_dump(),
             )
-        except Exception as e:
-            logger.error(f"Error retrieving physical view data: {str(e)}")
-            return JSONResponse(
-                rest_response(result=False, msg=f"Error retrieving physical view data: {str(e)}")
-            )
+        )
 
     async def get_context(self, request: Request) -> JSONResponse:
         """Get the context."""
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", "")
-        context = await self.engine.get_context(flow_id)
-        return JSONResponse(
-            rest_response(
-                result=True,
-                msg="Context retrieved successfully.",
-                data=[c.model_dump() for c in context],
+        end_time = data.get("end_time", None)
+
+        try:
+            snapshot = None
+            if end_time is not None:
+                snapshot = await self.engine.replay(flow_id, int(end_time))
+            context = await self.engine.get_context(flow_id, snapshot)
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Context retrieved successfully.",
+                    data=[c.model_dump() for c in context],
+                )
             )
-        )
+        except Exception as e:
+            logger.error(f"Error retrieving context: {str(e)}")
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving context: {str(e)}")
+            )
 
     async def get_resource_usage(self, request: Request) -> JSONResponse:
         """Get the resource usage."""
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", "")
-        resource_usage = await self.engine.get_resource_usage(flow_id)
-        return JSONResponse(
-            rest_response(
-                result=True,
-                msg="Resource usage retrieved successfully.",
-                data=[r.model_dump() for r in resource_usage],
+        end_time = data.get("end_time", None)
+
+        try:
+            snapshot = None
+            if end_time is not None:
+                snapshot = await self.engine.replay(flow_id, int(end_time))
+            resource_usage = await self.engine.get_resource_usage(flow_id, snapshot)
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Resource usage retrieved successfully.",
+                    data=[r.model_dump() for r in resource_usage],
+                )
             )
-        )
+        except Exception as e:
+            logger.error(f"Error retrieving resource usage: {str(e)}")
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving resource usage: {str(e)}")
+            )
 
     async def get_prompt(self, request: Request) -> JSONResponse:
         """Get the prompt."""
-        prompt = await self.engine.get_prompt()
-        return JSONResponse(
-            rest_response(result=True, msg="Prompt retrieved successfully.", data=prompt)
-        )
+        try:
+            prompt = await self.engine.get_prompt()
+            return JSONResponse(
+                rest_response(result=True, msg="Prompt retrieved successfully.", data=prompt)
+            )
+        except Exception as e:
+            logger.error(f"Error retrieving prompt: {str(e)}")
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving prompt: {str(e)}")
+            )

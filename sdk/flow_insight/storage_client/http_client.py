@@ -1,8 +1,8 @@
 import httpx
 from pydantic import BaseModel
 
-from flow_insight.model import RecordType
 from flow_insight.storage.persist.base import StorageClient
+from flow_insight.storage.persist.model import RecordType
 
 
 class HTTPStorageClient(StorageClient):

@@ -1,3 +1,5 @@
+import dill
+
 from flow_insight.storage.snapshot.base import SnapshotStorageBackend
 
 
@@ -13,3 +15,8 @@ class MemoryStorageBackend(SnapshotStorageBackend):
 
     def __delitem__(self, key):
         del self._data[key]
+
+    def take_snapshot(self):
+        snapshot = MemoryStorageBackend()
+        snapshot._data = dill.loads(dill.dumps(self._data))
+        return snapshot

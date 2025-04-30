@@ -17,7 +17,6 @@ type FlowInsightProps = {
   baseUrl: string;
   flowId?: string;
   initialViewType?: 'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis';
-  autoRefresh?: boolean;
   refreshInterval?: number;
   authToken?: string;
   onElementClick?: (data: ElementData) => void;
@@ -49,21 +48,13 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
   baseUrl,
   flowId,
   initialViewType = 'logical',
-  autoRefresh = false,
   refreshInterval = 2000,
   authToken,
   onElementClick,
   colorScheme,
 }) => {
   const [apiService, setApiService] = useState<ApiService | null>(null);
-  const [graphData, setGraphData] = useState<GraphData | null>(null);
-  const [stackGraphData, setStackGraphData] = useState<GraphData | null>(null);
-  const [physicalViewData, setPhysicalViewData] = useState<PhysicalViewData | null>(null);
-  const [flameData, setFlameData] = useState<FlameGraphData | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
 
   // Initialize API service
   useEffect(() => {
@@ -75,77 +66,6 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
     }
   }, [baseUrl, authToken]);
 
-  // Function to fetch all data
-  const fetchAllData = useCallback(async () => {
-    if (!apiService) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch regular graph data
-      const data = await apiService.getGraphData(flowId!, false);
-      setGraphData(data);
-
-      // Fetch stack graph data
-      const stackData = await apiService.getGraphData(flowId!, true);
-      setStackGraphData(stackData);
-
-      // Fetch physical view data if job ID is provided
-      if (flowId) {
-        const physicalData = await apiService.getPhysicalViewData(flowId);
-        setPhysicalViewData(physicalData);
-
-        // Fetch flame graph data if job ID is provided
-        const flameGraphData = await apiService.getFlameGraphData(flowId);
-        setFlameData(flameGraphData);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch data');
-    } finally {
-      setLoading(false);
-    }
-  }, [apiService, flowId]);
-
-  // Initial data fetch
-  useEffect(() => {
-    if (apiService) {
-      fetchAllData();
-    }
-  }, [apiService, fetchAllData]);
-
-  // Handle auto-refresh
-  useEffect(() => {
-    if (autoRefresh && apiService) {
-      intervalRef.current = setInterval(fetchAllData, refreshInterval);
-
-      return () => {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-      };
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, [autoRefresh, apiService, fetchAllData, refreshInterval]);
-
-  // Handle element click
-  const handleElementClick = useCallback(
-    // eslint-disable-next-line
-    (data: ElementData, skip_zoom = false) => {
-      if (data && data.id) {
-        setSelectedElementId(data.id);
-      }
-
-      if (onElementClick) {
-        onElementClick(data);
-      }
-    },
-    [onElementClick]
-  );
-
   if (error) {
     return (
       <ThemeProvider theme={defaultTheme}>
@@ -155,37 +75,17 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
     );
   }
 
-  if (loading && !graphData) {
-    return (
-      <ThemeProvider theme={defaultTheme}>
-        <CssBaseline />
-        <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
-          <CircularProgress />
-        </Box>
-      </ThemeProvider>
-    );
-  }
-
   return (
     <ThemeProvider theme={defaultTheme}>
       <CssBaseline />
       <Box sx={{ height: '100%', width: '100%' }}>
-        {graphData && (
-          <GraphPage
-            graphData={graphData}
-            stackGraphData={stackGraphData}
-            physicalViewData={physicalViewData}
-            flameData={flameData}
-            flowId={flowId}
-            initialViewType={initialViewType}
-            autoRefresh={autoRefresh}
-            onElementClick={handleElementClick}
-            selectedElementId={selectedElementId}
-            onUpdate={fetchAllData}
-            colorScheme={colorScheme}
-            apiService={apiService!}
-          />
-        )}
+        <GraphPage
+          flowId={flowId}
+          initialViewType={initialViewType}
+          onElementClick={onElementClick}
+          colorScheme={colorScheme}
+          apiService={apiService!}
+        />
       </Box>
     </ThemeProvider>
   );

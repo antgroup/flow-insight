@@ -208,8 +208,15 @@ export class ApiService {
   }
 
   // Graph Data
-  public async getApiGraphData(flowId: string, stackMode = false): Promise<ATGraphData> {
-    const path = `get_call_graph_data?flow_id=${flowId}&stack_mode=${stackMode}`;
+  public async getApiGraphData(
+    flowId: string,
+    stackMode = false,
+    end_time?: number
+  ): Promise<ATGraphData> {
+    let path = `get_call_graph_data?flow_id=${flowId}&stack_mode=${stackMode}`;
+    if (end_time) {
+      path += `&end_time=${end_time}`;
+    }
     const response = await this.request<ApiResponse<any>>(path);
 
     if (!response.result) {
@@ -265,9 +272,13 @@ export class ApiService {
       resourceUsage: resourceUsage ? resourceUsage.usage : {},
     };
   }
-  public async getGraphData(flowId: string, stackMode = false): Promise<GraphData> {
-    const apiGraphData = await this.getApiGraphData(flowId, stackMode);
-    const apiPhysicalViewData = await this.getApiPhysicalViewData(flowId);
+  public async getGraphData(
+    flowId: string,
+    stackMode = false,
+    end_time?: number
+  ): Promise<GraphData> {
+    const apiGraphData = await this.getApiGraphData(flowId, stackMode, end_time);
+    const apiPhysicalViewData = await this.getApiPhysicalViewData(flowId, end_time);
     const nodeStats: Record<string, ATNode> = apiPhysicalViewData.nodes;
     const serviceStats: ATServiceWithStats[] = apiPhysicalViewData.services;
     const serviceStatsMap: Record<string, ATServiceStats> = serviceStats.reduce(
@@ -277,8 +288,8 @@ export class ApiService {
       },
       {} as Record<string, ATServiceStats>
     );
-    const apiContextData = await this.getContextData(flowId);
-    const apiResourceUsage = await this.getResourceUsage(flowId);
+    const apiContextData = await this.getContextData(flowId, end_time);
+    const apiResourceUsage = await this.getResourceUsage(flowId, end_time);
     const contextDataMap: Record<string, ATContext> = apiContextData.reduce(
       (acc, context) => {
         acc[context.service.instanceId] = context;
@@ -370,36 +381,45 @@ export class ApiService {
   }
 
   // Context Data
-  public async getContextData(flowId: string): Promise<ATContext[]> {
-    const path = `get_context?flow_id=${flowId}`;
+  public async getContextData(flowId: string, end_time?: number): Promise<ATContext[]> {
+    let path = `get_context?flow_id=${flowId}`;
+    if (end_time) {
+      path += `&end_time=${end_time}`;
+    }
     const response = await this.request<ApiResponse<ATContext[]>>(path);
     return this.convertKeysToCamelCase(response.data);
   }
 
   // Resource Usage
-  public async getResourceUsage(flowId: string): Promise<ATResourceUsage[]> {
-    const path = `get_resource_usage?flow_id=${flowId}`;
+  public async getResourceUsage(flowId: string, end_time?: number): Promise<ATResourceUsage[]> {
+    let path = `get_resource_usage?flow_id=${flowId}`;
+    if (end_time) {
+      path += `&end_time=${end_time}`;
+    }
     const response = await this.request<ApiResponse<ATResourceUsage[]>>(path);
     return this.convertKeysToCamelCase(response.data);
   }
 
   // Physical View Data
-  public async getApiPhysicalViewData(flowId: string): Promise<ATPhysicalViewData> {
-    const path = `get_physical_view_data?flow_id=${flowId}`;
+  public async getApiPhysicalViewData(
+    flowId: string,
+    end_time?: number
+  ): Promise<ATPhysicalViewData> {
+    let path = `get_physical_view_data?flow_id=${flowId}`;
+    if (end_time) {
+      path += `&end_time=${end_time}`;
+    }
     const response = await this.request<ApiResponse<any>>(path);
 
     if (!response.result) {
       throw new Error(response.msg || 'Failed to get physical view data');
     }
 
-    // Convert snake_case to camelCase
-    const physicalViewData = this.convertKeysToCamelCase(response.data);
-
-    return physicalViewData as ATPhysicalViewData;
+    return this.convertKeysToCamelCase(response.data) as ATPhysicalViewData;
   }
 
-  public async getPhysicalViewData(flowId: string): Promise<PhysicalViewData> {
-    const apiPhysicalViewData = await this.getApiPhysicalViewData(flowId);
+  public async getPhysicalViewData(flowId: string, end_time?: number): Promise<PhysicalViewData> {
+    const apiPhysicalViewData = await this.getApiPhysicalViewData(flowId, end_time);
     const nodeStats: Record<string, ATNode> = apiPhysicalViewData.nodes;
     const serviceStats: ATServiceWithStats[] = apiPhysicalViewData.services;
     const serviceStatsMap: Record<string, ATServiceStats> = serviceStats.reduce(
@@ -416,8 +436,8 @@ export class ApiService {
       },
       {} as Record<string, string>
     );
-    const apiContextData = await this.getContextData(flowId);
-    const apiResourceUsage = await this.getResourceUsage(flowId);
+    const apiContextData = await this.getContextData(flowId, end_time);
+    const apiResourceUsage = await this.getResourceUsage(flowId, end_time);
     const contextDataMap: Record<string, ATContext> = apiContextData.reduce(
       (acc, context) => {
         acc[context.service.instanceId] = context;
@@ -462,32 +482,33 @@ export class ApiService {
   }
 
   // Flame Graph Data
-  public async getApiFlameGraphData(flowId: string): Promise<ATFlameGraphData> {
-    const path = `get_flame_graph_data?flow_id=${flowId}`;
+  public async getApiFlameGraphData(flowId: string, end_time?: number): Promise<ATFlameGraphData> {
+    let path = `get_flame_graph_data?flow_id=${flowId}`;
+    if (end_time) {
+      path += `&end_time=${end_time}`;
+    }
     const response = await this.request<ApiResponse<any>>(path);
 
     if (!response.result) {
       throw new Error(response.msg || 'Failed to get flame graph data');
     }
 
-    // Convert snake_case to camelCase
-    const flameData = this.convertKeysToCamelCase(response.data);
-
-    return flameData as ATFlameGraphData;
+    return this.convertKeysToCamelCase(response.data) as ATFlameGraphData;
   }
 
-  public async getFlameGraphData(flowId: string): Promise<FlameGraphData> {
-    const apiFlameGraphData = await this.getApiFlameGraphData(flowId);
+  public async getFlameGraphData(flowId: string, end_time?: number): Promise<FlameGraphData> {
+    const apiFlameGraphData = await this.getApiFlameGraphData(flowId, end_time);
     const flameData: FlameGraphData = {
       aggregated: apiFlameGraphData.aggregated,
       parentStartTimes: apiFlameGraphData.parentStartTimes.map((parentStartTime: any) => ({
         calleeId: parentStartTime.calleeId,
         startTimes: parentStartTime.startTimes.map((startTime: any) => ({
           callerId: startTime.callerId,
-          startTime: startTime.startTime / 1000,
+          startTime: startTime.startTime,
         })),
       })),
     };
+
     return flameData;
   }
 

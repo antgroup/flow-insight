@@ -1,4 +1,5 @@
-from flow_insight.model import (
+from flow_insight.storage.persist.base import StorageType
+from flow_insight.storage.persist.model import (
     BatchNodePhysicalStatsEvent,
     BatchServicePhysicalStatsEvent,
     CallBeginEvent,
@@ -12,7 +13,6 @@ from flow_insight.model import (
     RecordType,
     ResourceUsageEvent,
 )
-from flow_insight.storage.persist.base import StorageType
 from flow_insight.storage_client.http_client import HTTPStorageClient
 
 

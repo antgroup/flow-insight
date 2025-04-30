@@ -3,8 +3,12 @@
 from flow_insight.api.fastapi_api import FastAPIInsightServer
 from flow_insight.client import InsightClient
 
+# Storage types
+from flow_insight.storage.persist.base import StorageType
+
 # Models
-from flow_insight.model import (
+from flow_insight.storage.persist.model import (
+    BatchNodePhysicalStats,
     BatchNodePhysicalStatsEvent,
     BatchServicePhysicalStatsEvent,
     CallBeginEvent,
@@ -12,28 +16,22 @@ from flow_insight.model import (
     CallSubmitEvent,
     ContextEvent,
     DebuggerInfoEvent,
-    ObjectGetEvent,
-    ObjectPutEvent,
-    PromptRegisterEvent,
-    RecordType,
-    ResourceUsageEvent,
-    UsageModel,
-)
-
-# Storage types
-from flow_insight.storage.persist.base import StorageType
-from flow_insight.storage.persist.model import BatchNodePhysicalStats, ServicePhysicalStatsRecord
-from flow_insight.storage.snapshot.model import (
     DeviceInfo,
     DeviceType,
     MemoryInfo,
     NodeMemoryInfo,
     NodePhysicalStats,
     NodeResourceUsage,
-    ResourceUsage,
+    ObjectGetEvent,
+    ObjectPutEvent,
+    PromptRegisterEvent,
+    RecordType,
+    ResourceUsageEvent,
     Service,
     ServicePhysicalStats,
+    ServicePhysicalStatsRecord,
     ServiceState,
+    UsageModel,
 )
 
 __all__ = [
