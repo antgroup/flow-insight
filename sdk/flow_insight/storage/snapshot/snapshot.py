@@ -32,7 +32,6 @@ class SnapshotStorage:
             raise ValueError(f"Unsupported storage backend: {storage_backend}")
         self._session_id = session_id
         self._storage_backend = storage_backend
-        self._storage["flow_creation_time"] = defaultdict(lambda: -1)
         self._storage["call_graph"] = defaultdict(
             lambda: defaultdict(lambda: {"count": 0, "start_time": 0})
         )
@@ -84,12 +83,6 @@ class SnapshotStorage:
         snapshot = SnapshotStorage(self._session_id, self._storage_backend)
         snapshot._storage = self._storage.take_snapshot()
         return snapshot
-
-    async def get_flow_creation_time(self, flow_id: str):
-        return self._storage["flow_creation_time"][flow_id]
-
-    async def set_flow_creation_time(self, flow_id: str, creation_time: int):
-        self._storage["flow_creation_time"][flow_id] = creation_time
 
     async def get_debugger_info(
         self,

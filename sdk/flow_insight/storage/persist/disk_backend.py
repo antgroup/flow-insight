@@ -54,6 +54,7 @@ class DiskPersistStorageBackend:
 
         # Index for quick flow_id lookups - will be rebuilt from DB during start()
         self._flow_index = {}  # flow_id -> list of event keys
+        self._flow_creation_time = {}  # flow_id -> creation time
 
     async def start(self):
         """Open database and rebuild flow_index from stored events."""
@@ -70,17 +71,23 @@ class DiskPersistStorageBackend:
             
         for key in await self._db.keys():
             try:
-                # Parse key to extract flow_id
-                parts = key.split(":")
+                key_str = key.decode('utf-8')
+                
+                parts = key_str.split(":")
                 if len(parts) >= 3:
                     flow_id = parts[0]
+
+                    if flow_id not in self._flow_creation_time:
+                        self._flow_creation_time[flow_id] = int(parts[2])
                     
-                    # Add to index
                     if flow_id not in self._flow_index:
                         self._flow_index[flow_id] = []
-                    self._flow_index[flow_id].append(key)
+                    self._flow_index[flow_id].append(key_str)
             except Exception as e:
                 print(f"Error rebuilding flow index for key {key}: {e}")
+
+        for flow_id in self._flow_index:
+            self._flow_index[flow_id] = sorted(self._flow_index[flow_id], key=lambda x: int(x.split(":")[2]))
 
     async def stop(self):
         """Close the database."""
@@ -95,6 +102,9 @@ class DiskPersistStorageBackend:
                 return record_type
         return "_default"
 
+    async def get_flow_creation_time(self, flow_id: str) -> int:
+        return self._flow_creation_time.get(flow_id, -1)
+
     async def record_event(self, event: Any):
         """Record a time series event.
 
@@ -103,6 +113,9 @@ class DiskPersistStorageBackend:
         """
         if not self._db:
             await self.start()
+
+        if event.flow_id not in self._flow_creation_time:
+            self._flow_creation_time[event.flow_id] = event.timestamp
 
         # Create a unique key for the event
         event_type = self._get_event_type(event)
@@ -132,30 +145,25 @@ class DiskPersistStorageBackend:
 
         results = []
         for key in await self._db.keys():
-            try:
-                # Extract timestamp from key
-                parts = key.split(":")
-                if len(parts) < 3:
-                    continue
+            key_str = key.decode('utf-8')
+            
+            parts = key_str.split(":")
+            if len(parts) < 3:
+                continue
 
-                # Get the event data
-                event_data = await self._db.get(key)
-                if not event_data:
-                    continue
+            event_data = await self._db.get(key)
+            if not event_data:
+                continue
 
-                # Deserialize and reconstruct event
-                event_dict = json.loads(event_data)
-                event_type = parts[1]
+            event_dict = json.loads(event_data.decode('utf-8'))
+            event_type = parts[1]
 
-                # Create the appropriate event object
-                if event_type in REVERSE_EVENT_TYPE_MAP:
-                    event_class = REVERSE_EVENT_TYPE_MAP[event_type]
-                    event = event_class.model_validate(event_dict)
-                    results.append(event)
-            except Exception as e:
-                print(f"Error retrieving event: {e}")
+            if event_type in REVERSE_EVENT_TYPE_MAP:
+                event_class = REVERSE_EVENT_TYPE_MAP[event_type]
+                event = event_class.model_validate(event_dict)
+                results.append(event)
 
-        return results
+        return sorted(results, key=lambda x: x.timestamp)
 
     async def query_events(self, flow_id: str, start_time: int, end_time: int) -> List[Any]:
         """Query events within a time range.
@@ -178,25 +186,20 @@ class DiskPersistStorageBackend:
 
         for key in flow_keys:
             try:
-                # Extract timestamp from key
                 parts = key.split(":")
                 if len(parts) < 3:
                     continue
 
                 timestamp = int(parts[2])
 
-                # Filter by time range
                 if start_time <= timestamp < end_time:
-                    # Get the event data
                     event_data = await self._db.get(key)
                     if not event_data:
                         continue
 
-                    # Deserialize and reconstruct event
-                    event_dict = json.loads(event_data)
+                    event_dict = json.loads(event_data.decode('utf-8'))
                     event_type = parts[1]
 
-                    # Create the appropriate event object
                     if event_type in REVERSE_EVENT_TYPE_MAP:
                         event_class = REVERSE_EVENT_TYPE_MAP[event_type]
                         event = event_class.model_validate(event_dict)

@@ -2,7 +2,6 @@ import asyncio
 from collections import defaultdict
 import math
 from typing import Any, Dict, List, Optional
-import logging
 
 from flow_insight.dap.client import DAPClient
 from flow_insight.storage.persist.base import StorageType as PersistStorageType
@@ -48,8 +47,6 @@ from flow_insight.storage.snapshot.model import (
 )
 from flow_insight.storage.snapshot.snapshot import SnapshotStorage
 
-logger = logging.getLogger(__name__)
-
 class InsightEngine:
     def __init__(self, storage_type: StorageType, persist_storage_config: dict, session_id: str):
         self._persist_storage = PersistStorage(session_id, PersistStorageType.DISK, persist_storage_config)
@@ -57,6 +54,7 @@ class InsightEngine:
         self._snapshots = {"latest": SnapshotStorage(session_id, storage_type)}
         self._session_id = session_id
         self._recover_task_done = False
+        self._recover_lock = asyncio.Lock()
 
     async def get_debug_sessions(
         self,
@@ -331,17 +329,16 @@ class InsightEngine:
         return filtered_graph, reachable_methods, reachable_services, reachable_funcs
 
     async def get_flow_creation_time(self, flow_id: str):
-        return await self._snapshots["latest"].get_flow_creation_time(flow_id)
+        return await self._persist_storage.get_flow_creation_time(flow_id)
 
     async def record_event(self, event: any):
         if not self._recover_task_done:
-            logger.info("Waiting for recover task to complete")
-            await self.recover()
-            self._recover_task_done = True
+            async with self._recover_lock:
+                if not self._recover_task_done:
+                    print("Waiting for recover task to complete")
+                    await self.recover()
+                    self._recover_task_done = True
 
-        creation_time = await self._snapshots["latest"].get_flow_creation_time(event.flow_id)
-        if creation_time == -1:
-            await self._snapshots["latest"].set_flow_creation_time(event.flow_id, event.timestamp)
         if isinstance(event, CallSubmitEvent):
             await self.emit_call_submit(event)
         elif isinstance(event, CallBeginEvent):
@@ -372,18 +369,17 @@ class InsightEngine:
     async def recover(self):
         latest_snapshot = self._snapshots["latest"]
         events = await self._persist_storage.query_all_events()
-        for event in events:
-            await self._do_replay(event, latest_snapshot)
+        await self._do_replay(events, latest_snapshot)
 
-        logger.info(f"Recovered {len(events)} events")
+        print(f"Recovered {len(events)} events")
 
         for label, snapshot in latest_snapshot.restore_snapshots().items():
             self._snapshots[label] = snapshot
 
-        logger.info(f"Recovered {len(latest_snapshot.restore_snapshots())} snapshots")
+        print(f"Recovered {len(latest_snapshot.restore_snapshots())} snapshots")
 
     async def replay(self, flow_id: str, end_time: int):
-        creation_time = await self._snapshots["latest"].get_flow_creation_time(flow_id)
+        creation_time = await self._persist_storage.get_flow_creation_time(flow_id)
         if creation_time == -1:
             return None
 

@@ -20,3 +20,6 @@ class PersistStorage:
 
     async def query_all_events(self) -> List[Any]:
         return await self.backend.query_all_events()
+
+    async def get_flow_creation_time(self, flow_id: str) -> int:
+        return await self.backend.get_flow_creation_time(flow_id)
