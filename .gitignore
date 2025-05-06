@@ -11,7 +11,7 @@ __pycache__/
 *.temp
 tmp/
 temp/
-.flowinsight
+.flow_insight
 
 # Editor and IDE Files
 .idea/

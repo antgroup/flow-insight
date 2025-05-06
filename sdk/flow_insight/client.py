@@ -23,6 +23,12 @@ class InsightClient:
         else:
             raise ValueError(f"Unsupported storage type: {storage_type}")
 
+    async def async_ping(self):
+        return await self._storage_client.async_ping()
+
+    def ping(self):
+        return self._storage_client.sync_ping()
+
     async def async_emit_event(self, event: any):
         if isinstance(event, CallSubmitEvent):
             return await self._storage_client.async_emit_record(RecordType.CALL_SUBMIT, event)

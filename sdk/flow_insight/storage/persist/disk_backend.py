@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Tuple
 
 import aiodbm
 
@@ -39,7 +39,7 @@ REVERSE_EVENT_TYPE_MAP = {v: k for k, v in EVENT_TYPE_MAP.items()}
 
 
 class DiskPersistStorageBackend:
-    def __init__(self, storage_dir: str):
+    def __init__(self, session_id: str, storage_dir: str):
         """Initialize disk-based event storage using an async key-value store.
 
         Args:
@@ -49,15 +49,38 @@ class DiskPersistStorageBackend:
         self._storage_dir.mkdir(parents=True, exist_ok=True)
 
         # Main database file
-        self._db_path = os.path.join(self._storage_dir, "events")
+        self._db_path = os.path.join(self._storage_dir, f"{session_id}.db")
         self._db = None
 
-        # Index for quick flow_id lookups
+        # Index for quick flow_id lookups - will be rebuilt from DB during start()
         self._flow_index = {}  # flow_id -> list of event keys
 
     async def start(self):
-        """Open database."""
+        """Open database and rebuild flow_index from stored events."""
         self._db = await aiodbm.open(self._db_path, "c")
+        
+        # Clear the index and rebuild it from the database
+        self._flow_index = {}
+        await self._rebuild_flow_index()
+
+    async def _rebuild_flow_index(self):
+        """Rebuild the flow_index by scanning all keys in the database."""
+        if not self._db:
+            return
+            
+        for key in await self._db.keys():
+            try:
+                # Parse key to extract flow_id
+                parts = key.split(":")
+                if len(parts) >= 3:
+                    flow_id = parts[0]
+                    
+                    # Add to index
+                    if flow_id not in self._flow_index:
+                        self._flow_index[flow_id] = []
+                    self._flow_index[flow_id].append(key)
+            except Exception as e:
+                print(f"Error rebuilding flow index for key {key}: {e}")
 
     async def stop(self):
         """Close the database."""
@@ -98,6 +121,42 @@ class DiskPersistStorageBackend:
             self._flow_index[event.flow_id] = []
         self._flow_index[event.flow_id].append(event_key)
 
+    async def query_all_events(self) -> List[Any]:
+        """Query all events.
+
+        Returns:
+            List of all events
+        """
+        if not self._db:
+            await self.start()
+
+        results = []
+        for key in await self._db.keys():
+            try:
+                # Extract timestamp from key
+                parts = key.split(":")
+                if len(parts) < 3:
+                    continue
+
+                # Get the event data
+                event_data = await self._db.get(key)
+                if not event_data:
+                    continue
+
+                # Deserialize and reconstruct event
+                event_dict = json.loads(event_data)
+                event_type = parts[1]
+
+                # Create the appropriate event object
+                if event_type in REVERSE_EVENT_TYPE_MAP:
+                    event_class = REVERSE_EVENT_TYPE_MAP[event_type]
+                    event = event_class.model_validate(event_dict)
+                    results.append(event)
+            except Exception as e:
+                print(f"Error retrieving event: {e}")
+
+        return results
+
     async def query_events(self, flow_id: str, start_time: int, end_time: int) -> List[Any]:
         """Query events within a time range.
 
@@ -127,7 +186,7 @@ class DiskPersistStorageBackend:
                 timestamp = int(parts[2])
 
                 # Filter by time range
-                if start_time <= timestamp <= end_time:
+                if start_time <= timestamp < end_time:
                     # Get the event data
                     event_data = await self._db.get(key)
                     if not event_data:

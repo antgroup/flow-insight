@@ -5,10 +5,10 @@ from flow_insight.storage.persist.disk_backend import DiskPersistStorageBackend
 
 
 class PersistStorage:
-    def __init__(self, storage_type: StorageType, storage_config: dict):
+    def __init__(self, session_id: str, storage_type: StorageType, storage_config: dict):
         self._start_up = False
         if storage_type == StorageType.DISK:
-            self.backend = DiskPersistStorageBackend(**storage_config)
+            self.backend = DiskPersistStorageBackend(session_id, **storage_config)
         else:
             raise ValueError(f"Unsupported storage type: {storage_type}")
 
@@ -17,3 +17,6 @@ class PersistStorage:
 
     async def query_events(self, flow_id: str, start_time: int, end_time: int) -> List[Any]:
         return await self.backend.query_events(flow_id, start_time, end_time)
+
+    async def query_all_events(self) -> List[Any]:
+        return await self.backend.query_all_events()

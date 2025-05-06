@@ -23,6 +23,12 @@ class HTTPStorageClient(StorageClient):
 
         response.raise_for_status()
         return response.json() if response.content else None
+    
+    async def async_ping(self):
+        return await self._async_request_server(endpoint="ping", method="GET")
+
+    def sync_ping(self):
+        return self._sync_request_server(endpoint="ping", method="GET")
 
     def _sync_request_server(self, endpoint: str, data: dict = None, method: str = "POST"):
         url = f"{self._server_url}/{endpoint}"

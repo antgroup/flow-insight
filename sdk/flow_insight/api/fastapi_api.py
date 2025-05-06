@@ -50,10 +50,13 @@ def rest_response(result: bool, msg: str, **kwargs) -> Dict[str, Any]:
 
 class FastAPIInsightServer(APIInterface):
     def __init__(
-        self, storage_type: StorageType = StorageType.MEMORY, persist_storage_config: dict = None
+        self,
+        storage_type: StorageType = StorageType.MEMORY,
+        persist_storage_config: dict = None,
+        session_id: str = "",
     ):
         super().__init__()
-        self.engine = InsightEngine(storage_type, persist_storage_config)
+        self.engine = InsightEngine(storage_type, persist_storage_config, session_id)
         self.app = FastAPI(title="Flow Insight API")
         self._setup_routes()
 
@@ -78,6 +81,9 @@ class FastAPIInsightServer(APIInterface):
         # Prompt routes
         self.app.get("/get_prompt")(self.get_prompt)
         self.app.get("/get_flow_creation_time")(self.get_flow_creation_time)
+
+        # Ping route
+        self.app.get("/ping")(self.ping)
 
     async def run(self, host: str, port: int):
         """Run the HTTP server."""
@@ -414,3 +420,7 @@ class FastAPIInsightServer(APIInterface):
                 data=await self.engine.get_flow_creation_time(flow_id),
             )
         )
+
+    async def ping(self, request: Request) -> JSONResponse:
+        """Ping the server."""
+        return JSONResponse(rest_response(result=True, msg="Pong"))

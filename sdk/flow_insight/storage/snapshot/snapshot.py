@@ -24,13 +24,15 @@ from flow_insight.storage.snapshot.model import (
 
 
 class SnapshotStorage:
-    def __init__(self, storage_backend: StorageType):
+    def __init__(self, session_id: str, storage_backend: StorageType):
         super().__init__()
         if storage_backend == StorageType.MEMORY:
-            self._storage = MemoryStorageBackend()
+            self._storage = MemoryStorageBackend(session_id)
         else:
             raise ValueError(f"Unsupported storage backend: {storage_backend}")
+        self._session_id = session_id
         self._storage_backend = storage_backend
+        self._storage["flow_creation_time"] = defaultdict(lambda: -1)
         self._storage["call_graph"] = defaultdict(
             lambda: defaultdict(lambda: {"count": 0, "start_time": 0})
         )
@@ -67,10 +69,27 @@ class SnapshotStorage:
             )
         )
 
+    def restore_snapshots(self):
+        snapshots = {}
+        for label, snapshot in self._storage.restore_snapshots().items():
+            snapshot_storage = SnapshotStorage(self._session_id, self._storage_backend)
+            snapshot_storage._storage = snapshot
+            snapshots[label] = snapshot_storage
+        return snapshots
+
+    def store_snapshot(self, label: str):
+        self._storage.store_snapshot(label)
+
     def take_snapshot(self):
-        snapshot = SnapshotStorage(self._storage_backend)
+        snapshot = SnapshotStorage(self._session_id, self._storage_backend)
         snapshot._storage = self._storage.take_snapshot()
         return snapshot
+
+    async def get_flow_creation_time(self, flow_id: str):
+        return self._storage["flow_creation_time"][flow_id]
+
+    async def set_flow_creation_time(self, flow_id: str, creation_time: int):
+        self._storage["flow_creation_time"][flow_id] = creation_time
 
     async def get_debugger_info(
         self,
