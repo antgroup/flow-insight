@@ -54,6 +54,7 @@ class InsightEngine:
         self,
         snapshot_storage_type: StorageType,
         persist_storage_type: PersistStorageType,
+        snapshot_duration_s: int = 1800,
         **persist_storage_config,
     ):
         self._persist_storage = PersistStorage(persist_storage_type, **persist_storage_config)
@@ -63,6 +64,7 @@ class InsightEngine:
         self._snapshots = {"latest": SnapshotStorage(snapshot_storage_type)}
         self._recover_task_done = False
         self._recover_lock = asyncio.Lock()
+        self._snapshot_duration_s = snapshot_duration_s
 
     async def get_debug_sessions(
         self,
@@ -375,6 +377,23 @@ class InsightEngine:
             raise ValueError(f"Unknown event type: {type(event)}")
 
         asyncio.create_task(self._persist_storage.record_event(event))
+        asyncio.create_task(self.try_take_snapshot(event.flow_id))
+
+    async def try_take_snapshot(self, flow_id: str):
+        latest_snapshot_time = -1
+        for key in self._snapshots.keys():
+            if key.startswith(flow_id):
+                latest_snapshot_time = max(latest_snapshot_time, int(key.split(":")[-1]))
+        current = int(time.time() * 1000)
+        if (
+            latest_snapshot_time > 0
+            and current - latest_snapshot_time < self._snapshot_duration_s * 1000
+        ):
+            return
+        snapshot = await self.replay(flow_id, str(current))
+        if f"{flow_id}:{current}" not in self._snapshots:
+            snapshot.store_snapshot(current)
+            self._snapshots[f"{flow_id}:{current}"] = snapshot
 
     async def recover(self):
         latest_snapshot = self._snapshots["latest"]
