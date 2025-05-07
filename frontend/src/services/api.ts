@@ -651,8 +651,8 @@ export class ApiService {
   }
 
   // Insight Analysis
-  public async getInsightAnalyzePrompt(): Promise<string> {
-    const path = `get_prompt`;
+  public async getInsightAnalyzePrompt(flowId: string): Promise<string> {
+    const path = `get_prompt?flow_id=${flowId}`;
     const response = await this.request<ApiResponse<string>>(path);
     return response.data;
   }

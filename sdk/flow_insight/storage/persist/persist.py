@@ -6,7 +6,7 @@ from flow_insight.storage.persist.influxdb_backend import InfluxDBStorageBackend
 
 
 class PersistStorage:
-    def __init__(self, storage_type: StorageType, storage_config: dict):
+    def __init__(self, storage_type: StorageType, **storage_config):
         self._start_up = False
         if storage_type == StorageType.DISK:
             self.backend = DiskPersistStorageBackend(**storage_config)

@@ -54,9 +54,9 @@ class InsightEngine:
         self,
         snapshot_storage_type: StorageType,
         persist_storage_type: PersistStorageType,
-        persist_storage_config: dict,
+        **persist_storage_config,
     ):
-        self._persist_storage = PersistStorage(persist_storage_type, persist_storage_config)
+        self._persist_storage = PersistStorage(persist_storage_type, **persist_storage_config)
         self._persist_storage_type = persist_storage_type
         self._snapshot_storage_type = snapshot_storage_type
         self._debug_sessions = defaultdict(dict)

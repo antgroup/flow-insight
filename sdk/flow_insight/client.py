@@ -18,7 +18,7 @@ from flow_insight.storage_client.influxdb_client import InfluxDBStorageClient
 
 
 class InsightClient:
-    def __init__(self, server_url: str, storage_type: StorageType, storage_config: dict = {}):
+    def __init__(self, server_url: str, storage_type: StorageType, **storage_config):
         if storage_type == StorageType.DISK:
             self._storage_client = HTTPStorageClient(server_url)
         elif storage_type == StorageType.INFLUXDB:

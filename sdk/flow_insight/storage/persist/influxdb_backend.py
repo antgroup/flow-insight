@@ -1,3 +1,4 @@
+import base64
 import time
 from collections import defaultdict
 from typing import Any, Dict, List
@@ -599,7 +600,7 @@ class InfluxDBStorageBackend(StorageBackend):
             result = results[0]
             return {
                 "flow_id": result["flow_id"],
-                "prompt": result["prompt_preview"],
+                "prompt": base64.b64decode(result["prompt"].encode()),
                 "timestamp": result["time"] // 1_000_000,
             }
         else:

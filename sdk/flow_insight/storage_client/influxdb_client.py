@@ -1,3 +1,5 @@
+import asyncio
+import base64
 import time
 import uuid
 
@@ -20,20 +22,81 @@ class InfluxDBStorageClient(StorageClient):
         self.sync_client = httpx.Client(timeout=30.0)
         self.async_client = httpx.AsyncClient(timeout=30.0)
 
-        self._create_database()
+        self._create_database_if_not_exists()
 
-    def _create_database(self):
-        """Create the InfluxDB database if it doesn't exist"""
+    def _create_database_if_not_exists(self):
+        """Create the InfluxDB database if it doesn't exist."""
         try:
-            query = f"CREATE DATABASE {self.db_name}"
+            # First check if database exists
+            query = "SHOW DATABASES"
             params = {"q": query}
             if self.username and self.password:
                 params["u"] = self.username
                 params["p"] = self.password
-            response = self.sync_client.post(f"{self.server_url}/query", params=params)
-            response.raise_for_status()
+
+            result = self.sync_client.get(f"{self.server_url}/query", params=params)
+            result.raise_for_status()
+            data = result.json()
+
+            # Check if database already exists
+            db_exists = False
+            if data.get("results") and data["results"][0].get("series"):
+                for series in data["results"][0]["series"]:
+                    for values in series.get("values", []):
+                        if values and values[0] == self.db_name:
+                            db_exists = True
+                            break
+
+            # Create database if it doesn't exist
+            if not db_exists:
+                query = f"CREATE DATABASE {self.db_name}"
+                params = {"q": query}
+                if self.username and self.password:
+                    params["u"] = self.username
+                    params["p"] = self.password
+
+                result = self.sync_client.get(f"{self.server_url}/query", params=params)
+                result.raise_for_status()
+
+            # Check if the flow_insight retention policy exists
+            query = f"SHOW RETENTION POLICIES ON {self.db_name}"
+            params = {"q": query}
+            if self.username and self.password:
+                params["u"] = self.username
+                params["p"] = self.password
+
+            result = self.sync_client.get(f"{self.server_url}/query", params=params)
+            result.raise_for_status()
+            data = result.json()
+
+            # Check if the flow_insight retention policy exists
+            rp_exists = False
+            if data.get("results") and data["results"][0].get("series"):
+                for series in data["results"][0]["series"]:
+                    if series.get("values"):
+                        for row in series.get("values", []):
+                            # First column is name of retention policy
+                            if row and row[0] == "flow_insight":
+                                rp_exists = True
+                                break
+
+            # Create retention policy if it doesn't exist
+            if not rp_exists:
+                # Create with infinite retention and make it default
+                query = (
+                    f"CREATE RETENTION POLICY flow_insight "
+                    f"ON {self.db_name} DURATION INF REPLICATION 1 DEFAULT"
+                )
+                params = {"q": query}
+                if self.username and self.password:
+                    params["u"] = self.username
+                    params["p"] = self.password
+
+                result = self.sync_client.get(f"{self.server_url}/query", params=params)
+                result.raise_for_status()
+
         except Exception as e:
-            print(f"Error creating database: {e} {self.server_url}")
+            print(f"Error creating database or retention policy: {e}")
 
     async def async_ping(self):
         """Check if the InfluxDB server is reachable"""
@@ -434,23 +497,15 @@ class InfluxDBStorageClient(StorageClient):
 
         elif record_type == RecordType.PROMPT_REGISTER:
             # Process PromptRegisterEvent
-            prompt_hash = str(hash(record_dict.get("prompt", "")))[
-                :8
-            ]  # Use hash as identifier, trimmed
             tags = {
                 "flow_id": flow_id,
                 "event_id": event_id,
-                "prompt_hash": prompt_hash,
                 "event_type": "prompt_register",
             }
 
             # Also store the actual prompt as a tag
             prompt = record_dict.get("prompt", "")
-            if len(prompt) > 200:
-                # Truncate long prompts to fit in tag
-                tags["prompt_preview"] = prompt[:200] + "..."
-            else:
-                tags["prompt_preview"] = prompt
+            tags["prompt"] = base64.b64encode(prompt.encode()).decode()
 
             point = self._create_point("flow_insight.prompt", tags, {"count": 1}, timestamp_ns)
             self._write(point)
@@ -483,30 +538,38 @@ class InfluxDBStorageClient(StorageClient):
             return f"{measurement} {field_str} {timestamp}"
 
     def _write(self, data):
-        try:
-            params = {"db": self.db_name, "precision": "ns"}
-            if self.username and self.password:
-                params["u"] = self.username
-                params["p"] = self.password
-            response = self.sync_client.post(
-                f"{self.server_url}/write", params=params, content=data
-            )
-            response.raise_for_status()
-        except Exception as e:
-            print(f"Error flushing batch to InfluxDB: {e}")
+        retry = 5
+        while retry > 0:
+            try:
+                params = {"db": self.db_name, "precision": "ns"}
+                if self.username and self.password:
+                    params["u"] = self.username
+                    params["p"] = self.password
+                response = self.sync_client.post(
+                    f"{self.server_url}/write", params=params, content=data
+                )
+                response.raise_for_status()
+                return
+            except Exception:
+                time.sleep(1)
+            retry -= 1
 
     async def _async_write(self, data):
-        try:
-            params = {"db": self.db_name, "precision": "ns"}
-            if self.username and self.password:
-                params["u"] = self.username
-                params["p"] = self.password
-            response = await self.async_client.post(
-                f"{self.server_url}/write", params=params, content=data
-            )
-            response.raise_for_status()
-        except Exception as e:
-            print(f"Error flushing batch to InfluxDB: {e}")
+        retry = 5
+        while retry > 0:
+            try:
+                params = {"db": self.db_name, "precision": "ns"}
+                if self.username and self.password:
+                    params["u"] = self.username
+                    params["p"] = self.password
+                response = await self.async_client.post(
+                    f"{self.server_url}/write", params=params, content=data
+                )
+                response.raise_for_status()
+                return
+            except Exception:
+                await asyncio.sleep(1)
+            retry -= 1
 
     async def async_emit_record(self, record_type: RecordType, record: BaseModel):
         """Asynchronously emit a record to InfluxDB"""

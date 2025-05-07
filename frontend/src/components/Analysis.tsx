@@ -296,7 +296,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
 
     try {
       // 1. Get the analyze promp
-      const prompt = await apiService.getInsightAnalyzePrompt();
+      const prompt = await apiService.getInsightAnalyzePrompt(flowId);
       const modelToUse = openaiModel;
       const modelContextLength = parseInt(contextLength) || 64000;
 

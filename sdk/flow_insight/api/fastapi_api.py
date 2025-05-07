@@ -54,11 +54,11 @@ class FastAPIInsightServer(APIInterface):
         self,
         snapshot_storage_type: StorageType = StorageType.MEMORY,
         persist_storage_type: PersistStorageType = PersistStorageType.DISK,
-        persist_storage_config: dict = None,
+        **persist_storage_config,
     ):
         super().__init__()
         self.engine = InsightEngine(
-            snapshot_storage_type, persist_storage_type, persist_storage_config
+            snapshot_storage_type, persist_storage_type, **persist_storage_config
         )
         self.app = FastAPI(title="Flow Insight API")
         self._setup_routes()
@@ -147,8 +147,9 @@ class FastAPIInsightServer(APIInterface):
         filter_active = data.get("filter_active", "false") == "true"
 
         try:
+            snapshot = await self.engine.replay(flow_id, None)
             sessions = await self.engine.get_debug_sessions(
-                flow_id, service_name, instance_id, method_name, filter_active
+                flow_id, service_name, instance_id, method_name, filter_active, snapshot
             )
             return JSONResponse(
                 rest_response(
@@ -170,7 +171,8 @@ class FastAPIInsightServer(APIInterface):
         span_id = data.get("span_id", "")
 
         try:
-            breakpoints = await self.engine.get_breakpoints(flow_id, span_id)
+            snapshot = await self.engine.replay(flow_id, None)
+            breakpoints = await self.engine.get_breakpoints(flow_id, span_id, snapshot)
             return JSONResponse(
                 rest_response(
                     result=True,
@@ -192,10 +194,11 @@ class FastAPIInsightServer(APIInterface):
         breakpoints_data = data.get("breakpoints", [])
 
         try:
+            snapshot = await self.engine.replay(flow_id, None)
             breakpoints = [
                 Breakpoint(line=bp["line"], source=bp["source"]) for bp in breakpoints_data
             ]
-            result = await self.engine.set_breakpoints(flow_id, span_id, breakpoints)
+            result = await self.engine.set_breakpoints(flow_id, span_id, breakpoints, snapshot)
             return JSONResponse(
                 rest_response(result=True, msg="Breakpoints set successfully.", data=result)
             )
@@ -215,8 +218,9 @@ class FastAPIInsightServer(APIInterface):
         span_id = data.get("span_id", "")
 
         try:
+            snapshot = await self.engine.replay(flow_id, None)
             result = await self.engine.activate_debug_session(
-                flow_id, service_name, instance_id, method_name, span_id
+                flow_id, service_name, instance_id, method_name, span_id, snapshot
             )
             return JSONResponse(
                 rest_response(result=True, msg="Debug session activated successfully.", data=result)
@@ -391,8 +395,11 @@ class FastAPIInsightServer(APIInterface):
 
     async def get_prompt(self, request: Request) -> JSONResponse:
         """Get the prompt."""
+        data = await self._parse_request(request)
+        flow_id = data.get("flow_id", "")
         try:
-            prompt = await self.engine.get_prompt()
+            snapshot = await self.engine.replay(flow_id, None)
+            prompt = await self.engine.get_prompt(snapshot)
             return JSONResponse(
                 rest_response(result=True, msg="Prompt retrieved successfully.", data=prompt)
             )
