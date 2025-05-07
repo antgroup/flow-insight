@@ -415,23 +415,27 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
     try {
       const activeSessions = await apiService.getActiveDebugSessions(flowId);
       setActiveSessions(activeSessions);
-      const serviceInfo = selectedElement?.instanceId
-        ? [selectedElement?.serviceName, selectedElement?.instanceId]
-        : [];
-      const funcName = selectedElement?.name;
-      const currentActiveSessions = sessions.find(
-        session =>
-          session.spanId === selectedSession &&
-          session.serviceInfo[0] === serviceInfo[0] &&
-          session.serviceInfo[1] === serviceInfo[1] &&
-          session.funcName === funcName
-      );
-      if (!currentActiveSessions) {
-        setSelectedSession(null);
-        setThreads([]);
-        setStackFrames([]);
-        setSelectedThread(null);
-        setSelectedFrame(null);
+
+      // Update selected session if it's no longer active
+      if (selectedSession && !activeSessions.includes(selectedSession)) {
+        const serviceInfo = selectedElement?.instanceId
+          ? [selectedElement?.serviceName, selectedElement?.instanceId]
+          : [];
+        const funcName = selectedElement?.name;
+        const currentActiveSessions = sessions.find(
+          session =>
+            session.spanId === selectedSession &&
+            session.serviceInfo[0] === serviceInfo[0] &&
+            session.serviceInfo[1] === serviceInfo[1] &&
+            session.funcName === funcName
+        );
+        if (!currentActiveSessions) {
+          setSelectedSession(null);
+          setThreads([]);
+          setStackFrames([]);
+          setSelectedThread(null);
+          setSelectedFrame(null);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch active debug sessions:', error);
@@ -522,38 +526,37 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
 
     setIsInitializing(true);
 
+    // Update local state immediately to show the session as active
+    setActiveSessions(prev => [...prev, session.spanId]);
+
     try {
-      const result = await apiService.activateDebugSession(
+      await apiService.activateDebugSession(
         flowId,
         session.serviceInfo,
         session.funcName,
         session.spanId
       );
 
-      if (result) {
-        fetchActiveDebugSessions();
-        setSelectedSession(session.spanId);
+      await fetchActiveDebugSessions();
+      setSelectedSession(session.spanId);
 
-        const threadIds = await fetchThreads(session.spanId);
-        // Try to pause the execution
-        if (threadIds) {
-          for (const threadId of threadIds) {
-            await apiService.sendDebugCommand(flowId, session.spanId, 'pause', {
-              thread_id: threadId,
-            });
-          }
+      const threadIds = await fetchThreads(session.spanId);
+      // Try to pause the execution
+      if (threadIds) {
+        for (const threadId of threadIds) {
+          await apiService.sendDebugCommand(flowId, session.spanId, 'pause', {
+            thread_id: threadId,
+          });
         }
-        setIsInitializing(false);
-        setTimeout(async () => {
-          setSelectedSession(session.spanId);
-          if (threadIds) {
-            await fetchStackTrace(session.spanId, threadIds[0]);
-          }
-          setProcessCmdType('switch');
-        }, 100);
-      } else {
-        setIsInitializing(false);
       }
+      setIsInitializing(false);
+      setTimeout(async () => {
+        setSelectedSession(session.spanId);
+        if (threadIds) {
+          await fetchStackTrace(session.spanId, threadIds[0]);
+        }
+        setProcessCmdType('switch');
+      }, 100);
     } catch (error) {
       console.error('Failed to activate debug session:', error);
       setIsInitializing(false);
@@ -566,19 +569,24 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
       return;
     }
 
+    // Update loading state specifically for this operation
     setLoading(true);
-    try {
-      const result = await apiService.deactivateDebugSession(flowId, spanId);
 
-      if (result) {
-        fetchActiveDebugSessions();
-        if (selectedSession === spanId) {
-          setSelectedSession(null);
-          setThreads([]);
-          setStackFrames([]);
-          setSelectedThread(null);
-          setSelectedFrame(null);
-        }
+    // Update local state immediately to show the session as inactive
+    setActiveSessions(prev => prev.filter(id => id !== spanId));
+
+    try {
+      await apiService.deactivateDebugSession(flowId, spanId);
+
+      // Only fetch active sessions after successful deactivation
+      await fetchActiveDebugSessions();
+
+      if (selectedSession === spanId) {
+        setSelectedSession(null);
+        setThreads([]);
+        setStackFrames([]);
+        setSelectedThread(null);
+        setSelectedFrame(null);
       }
     } catch (error) {
       console.error('Failed to deactivate debug session:', error);
@@ -1199,6 +1207,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
                     }}
                   >
                     Debug Sessions
+                    {loading && <CircularProgress size={16} />}
                   </Typography>
                   <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
                     <List dense disablePadding>
@@ -1217,7 +1226,10 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
                                   size="small"
                                   variant="outlined"
                                   color="error"
-                                  onClick={() => handleDeactivate(session.spanId)}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    handleDeactivate(session.spanId);
+                                  }}
                                   disabled={isInitializing && selectedSession === session.spanId}
                                   sx={{ py: 0, px: 1, minWidth: 'auto' }}
                                 >
@@ -1228,7 +1240,10 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
                                   size="small"
                                   variant="outlined"
                                   color="primary"
-                                  onClick={() => handleActivate(session)}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    handleActivate(session);
+                                  }}
                                   disabled={isInitializing}
                                   sx={{ py: 0, px: 1, minWidth: 'auto' }}
                                 >

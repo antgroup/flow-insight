@@ -102,7 +102,7 @@ export class ApiService {
     const method = options.method || 'GET';
 
     // Only cache GET requests
-    if (method === 'GET') {
+    if (method === 'GET' && !endpoint.startsWith('get_active_debug_sessions')) {
       const cacheKey = `${url}-${JSON.stringify(options)}-${JSON.stringify(data)}`;
       const cachedData = this.cache.get(cacheKey);
       const now = Date.now();

@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 import sys
 from typing import Optional
 import logging
@@ -44,6 +45,8 @@ from flow_insight import (
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+session_id = str(uuid.uuid4())[:8]
 
 HOST = "0.0.0.0"
 PORT = 8000
@@ -464,9 +467,9 @@ async def emit_demo_events(client):
 async def setup_and_run_server(opentsdb_url: Optional[str] = None):
     # Create the FastAPI server
     if opentsdb_url is not None:
-        server = FastAPIInsightServer(snapshot_storage_type=SnapshotStorageType.MEMORY, persist_storage_type=PersistStorageType.INFLUXDB, persist_storage_config={"server_url": opentsdb_url, "username": "nodered", "password": "nodered"})
+        server = FastAPIInsightServer(snapshot_storage_type=SnapshotStorageType.MEMORY, persist_storage_type=PersistStorageType.INFLUXDB, server_url=opentsdb_url, username="nodered", password="nodered", session_id=session_id)
     else:
-        server = FastAPIInsightServer(snapshot_storage_type=SnapshotStorageType.MEMORY, persist_storage_type=PersistStorageType.DISK, persist_storage_config={"storage_dir": ".flow_insight/events"})
+        server = FastAPIInsightServer(snapshot_storage_type=SnapshotStorageType.MEMORY, persist_storage_type=PersistStorageType.DISK, storage_dir=".flow_insight/events")
     
     # Mount the frontend static files
     frontend_dir = Path(__file__).parent.parent / "frontend" / "example" / "dist"
@@ -486,7 +489,7 @@ async def setup_and_run_server(opentsdb_url: Optional[str] = None):
     
     # Create a client to emit events
     if opentsdb_url is not None:
-        client = InsightClient(opentsdb_url, PersistStorageType.INFLUXDB, {"username": "nodered", "password": "nodered"})
+        client = InsightClient(opentsdb_url, PersistStorageType.INFLUXDB, username="nodered", password="nodered", session_id=session_id)
     else:
         client = InsightClient(f"http://localhost:{PORT}", PersistStorageType.DISK)
     

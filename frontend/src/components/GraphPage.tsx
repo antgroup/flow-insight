@@ -4,10 +4,15 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
-  Slider,
+  Button,
+  Menu,
+  MenuItem,
   Typography,
+  Divider,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
-import { Download, RefreshCw, PanelLeft, PanelRight, Bug } from 'lucide-react';
+import { Download, RefreshCw, PanelLeft, PanelRight, Bug, Clock } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -87,6 +92,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const [rightDrawerOpen, setRightDrawerOpen] = useState(true);
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
 
+  // Replace timelineRange with a single startTimestamp
+  const [startTimestamp, setStartTimestamp] = useState<number>(Date.now() - 3600000);
   const [currentTimestamp, setCurrentTimestamp] = useState<number>(Date.now());
   const [isLatestTime, setIsLatestTime] = useState<boolean>(true);
 
@@ -101,10 +108,28 @@ const GraphPage: React.FC<GraphPageProps> = ({
     initialSelectedElementId || null
   );
 
-  const [timelineRange, setTimelineRange] = useState<[number, number]>([
-    Date.now() - 3600000,
-    Date.now(),
-  ]);
+  const [flowDuration, setFlowDuration] = useState<number | null>(null);
+
+  // Time selector state
+  const [timeMenuAnchorEl, setTimeMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const timeMenuOpen = Boolean(timeMenuAnchorEl);
+  const [customTimeValue, setCustomTimeValue] = useState<string>('');
+  const [customTimeUnit, setCustomTimeUnit] = useState<string>('m');
+
+  // Predefined time ranges
+  const timeRangeOptions = [
+    { label: 'Last 10 seconds', value: 10 * 1000 },
+    { label: 'Last 30 seconds', value: 30 * 1000 },
+    { label: 'Last 1 minutes', value: 1 * 60 * 1000 },
+    { label: 'Last 5 minutes', value: 5 * 60 * 1000 },
+    { label: 'Last 15 minutes', value: 15 * 60 * 1000 },
+    { label: 'Last 30 minutes', value: 30 * 60 * 1000 },
+    { label: 'Last 1 hour', value: 60 * 60 * 1000 },
+    { label: 'Last 3 hours', value: 3 * 60 * 60 * 1000 },
+    { label: 'Last 6 hours', value: 6 * 60 * 60 * 1000 },
+    { label: 'Last 12 hours', value: 12 * 60 * 60 * 1000 },
+    { label: 'Last 24 hours', value: 24 * 60 * 60 * 1000 },
+  ];
 
   const fetchGraphData = useCallback(
     async (id?: string, stackMode?: boolean, isLatestTime?: boolean, timestamp?: number) => {
@@ -141,7 +166,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
     }
   }, [routeFlowId]);
 
-  // Fetch flow creation time
+  // Fetch flow creation time and calculate duration
   useEffect(() => {
     if (currentFlowId) {
       (async () => {
@@ -149,15 +174,34 @@ const GraphPage: React.FC<GraphPageProps> = ({
           // Get flow creation time from API
           const creationTime = await apiService.getFlowCreationTime(currentFlowId);
           const now = Date.now();
-          // Update timeline range with the flow creation time
-          setTimelineRange([creationTime, now]);
+          // Update start timestamp with the flow creation time
+          setStartTimestamp(creationTime);
           setCurrentTimestamp(now);
+          // Calculate flow duration
+          setFlowDuration(now - creationTime);
         } catch (err) {
           console.error('Failed to fetch flow creation time:', err);
         }
       })();
     }
   }, [currentFlowId, apiService]);
+
+  // Update the current timestamp periodically if auto-refresh is enabled
+  useEffect(() => {
+    if (autoRefresh) {
+      const intervalId = setInterval(() => {
+        const now = Date.now();
+        // When auto-refresh is enabled, always update the timestamp to the latest
+        setCurrentTimestamp(now);
+        // Ensure isLatestTime remains true during auto-refresh
+        setIsLatestTime(true);
+      }, 5000);
+
+      return () => {
+        clearInterval(intervalId);
+      };
+    }
+  }, [autoRefresh]);
 
   // Initial data fetch
   useEffect(() => {
@@ -176,25 +220,6 @@ const GraphPage: React.FC<GraphPageProps> = ({
       })();
     }
   }, [currentFlowId, fetchGraphData, apiService]);
-
-  // Update the timeline range periodically if auto-refresh is enabled
-  useEffect(() => {
-    if (autoRefresh) {
-      const intervalId = setInterval(() => {
-        const now = Date.now();
-        // Keep the start time (flow creation time) but update the end time
-        setTimelineRange(prevRange => [prevRange[0], now]);
-        // When auto-refresh is enabled, always update the timestamp to the latest
-        setCurrentTimestamp(now);
-        // Ensure isLatestTime remains true during auto-refresh
-        setIsLatestTime(true);
-      }, 5000);
-
-      return () => {
-        clearInterval(intervalId);
-      };
-    }
-  }, [autoRefresh]);
 
   // eslint-disable-next-line
   const fetchDatas = async (isLatestTime?: boolean, timestamp?: number) => {
@@ -272,7 +297,6 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
     // Always get latest data and update timeline when manually updating
     const now = Date.now();
-    setTimelineRange(prevRange => [prevRange[0], now]);
     setCurrentTimestamp(now);
     setIsLatestTime(true);
 
@@ -291,13 +315,50 @@ const GraphPage: React.FC<GraphPageProps> = ({
     []
   );
 
-  const handleTimelineChange = (event: Event, newValue: number | number[]) => {
-    const timestamp = newValue as number;
-    setCurrentTimestamp(timestamp);
-    setIsLatestTime(timestamp === timelineRange[1]);
+  // Handle time menu open
+  const handleTimeMenuClick = (event: React.MouseEvent<HTMLElement>) => {
+    setTimeMenuAnchorEl(event.currentTarget);
 
-    const isLatest = timestamp === timelineRange[1];
-    fetchDatas(isLatest, timestamp);
+    // Call get_flow_creation_time each time time range is opened
+    if (currentFlowId) {
+      (async () => {
+        try {
+          // Get flow creation time from API
+          const creationTime = await apiService.getFlowCreationTime(currentFlowId);
+          const now = Date.now();
+          // Update start timestamp with the flow creation time
+          setStartTimestamp(creationTime);
+          // Calculate flow duration
+          setFlowDuration(now - creationTime);
+        } catch (err) {
+          console.error('Failed to fetch flow creation time:', err);
+        }
+      })();
+    }
+  };
+
+  // Handle time menu close
+  const handleTimeMenuClose = () => {
+    setTimeMenuAnchorEl(null);
+  };
+
+  // Handle time range selection
+  const handleTimeRangeSelect = (rangeMs: number) => {
+    const now = Date.now();
+    // Only calculate a new start point, don't change the current timestamp
+    // which remains the endpoint for the time range
+    const newStartTimestamp = now - rangeMs;
+
+    // Make sure we don't go earlier than the flow start time
+    if (newStartTimestamp < startTimestamp) {
+      // Keep using the original start timestamp
+      // No change needed
+    } else {
+      setStartTimestamp(newStartTimestamp);
+    }
+
+    applyTimePoint(newStartTimestamp);
+    handleTimeMenuClose();
   };
 
   const handleAutoRefreshChange = useCallback((enabled: boolean) => {
@@ -308,10 +369,16 @@ const GraphPage: React.FC<GraphPageProps> = ({
       const now = Date.now();
       setCurrentTimestamp(now);
       setIsLatestTime(true);
-      // Update the end of timeline range to now
-      setTimelineRange(prevRange => [prevRange[0], now]);
     }
   }, []);
+
+  // Handle setting current time to now
+  const handleSetToNow = () => {
+    const now = Date.now();
+    setCurrentTimestamp(now);
+    setIsLatestTime(true);
+    fetchDatas(true);
+  };
 
   // Toggle drawer states
   const toggleLeftDrawer = () => {
@@ -355,6 +422,112 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString();
+  };
+
+  const formatTimeLabel = () => {
+    if (autoRefresh) {
+      return 'Auto Refresh';
+    }
+
+    if (isLatestTime) {
+      return 'Now';
+    }
+
+    // Calculate how far back the current timestamp is from now
+    const timeDiff = Date.now() - currentTimestamp;
+
+    if (timeDiff < 60000) {
+      return `${Math.floor(timeDiff / 1000)}s ago`;
+    } else if (timeDiff < 3600000) {
+      return `${Math.floor(timeDiff / 60000)}m ago`;
+    } else if (timeDiff < 86400000) {
+      return `${Math.floor(timeDiff / 3600000)}h ago`;
+    } else {
+      return formatTime(currentTimestamp);
+    }
+  };
+
+  // Apply selected timestamp for the end_time parameter
+  const applyTimePoint = (timestamp: number) => {
+    setCurrentTimestamp(timestamp);
+    setIsLatestTime(timestamp === Date.now());
+    fetchDatas(timestamp === Date.now(), timestamp);
+  };
+
+  // Handle custom time input change
+  const handleCustomTimeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setCustomTimeValue(event.target.value);
+  };
+
+  // Handle custom time unit change
+  const handleCustomTimeUnitChange = (unit: string) => {
+    setCustomTimeUnit(unit);
+  };
+
+  // Handle custom time submission
+  const handleCustomTimeSubmit = () => {
+    const value = parseInt(customTimeValue, 10);
+    if (isNaN(value) || value <= 0) {
+      return;
+    }
+
+    let milliseconds = 0;
+    switch (customTimeUnit) {
+      case 's':
+        milliseconds = value * 1000;
+        break;
+      case 'm':
+        milliseconds = value * 60 * 1000;
+        break;
+      case 'h':
+        milliseconds = value * 60 * 60 * 1000;
+        break;
+      case 'd':
+        milliseconds = value * 24 * 60 * 60 * 1000;
+        break;
+      default:
+        milliseconds = value * 60 * 1000; // default to minutes
+    }
+
+    const now = Date.now();
+    const newStartTimestamp = now - milliseconds;
+
+    // Check if time range exceeds flow duration
+    if (newStartTimestamp < startTimestamp) {
+      // If exceeds, don't change the start timestamp
+      // No change needed
+    } else {
+      setStartTimestamp(newStartTimestamp);
+    }
+
+    applyTimePoint(newStartTimestamp);
+
+    handleTimeMenuClose();
+    setCustomTimeValue('');
+  };
+
+  // Format flow duration for display
+  const formatDuration = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) {
+      return `${days}d ${hours % 24}h`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  };
+
+  // Check if a time range exceeds flow duration
+  const isTimeRangeExceedingDuration = (rangeMs: number) => {
+    if (!flowDuration) return false;
+    return rangeMs > flowDuration;
   };
 
   if (error) {
@@ -430,6 +603,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   Analysis
                 </ToggleButton>
               </ToggleButtonGroup>
+
               <DebugPanel
                 flowId={currentFlowId}
                 selectedElement={infoCardData}
@@ -503,6 +677,169 @@ const GraphPage: React.FC<GraphPageProps> = ({
                     </IconButton>
                   </Tooltip>
                 )}
+
+                {/* Time selector button - moved to align with IDE button group */}
+                <Tooltip title="Select time range">
+                  <IconButton
+                    onClick={handleTimeMenuClick}
+                    size="small"
+                    sx={{
+                      backgroundColor: 'white',
+                      boxShadow: 1,
+                      padding: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      '&:hover': {
+                        backgroundColor: 'grey.100',
+                      },
+                      border: isLatestTime
+                        ? '1px solid rgba(25, 118, 210, 0.5)'
+                        : '1px solid rgba(0, 0, 0, 0.12)',
+                      color: isLatestTime ? 'primary.main' : 'text.primary',
+                    }}
+                  >
+                    <Clock size={16} />
+                  </IconButton>
+                </Tooltip>
+
+                {/* Time selection menu */}
+                <Menu
+                  anchorEl={timeMenuAnchorEl}
+                  open={timeMenuOpen}
+                  onClose={handleTimeMenuClose}
+                  MenuListProps={{
+                    'aria-labelledby': 'time-selector-button',
+                  }}
+                  slotProps={{
+                    paper: {
+                      sx: {
+                        width: '220px',
+                        maxHeight: '400px',
+                        overflow: 'auto',
+                        zIndex: 100000,
+                      },
+                    },
+                  }}
+                  style={{ zIndex: 100000 }}
+                  sx={{ zIndex: 100000 }}
+                >
+                  <MenuItem
+                    onClick={handleSetToNow}
+                    sx={{ fontWeight: isLatestTime ? 'bold' : 'normal' }}
+                  >
+                    Now
+                  </MenuItem>
+
+                  <Divider />
+
+                  {flowDuration && (
+                    <>
+                      <Typography
+                        variant="caption"
+                        sx={{ p: 1, display: 'block', color: 'text.secondary' }}
+                      >
+                        Flow duration: {formatDuration(flowDuration)}
+                      </Typography>
+                      <Divider />
+                    </>
+                  )}
+
+                  {/* Move custom field above quick range */}
+                  <Typography
+                    variant="caption"
+                    sx={{ p: 1, display: 'block', color: 'text.secondary' }}
+                  >
+                    Custom time range
+                  </Typography>
+
+                  <Box sx={{ p: 1, display: 'flex', alignItems: 'center' }}>
+                    <TextField
+                      size="small"
+                      value={customTimeValue}
+                      onChange={handleCustomTimeChange}
+                      onKeyPress={e => {
+                        if (e.key === 'Enter') {
+                          handleCustomTimeSubmit();
+                        }
+                      }}
+                      type="number"
+                      inputProps={{
+                        min: 1,
+                        sx: {
+                          fontSize: '0.75rem', // Make font inside custom field input smaller
+                          padding: '8px 6px',
+                        },
+                      }}
+                      sx={{ width: '80px', mr: 1 }}
+                      placeholder="Time"
+                    />
+                    <Box sx={{ display: 'flex', gap: '4px' }}>
+                      {['s', 'm', 'h', 'd'].map(unit => (
+                        <Button
+                          key={unit}
+                          size="small"
+                          variant={customTimeUnit === unit ? 'contained' : 'outlined'}
+                          onClick={() => handleCustomTimeUnitChange(unit)}
+                          sx={{
+                            minWidth: '24px',
+                            p: '2px 8px',
+                            fontSize: '0.75rem', // Make font smaller
+                          }}
+                        >
+                          {unit}
+                        </Button>
+                      ))}
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ p: 1 }}>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      fullWidth
+                      onClick={handleCustomTimeSubmit}
+                      disabled={!customTimeValue || parseInt(customTimeValue, 10) <= 0}
+                      sx={{ fontSize: '0.75rem' }} // Make font smaller
+                    >
+                      Apply
+                    </Button>
+                  </Box>
+
+                  <Divider />
+
+                  <Typography
+                    variant="caption"
+                    sx={{ p: 1, display: 'block', color: 'text.secondary' }}
+                  >
+                    Quick ranges
+                  </Typography>
+
+                  {timeRangeOptions.map(option => {
+                    const exceeds = isTimeRangeExceedingDuration(option.value);
+                    return (
+                      <MenuItem
+                        key={option.value}
+                        onClick={() => handleTimeRangeSelect(option.value)}
+                        sx={{
+                          color: exceeds ? 'text.disabled' : 'text.primary',
+                          '&:hover': {
+                            backgroundColor: exceeds ? 'transparent' : undefined,
+                          },
+                          fontSize: '0.8rem', // Make font smaller
+                        }}
+                        disabled={exceeds}
+                      >
+                        {option.label}
+                        {exceeds && (
+                          <Typography variant="caption" sx={{ ml: 1, color: 'text.disabled' }}>
+                            (exceeds duration)
+                          </Typography>
+                        )}
+                      </MenuItem>
+                    );
+                  })}
+                </Menu>
 
                 {(currentViewType === 'logical' ||
                   currentViewType === 'call_stack' ||
@@ -726,65 +1063,6 @@ const GraphPage: React.FC<GraphPageProps> = ({
             />
           </Box>
         )}
-
-        {/* Timeline slider */}
-        <Box
-          sx={{
-            position: 'absolute',
-            bottom: 20,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '40%',
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
-            zIndex: 100,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-          }}
-        >
-          <Typography
-            variant="caption"
-            sx={{ alignSelf: 'flex-end', color: isLatestTime ? 'primary.main' : 'text.secondary' }}
-          >
-            {autoRefresh
-              ? 'Live (Auto Refresh)'
-              : isLatestTime
-                ? 'Live'
-                : formatTime(currentTimestamp)}
-          </Typography>
-          <Slider
-            value={autoRefresh ? timelineRange[1] : currentTimestamp}
-            min={timelineRange[0]}
-            max={timelineRange[1]}
-            onChange={handleTimelineChange}
-            disabled={autoRefresh}
-            aria-labelledby="timeline-slider"
-            sx={{
-              width: '100%',
-              '& .MuiSlider-thumb': {
-                width: 16,
-                height: 16,
-                backgroundColor: isLatestTime ? 'primary.main' : 'grey.500',
-              },
-              '& .Mui-disabled': {
-                color: 'primary.main',
-              },
-            }}
-            valueLabelDisplay="auto"
-            valueLabelFormat={formatTime}
-          />
-          <Box sx={{ display: 'flex', width: '100%', justifyContent: 'space-between', mt: 0.5 }}>
-            <Typography variant="caption" color="text.secondary">
-              {formatTime(timelineRange[0])}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {formatTime(timelineRange[1])}
-            </Typography>
-          </Box>
-        </Box>
       </Box>
 
       <ElementsPanel
