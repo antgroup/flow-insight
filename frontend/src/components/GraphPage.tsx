@@ -11,6 +11,7 @@ import {
   Divider,
   TextField,
   InputAdornment,
+  CircularProgress,
 } from '@mui/material';
 import { Download, RefreshCw, PanelLeft, PanelRight, Bug, Clock } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -86,6 +87,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const flameVisualizationRef = useRef<FlameVisualizationHandle>(null);
   const autoRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   // State for drawer visibility
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(true);
@@ -207,56 +209,70 @@ const GraphPage: React.FC<GraphPageProps> = ({
   useEffect(() => {
     if (currentFlowId) {
       (async () => {
-        await fetchGraphData(currentFlowId, false);
-        await fetchGraphData(currentFlowId, true);
+        setInitialLoading(true);
         try {
+          await fetchGraphData(currentFlowId, false);
+          await fetchGraphData(currentFlowId, true);
           const data = await apiService.getPhysicalViewData(currentFlowId);
           setPhysicalViewData(data);
           const flameData = await apiService.getFlameGraphData(currentFlowId);
           setFlameData(flameData);
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch view data');
+        } finally {
+          setInitialLoading(false);
         }
       })();
     }
   }, [currentFlowId, fetchGraphData, apiService]);
 
   // eslint-disable-next-line
-  const fetchDatas = async (isLatestTime?: boolean, timestamp?: number) => {
-    if (currentViewType === 'call_stack') {
-      await fetchGraphData(currentFlowId, true, isLatestTime, timestamp);
-    }
-    if (currentViewType === 'logical') {
-      await fetchGraphData(currentFlowId, false, isLatestTime, timestamp);
-    }
-    if (currentViewType === 'physical') {
-      await fetchGraphData(currentFlowId, false, isLatestTime, timestamp);
-      try {
-        const data = await apiService.getPhysicalViewData(
-          currentFlowId!,
-          isLatestTime ? undefined : currentTimestamp
-        );
-        setPhysicalViewData(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch physical view data');
+  const fetchDatas = async (isLatest?: boolean, timestamp?: number) => {
+    const useLatestTime = isLatest !== undefined ? isLatest : isLatestTime;
+    const useTimestamp = timestamp !== undefined ? timestamp : currentTimestamp;
+
+    try {
+      setUpdating(true);
+
+      if (currentViewType === 'call_stack') {
+        await fetchGraphData(currentFlowId, true, useLatestTime, useTimestamp);
       }
-    }
-    if (currentViewType === 'flame' || currentViewType === 'analysis') {
-      await fetchGraphData(currentFlowId, false);
-      try {
-        const data = await apiService.getPhysicalViewData(
-          currentFlowId!,
-          isLatestTime ? undefined : currentTimestamp
-        );
-        setPhysicalViewData(data);
-        const flameData = await apiService.getFlameGraphData(
-          currentFlowId!,
-          isLatestTime ? undefined : currentTimestamp
-        );
-        setFlameData(flameData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch view data');
+      if (currentViewType === 'logical') {
+        await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
       }
+      if (currentViewType === 'physical') {
+        await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
+        try {
+          const data = await apiService.getPhysicalViewData(
+            currentFlowId!,
+            useLatestTime ? undefined : useTimestamp
+          );
+          setPhysicalViewData(data);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch physical view data');
+        }
+      }
+      if (currentViewType === 'flame' || currentViewType === 'analysis') {
+        await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
+        try {
+          const data = await apiService.getPhysicalViewData(
+            currentFlowId!,
+            useLatestTime ? undefined : useTimestamp
+          );
+          setPhysicalViewData(data);
+          const flameData = await apiService.getFlameGraphData(
+            currentFlowId!,
+            useLatestTime ? undefined : useTimestamp
+          );
+          setFlameData(flameData);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch view data');
+        }
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to fetch data');
+    } finally {
+      setUpdating(false);
     }
   };
   // Auto-refresh effect for call stack view
@@ -293,15 +309,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
   }, []);
 
   const handleUpdate = useCallback(async () => {
-    setUpdating(true);
-
     // Always get latest data and update timeline when manually updating
     const now = Date.now();
     setCurrentTimestamp(now);
     setIsLatestTime(true);
 
     await fetchDatas(true);
-    setUpdating(false);
   }, [fetchDatas]);
 
   const handleSearchChange = useCallback((term: string) => {
@@ -309,10 +322,14 @@ const GraphPage: React.FC<GraphPageProps> = ({
   }, []);
 
   const handleViewTypeChange = useCallback(
-    (viewType: 'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis') => {
+    async (viewType: 'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis') => {
+      // First change to the new view type
       setCurrentViewType(viewType);
+
+      // Then fetch data for this view type with the current time settings
+      await fetchDatas(isLatestTime, currentTimestamp);
     },
-    []
+    [fetchDatas, isLatestTime, currentTimestamp]
   );
 
   // Handle time menu open
@@ -534,6 +551,16 @@ const GraphPage: React.FC<GraphPageProps> = ({
     return <Box color="error.main">Error: {error}</Box>;
   }
 
+  if (initialLoading) {
+    return (
+      <Box
+        sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
@@ -571,7 +598,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 value={currentViewType}
                 exclusive
                 onChange={(event, value) => {
-                  if (value !== null) {
+                  if (value !== null && !updating) {
                     handleViewTypeChange(value);
                   }
                 }}
@@ -587,19 +614,19 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   },
                 }}
               >
-                <ToggleButton value="logical" aria-label="logical view">
+                <ToggleButton value="logical" aria-label="logical view" disabled={updating}>
                   Logical
                 </ToggleButton>
-                <ToggleButton value="physical" aria-label="physical view">
+                <ToggleButton value="physical" aria-label="physical view" disabled={updating}>
                   Physical
                 </ToggleButton>
-                <ToggleButton value="call_stack" aria-label="call stack view">
+                <ToggleButton value="call_stack" aria-label="call stack view" disabled={updating}>
                   Call Stack
                 </ToggleButton>
-                <ToggleButton value="flame" aria-label="flame graph view">
+                <ToggleButton value="flame" aria-label="flame graph view" disabled={updating}>
                   Flame Graph
                 </ToggleButton>
-                <ToggleButton value="analysis" aria-label="analysis view">
+                <ToggleButton value="analysis" aria-label="analysis view" disabled={updating}>
                   Analysis
                 </ToggleButton>
               </ToggleButtonGroup>
@@ -977,57 +1004,95 @@ const GraphPage: React.FC<GraphPageProps> = ({
           </div>
         </div>
 
-        {graphData && currentViewType === 'logical' && (
-          <Visualization
-            ref={visualizationRef}
-            // eslint-disable-next-line
-            graphData={graphData!}
-            physicalViewData={physicalViewData}
-            flameData={flameData}
-            viewType={currentViewType}
-            onElementClick={handleElementClick}
-            showInfoCard={false}
-            selectedElementId={selectedElementId}
-            flowId={currentFlowId}
-            searchTerm={searchTerm}
-            autoRefresh={autoRefresh}
-            setViewType={setCurrentViewType}
-            apiService={apiService}
-            currentTimestamp={currentTimestamp}
-          />
-        )}
-        {currentViewType === 'call_stack' && (
-          <Visualization
-            ref={visualizationRef}
-            // eslint-disable-next-line
-            graphData={stackGraphData!}
-            physicalViewData={physicalViewData}
-            flameData={flameData}
-            viewType={currentViewType}
-            onElementClick={handleElementClick}
-            showInfoCard={false}
-            selectedElementId={selectedElementId}
-            flowId={currentFlowId}
-            searchTerm={searchTerm}
-            autoRefresh={autoRefresh}
-            setViewType={setCurrentViewType}
-            apiService={apiService}
-            currentTimestamp={currentTimestamp}
-          />
-        )}
-        {graphData && currentViewType === 'physical' && (
-          <PhysicalVisualization
-            ref={physicalVisualizationRef}
-            // eslint-disable-next-line
-            physicalViewData={physicalViewData!}
-            onElementClick={handleElementClick}
-            selectedElementId={selectedElementId}
-            flowId={currentFlowId}
-            onUpdate={handleUpdate}
-            updating={false}
-            searchTerm={searchTerm}
-          />
-        )}
+        {graphData &&
+          currentViewType === 'logical' &&
+          (updating ? (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                height: '100%',
+              }}
+            >
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Visualization
+              ref={visualizationRef}
+              // eslint-disable-next-line
+              graphData={graphData!}
+              physicalViewData={physicalViewData}
+              flameData={flameData}
+              viewType={currentViewType}
+              onElementClick={handleElementClick}
+              showInfoCard={false}
+              selectedElementId={selectedElementId}
+              flowId={currentFlowId}
+              searchTerm={searchTerm}
+              autoRefresh={autoRefresh}
+              setViewType={setCurrentViewType}
+              apiService={apiService}
+              currentTimestamp={currentTimestamp}
+            />
+          ))}
+        {currentViewType === 'call_stack' &&
+          (updating ? (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                height: '100%',
+              }}
+            >
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Visualization
+              ref={visualizationRef}
+              // eslint-disable-next-line
+              graphData={stackGraphData!}
+              physicalViewData={physicalViewData}
+              flameData={flameData}
+              viewType={currentViewType}
+              onElementClick={handleElementClick}
+              showInfoCard={false}
+              selectedElementId={selectedElementId}
+              flowId={currentFlowId}
+              searchTerm={searchTerm}
+              autoRefresh={autoRefresh}
+              setViewType={setCurrentViewType}
+              apiService={apiService}
+              currentTimestamp={currentTimestamp}
+            />
+          ))}
+        {graphData &&
+          currentViewType === 'physical' &&
+          (updating ? (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                height: '100%',
+              }}
+            >
+              <CircularProgress />
+            </Box>
+          ) : (
+            <PhysicalVisualization
+              ref={physicalVisualizationRef}
+              // eslint-disable-next-line
+              physicalViewData={physicalViewData!}
+              onElementClick={handleElementClick}
+              selectedElementId={selectedElementId}
+              flowId={currentFlowId}
+              onUpdate={handleUpdate}
+              updating={updating}
+              searchTerm={searchTerm}
+            />
+          ))}
         {flameData && currentViewType === 'flame' && (
           <div
             style={{
@@ -1037,7 +1102,18 @@ const GraphPage: React.FC<GraphPageProps> = ({
               height: '600px',
             }}
           >
-            {flameData ? (
+            {updating ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%',
+                }}
+              >
+                <CircularProgress />
+              </Box>
+            ) : flameData ? (
               <FlameVisualization
                 ref={flameVisualizationRef}
                 flameData={flameData}
@@ -1045,7 +1121,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 selectedElementId={selectedElementId}
                 flowId={currentFlowId}
                 onUpdate={handleUpdate}
-                updating={false}
+                updating={updating}
                 searchTerm={searchTerm}
                 // eslint-disable-next-line
                 graphData={graphData!}
@@ -1061,13 +1137,28 @@ const GraphPage: React.FC<GraphPageProps> = ({
         )}
         {currentViewType === 'analysis' && (
           <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
-            <InsightPanel
-              flowId={currentFlowId}
-              graphData={graphData}
-              physicalViewData={physicalViewData}
-              flameData={flameData}
-              apiService={apiService}
-            />
+            {updating ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%',
+                }}
+              >
+                <CircularProgress />
+              </Box>
+            ) : (
+              <InsightPanel
+                flowId={currentFlowId}
+                graphData={graphData}
+                physicalViewData={physicalViewData}
+                flameData={flameData}
+                apiService={apiService}
+                isLatestTime={isLatestTime}
+                timestamp={currentTimestamp}
+              />
+            )}
           </Box>
         )}
       </Box>

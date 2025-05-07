@@ -59,7 +59,7 @@ const FlowInsight: React.FC<FlowInsightProps> = ({ baseUrl, flowId, authToken })
     <ThemeProvider theme={defaultTheme}>
       <CssBaseline />
       <Box sx={{ height: '100%', width: '100%' }}>
-        <GraphPage flowId={flowId} apiService={apiService!} />
+        {apiService && <GraphPage flowId={flowId} apiService={apiService} />}
       </Box>
     </ThemeProvider>
   );

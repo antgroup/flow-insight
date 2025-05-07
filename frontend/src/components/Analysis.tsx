@@ -30,6 +30,8 @@ type InsightPanelProps = {
   physicalViewData: any;
   flameData: any;
   apiService: ApiService;
+  isLatestTime?: boolean;
+  timestamp?: number;
 };
 
 // Custom markdown components for better rendering
@@ -196,6 +198,8 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
   physicalViewData,
   flameData,
   apiService,
+  isLatestTime,
+  timestamp,
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -312,7 +316,35 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         `
         : prompt;
 
-      // 2. Prepare all data with readable timestamps and names
+      // 2. Fetch updated data with timestamp if provided
+      let currentGraphData = graphData;
+      let currentPhysicalData = physicalViewData;
+      let currentFlameData = flameData;
+
+      // If timestamp is provided and we're not looking at latest time, fetch data for that specific timestamp
+      if (!isLatestTime && timestamp) {
+        try {
+          const fetchedGraphData = await apiService.getGraphData(flowId, false, timestamp);
+          if (fetchedGraphData) {
+            currentGraphData = fetchedGraphData;
+          }
+
+          const fetchedPhysicalData = await apiService.getPhysicalViewData(flowId, timestamp);
+          if (fetchedPhysicalData) {
+            currentPhysicalData = fetchedPhysicalData;
+          }
+
+          const fetchedFlameData = await apiService.getFlameGraphData(flowId, timestamp);
+          if (fetchedFlameData) {
+            currentFlameData = fetchedFlameData;
+          }
+        } catch (err) {
+          console.error('Error fetching data for timestamp:', err);
+          // Continue with existing data if fetch fails
+        }
+      }
+
+      // 3. Prepare all data with readable timestamps and names
       const prepareData = (data: any) => {
         if (!data) {
           return null;
@@ -321,18 +353,18 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         return apiService.replaceIdsWithNames(dataWithReadableTime);
       };
 
-      const preparedGraphData = prepareData(graphData);
-      const preparedPhysicalData = prepareData(physicalViewData);
-      const preparedFlameData = prepareData(flameData);
+      const preparedGraphData = prepareData(currentGraphData);
+      const preparedPhysicalData = prepareData(currentPhysicalData);
+      const preparedFlameData = prepareData(currentFlameData);
 
-      // 3. Combine all available data into a single object
+      // 4. Combine all available data into a single object
       const combinedData = {
         graphData: preparedGraphData,
         physicalViewData: preparedPhysicalData,
         flameData: preparedFlameData,
       };
 
-      // 4. Chunk the combined data using the user-defined context length
+      // 5. Chunk the combined data using the user-defined context length
       const dataChunks = chunkData(
         combinedData,
         apiService,
@@ -348,7 +380,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
       // Count tokens in the prompt to ensure it doesn't exceed limits
       const promptTokens = apiService.countTokens(promptWithLanguage, modelToUse);
 
-      // 5. Generate reports for each chunk concurrently
+      // 6. Generate reports for each chunk concurrently
       const chunkPrompts = dataChunks.map((chunk, index) => {
         return `${promptWithLanguage}\n\nChunk ${index + 1} of ${dataChunks.length}:\n${chunk}`;
       });
