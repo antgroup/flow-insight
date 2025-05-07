@@ -24,17 +24,16 @@ from flow_insight.storage.snapshot.model import (
 
 
 class SnapshotStorage:
-    def __init__(self, session_id: str, storage_backend: StorageType):
+    def __init__(self, storage_backend: StorageType):
         super().__init__()
         if storage_backend == StorageType.MEMORY:
-            self._storage = MemoryStorageBackend(session_id)
+            self._storage = MemoryStorageBackend()
         else:
             raise ValueError(f"Unsupported storage backend: {storage_backend}")
-        self._session_id = session_id
-        self._storage_backend = storage_backend
         self._storage["call_graph"] = defaultdict(
             lambda: defaultdict(lambda: {"count": 0, "start_time": 0})
         )
+        self._storage_backend = storage_backend
         self._storage["services"] = defaultdict(set)
         self._storage["methods"] = defaultdict(lambda: defaultdict(set))
         self._storage["functions"] = defaultdict(set)
@@ -44,7 +43,6 @@ class SnapshotStorage:
         self._storage["flow_record"] = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
         self._storage["start_time_record"] = defaultdict(lambda: defaultdict(dict))
         self._storage["debugger_info"] = defaultdict(lambda: defaultdict(dict))
-        self._storage["debug_sessions"] = defaultdict(dict)
         self._storage["breakpoints"] = defaultdict(lambda: defaultdict(list))
         self._storage["data_flows"] = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
         self._storage["object_events"] = defaultdict(lambda: defaultdict())
@@ -71,7 +69,7 @@ class SnapshotStorage:
     def restore_snapshots(self):
         snapshots = {}
         for label, snapshot in self._storage.restore_snapshots().items():
-            snapshot_storage = SnapshotStorage(self._session_id, self._storage_backend)
+            snapshot_storage = SnapshotStorage(self._storage_backend)
             snapshot_storage._storage = snapshot
             snapshots[label] = snapshot_storage
         return snapshots
@@ -80,7 +78,7 @@ class SnapshotStorage:
         self._storage.store_snapshot(label)
 
     def take_snapshot(self):
-        snapshot = SnapshotStorage(self._session_id, self._storage_backend)
+        snapshot = SnapshotStorage(self._storage_backend)
         snapshot._storage = self._storage.take_snapshot()
         return snapshot
 

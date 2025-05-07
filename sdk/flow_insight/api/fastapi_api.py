@@ -9,6 +9,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from flow_insight.api.base import APIInterface
 from flow_insight.engine import Breakpoint, DebugCommand, InsightEngine
+from flow_insight.storage.persist.base import StorageType as PersistStorageType
 from flow_insight.storage.persist.model import (
     BatchNodePhysicalStatsEvent,
     BatchServicePhysicalStatsEvent,
@@ -51,12 +52,14 @@ def rest_response(result: bool, msg: str, **kwargs) -> Dict[str, Any]:
 class FastAPIInsightServer(APIInterface):
     def __init__(
         self,
-        storage_type: StorageType = StorageType.MEMORY,
+        snapshot_storage_type: StorageType = StorageType.MEMORY,
+        persist_storage_type: PersistStorageType = PersistStorageType.DISK,
         persist_storage_config: dict = None,
-        session_id: str = "",
     ):
         super().__init__()
-        self.engine = InsightEngine(storage_type, persist_storage_config, session_id)
+        self.engine = InsightEngine(
+            snapshot_storage_type, persist_storage_type, persist_storage_config
+        )
         self.app = FastAPI(title="Flow Insight API")
         self._setup_routes()
 
@@ -289,9 +292,7 @@ class FastAPIInsightServer(APIInterface):
         end_time = data.get("end_time", None)
 
         try:
-            snapshot = None
-            if end_time is not None:
-                snapshot = await self.engine.replay(flow_id, int(end_time))
+            snapshot = await self.engine.replay(flow_id, end_time)
             graph_data = await self.engine.get_call_graph_data(flow_id, stack_mode, snapshot)
             return JSONResponse(
                 rest_response(
@@ -313,9 +314,7 @@ class FastAPIInsightServer(APIInterface):
         end_time = data.get("end_time", None)
 
         try:
-            snapshot = None
-            if end_time is not None:
-                snapshot = await self.engine.replay(flow_id, int(end_time))
+            snapshot = await self.engine.replay(flow_id, end_time)
             flame_data = await self.engine.get_flame_graph_data(flow_id, snapshot)
             return JSONResponse(
                 rest_response(
@@ -336,9 +335,7 @@ class FastAPIInsightServer(APIInterface):
         flow_id = data.get("flow_id", "")
         end_time = data.get("end_time", None)
 
-        snapshot = None
-        if end_time is not None:
-            snapshot = await self.engine.replay(flow_id, int(end_time))
+        snapshot = await self.engine.replay(flow_id, end_time)
         physical_view_data = await self.engine.get_physical_view_data(flow_id, snapshot)
         return JSONResponse(
             rest_response(
@@ -355,9 +352,7 @@ class FastAPIInsightServer(APIInterface):
         end_time = data.get("end_time", None)
 
         try:
-            snapshot = None
-            if end_time is not None:
-                snapshot = await self.engine.replay(flow_id, int(end_time))
+            snapshot = await self.engine.replay(flow_id, end_time)
             context = await self.engine.get_context(flow_id, snapshot)
             return JSONResponse(
                 rest_response(
@@ -379,9 +374,7 @@ class FastAPIInsightServer(APIInterface):
         end_time = data.get("end_time", None)
 
         try:
-            snapshot = None
-            if end_time is not None:
-                snapshot = await self.engine.replay(flow_id, int(end_time))
+            snapshot = await self.engine.replay(flow_id, end_time)
             resource_usage = await self.engine.get_resource_usage(flow_id, snapshot)
             return JSONResponse(
                 rest_response(

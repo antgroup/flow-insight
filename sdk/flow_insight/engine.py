@@ -1,6 +1,7 @@
 import asyncio
-from collections import defaultdict
 import math
+import time
+from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from flow_insight.dap.client import DAPClient
@@ -47,12 +48,19 @@ from flow_insight.storage.snapshot.model import (
 )
 from flow_insight.storage.snapshot.snapshot import SnapshotStorage
 
+
 class InsightEngine:
-    def __init__(self, storage_type: StorageType, persist_storage_config: dict, session_id: str):
-        self._persist_storage = PersistStorage(session_id, PersistStorageType.DISK, persist_storage_config)
+    def __init__(
+        self,
+        snapshot_storage_type: StorageType,
+        persist_storage_type: PersistStorageType,
+        persist_storage_config: dict,
+    ):
+        self._persist_storage = PersistStorage(persist_storage_type, persist_storage_config)
+        self._persist_storage_type = persist_storage_type
+        self._snapshot_storage_type = snapshot_storage_type
         self._debug_sessions = defaultdict(dict)
-        self._snapshots = {"latest": SnapshotStorage(session_id, storage_type)}
-        self._session_id = session_id
+        self._snapshots = {"latest": SnapshotStorage(snapshot_storage_type)}
         self._recover_task_done = False
         self._recover_lock = asyncio.Lock()
 
@@ -294,7 +302,9 @@ class InsightEngine:
 
         return graph_data
 
-    async def filter_call_graph_data(self, flow_id, call_graph, snapshot: Optional[SnapshotStorage] = None):
+    async def filter_call_graph_data(
+        self, flow_id, call_graph, snapshot: Optional[SnapshotStorage] = None
+    ):
         if snapshot is None:
             snapshot = self._snapshots["latest"]
         target_edges = defaultdict(set)
@@ -378,17 +388,27 @@ class InsightEngine:
 
         print(f"Recovered {len(latest_snapshot.restore_snapshots())} snapshots")
 
-    async def replay(self, flow_id: str, end_time: int):
+    async def replay(self, flow_id: str, end_time: Optional[str] = None):
+        if end_time is None and self._persist_storage_type == PersistStorageType.INFLUXDB:
+            end_time = int(time.time() * 1000)
+        elif end_time is None:
+            return None
+        end_time = int(end_time)
         creation_time = await self._persist_storage.get_flow_creation_time(flow_id)
         if creation_time == -1:
             return None
 
         if end_time < creation_time:
-            return SnapshotStorage(self._session_id, StorageType.MEMORY)
+            return SnapshotStorage(self._snapshot_storage_type)
 
         latest_snapshot = None
         latest_timestamp = -1
-        keys = sorted(map(lambda x: math.inf if x == "latest" else int(x.split(":")[-1]), filter(lambda x: x.startswith(flow_id), self._snapshots.keys())))
+        keys = sorted(
+            map(
+                lambda x: math.inf if x == "latest" else int(x.split(":")[-1]),
+                filter(lambda x: x.startswith(flow_id), self._snapshots.keys()),
+            )
+        )
         for key in keys:
             if key <= end_time:
                 latest_timestamp = key
@@ -396,12 +416,14 @@ class InsightEngine:
                 break
 
         if latest_timestamp == -1:
-            latest_snapshot = SnapshotStorage(self._session_id, StorageType.MEMORY)
+            latest_snapshot = SnapshotStorage(self._snapshot_storage_type)
         else:
             latest_snapshot = self._snapshots[f"{flow_id}:{str(latest_timestamp)}"].take_snapshot()
 
         events = await self._persist_storage.query_events(flow_id, latest_timestamp, end_time)
-        events.extend(await self._persist_storage.query_events(internal_flow_id, latest_timestamp, end_time))
+        events.extend(
+            await self._persist_storage.query_events(internal_flow_id, latest_timestamp, end_time)
+        )
 
         await self._do_replay(events, latest_snapshot)
 
@@ -437,7 +459,6 @@ class InsightEngine:
                 await self.emit_prompt(event, snapshot)
             else:
                 raise ValueError(f"Unknown event type: {type(event)}")
-
 
     async def emit_call_submit(
         self, call_submit: CallSubmitEvent, snapshot: Optional[SnapshotStorage] = None
@@ -599,12 +620,12 @@ class InsightEngine:
         resource_usage = ResourceUsage(service=service, method=method, usage=resource_usage.usage)
         await snapshot.add_resource_usage(flow_id, resource_usage)
 
-    async def get_resource_usage(self, flow_id, snapshot: SnapshotStorage = None):
+    async def get_resource_usage(self, flow_id, snapshot: Optional[SnapshotStorage] = None):
         if snapshot is None:
             snapshot = self._snapshots["latest"]
         return await snapshot.get_resource_usage(flow_id)
 
-    async def get_flame_graph_data(self, flow_id, snapshot: SnapshotStorage = None):
+    async def get_flame_graph_data(self, flow_id, snapshot: Optional[SnapshotStorage] = None):
         if snapshot is None:
             snapshot = self._snapshots["latest"]
         flame_data = FlameGraphData(aggregated=[], parent_start_times=[])

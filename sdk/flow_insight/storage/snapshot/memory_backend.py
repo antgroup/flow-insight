@@ -4,8 +4,7 @@ from flow_insight.storage.snapshot.base import SnapshotStorageBackend
 
 
 class MemoryStorageBackend(SnapshotStorageBackend):
-    def __init__(self, session_id: str):
-        self._session_id = session_id
+    def __init__(self):
         self._data = {}
         self._snapshots = {}
 
@@ -19,7 +18,7 @@ class MemoryStorageBackend(SnapshotStorageBackend):
         del self._data[key]
 
     def take_snapshot(self):
-        snapshot = MemoryStorageBackend(self._session_id)
+        snapshot = MemoryStorageBackend()
         snapshot._data = dill.loads(dill.dumps(self._data))
         return snapshot
 
@@ -29,8 +28,7 @@ class MemoryStorageBackend(SnapshotStorageBackend):
     def restore_snapshots(self):
         ret = {}
         for label, data in self._snapshots.items():
-            snapshot = MemoryStorageBackend(self._session_id)
+            snapshot = MemoryStorageBackend()
             snapshot._data = dill.loads(dill.dumps(data))
             ret[label] = snapshot
         return ret
-

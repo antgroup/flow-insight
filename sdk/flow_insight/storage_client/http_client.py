@@ -23,14 +23,14 @@ class HTTPStorageClient(StorageClient):
 
         response.raise_for_status()
         return response.json() if response.content else None
-    
+
     async def async_ping(self):
         try:
-            res =  await self._async_request_server(endpoint="ping", method="GET")
+            res = await self._async_request_server(endpoint="ping", method="GET")
             if res is not None:
                 return res
             return {"result": False}
-        except Exception as e:
+        except Exception:
             return {"result": False}
 
     def sync_ping(self):
@@ -39,7 +39,7 @@ class HTTPStorageClient(StorageClient):
             if res is not None:
                 return res
             return {"result": False}
-        except Exception as e:
+        except Exception:
             return {"result": False}
 
     def _sync_request_server(self, endpoint: str, data: dict = None, method: str = "POST"):

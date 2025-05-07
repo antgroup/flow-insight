@@ -1,4 +1,6 @@
 import asyncio
+import sys
+from typing import Optional
 import logging
 import random
 import time
@@ -459,9 +461,12 @@ async def emit_demo_events(client):
         service_stats_task.cancel()
         prompt_task.cancel()
 
-async def setup_and_run_server():
+async def setup_and_run_server(opentsdb_url: Optional[str] = None):
     # Create the FastAPI server
-    server = FastAPIInsightServer(storage_type=SnapshotStorageType.MEMORY, persist_storage_config={"storage_dir": ".flow_insight/events"})
+    if opentsdb_url is not None:
+        server = FastAPIInsightServer(snapshot_storage_type=SnapshotStorageType.MEMORY, persist_storage_type=PersistStorageType.INFLUXDB, persist_storage_config={"server_url": opentsdb_url, "username": "nodered", "password": "nodered"})
+    else:
+        server = FastAPIInsightServer(snapshot_storage_type=SnapshotStorageType.MEMORY, persist_storage_type=PersistStorageType.DISK, persist_storage_config={"storage_dir": ".flow_insight/events"})
     
     # Mount the frontend static files
     frontend_dir = Path(__file__).parent.parent / "frontend" / "example" / "dist"
@@ -480,7 +485,10 @@ async def setup_and_run_server():
     )
     
     # Create a client to emit events
-    client = InsightClient(f"http://localhost:{PORT}", PersistStorageType.MEMORY)
+    if opentsdb_url is not None:
+        client = InsightClient(opentsdb_url, PersistStorageType.INFLUXDB, {"username": "nodered", "password": "nodered"})
+    else:
+        client = InsightClient(f"http://localhost:{PORT}", PersistStorageType.DISK)
     
     # Start emitting events in the background
     emit_task = None
@@ -503,7 +511,7 @@ async def setup_and_run_server():
 if __name__ == "__main__":
     print(f"Starting Flow Insight demo server at http://{HOST}:{PORT}")
     try:
-        asyncio.run(setup_and_run_server())
+        asyncio.run(setup_and_run_server(sys.argv[1] if len(sys.argv) > 1 else None))
     except Exception as e:
         logger.error(f"Fatal exception: {str(e)}")
         logger.error(traceback.format_exc()) 

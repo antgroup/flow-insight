@@ -2,13 +2,16 @@ from typing import Any, List
 
 from flow_insight.storage.persist.base import StorageType
 from flow_insight.storage.persist.disk_backend import DiskPersistStorageBackend
+from flow_insight.storage.persist.influxdb_backend import InfluxDBStorageBackend
 
 
 class PersistStorage:
-    def __init__(self, session_id: str, storage_type: StorageType, storage_config: dict):
+    def __init__(self, storage_type: StorageType, storage_config: dict):
         self._start_up = False
         if storage_type == StorageType.DISK:
-            self.backend = DiskPersistStorageBackend(session_id, **storage_config)
+            self.backend = DiskPersistStorageBackend(**storage_config)
+        elif storage_type == StorageType.INFLUXDB:
+            self.backend = InfluxDBStorageBackend(**storage_config)
         else:
             raise ValueError(f"Unsupported storage type: {storage_type}")
 

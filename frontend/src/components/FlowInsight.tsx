@@ -1,14 +1,8 @@
-import {
-  Box,
-  CssBaseline,
-  ThemeProvider,
-  createTheme,
-  Typography,
-} from '@mui/material';
+import { Box, CssBaseline, ThemeProvider, createTheme, Typography } from '@mui/material';
 import React, { useEffect, useState } from 'react';
 
-import { ApiService } from '../services/api';
 import GraphPage from './GraphPage';
+import { ApiService } from '../services/api';
 
 // Define the props interface
 type FlowInsightProps = {
@@ -38,11 +32,7 @@ const defaultTheme = createTheme({
  * Main entry point for the Flow Insight library. This component wraps the ServiceGraph
  * component and handles the connection to the backend.
  */
-const FlowInsight: React.FC<FlowInsightProps> = ({
-  baseUrl,
-  flowId,
-  authToken,
-}) => {
+const FlowInsight: React.FC<FlowInsightProps> = ({ baseUrl, flowId, authToken }) => {
   const [apiService, setApiService] = useState<ApiService | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,10 +59,7 @@ const FlowInsight: React.FC<FlowInsightProps> = ({
     <ThemeProvider theme={defaultTheme}>
       <CssBaseline />
       <Box sx={{ height: '100%', width: '100%' }}>
-        <GraphPage
-          flowId={flowId}
-          apiService={apiService!}
-        />
+        <GraphPage flowId={flowId} apiService={apiService!} />
       </Box>
     </ThemeProvider>
   );
