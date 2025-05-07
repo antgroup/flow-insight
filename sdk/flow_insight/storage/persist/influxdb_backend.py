@@ -199,6 +199,7 @@ class InfluxDBStorageBackend(StorageBackend):
                 "flow_insight.resource.available",
             ],
             RecordType.PROMPT_REGISTER: ["flow_insight.prompt"],
+            RecordType.DRIVER_INFO_ADD: ["flow_insight.driver"],
         }
         start_time_ns = start_time * 1_000_000  # Convert ms to ns
         end_time_ns = end_time * 1_000_000  # Convert ms to ns
@@ -412,6 +413,8 @@ class InfluxDBStorageBackend(StorageBackend):
                 "debugger_host": result["debugger_host"],
                 "debugger_port": int(result["debugger_port"]),
                 "debugger_enabled": result["debugger_enabled"].lower() == "true",
+                "source_dir": result["source_dir"],
+                "trim_level": int(result["trim_level"]),
                 "timestamp": result["time"] // 1_000_000,
             }
         elif record_type == RecordType.SERVICE_PHYSICAL_STATS_ADD:
@@ -601,6 +604,13 @@ class InfluxDBStorageBackend(StorageBackend):
             return {
                 "flow_id": result["flow_id"],
                 "prompt": base64.b64decode(result["prompt"].encode()),
+                "timestamp": result["time"] // 1_000_000,
+            }
+        elif record_type == RecordType.DRIVER_INFO_ADD:
+            result = results[0]
+            return {
+                "flow_id": result["flow_id"],
+                "driver_ip": result["driver_ip"],
                 "timestamp": result["time"] // 1_000_000,
             }
         else:

@@ -679,10 +679,17 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 )}
 
                 {/* Time selector button - moved to align with IDE button group */}
-                <Tooltip title="Select time range">
+                <Tooltip
+                  title={
+                    autoRefresh
+                      ? 'Time selection disabled during auto refresh'
+                      : 'Select time range'
+                  }
+                >
                   <IconButton
                     onClick={handleTimeMenuClick}
                     size="small"
+                    disabled={autoRefresh}
                     sx={{
                       backgroundColor: 'white',
                       boxShadow: 1,

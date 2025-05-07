@@ -101,6 +101,7 @@ class RecordType(Enum):
     SERVICE_PHYSICAL_STATS_ADD = "service_physical_stats_add"
     NODE_PHYSICAL_STATS_ADD = "node_physical_stats_add"
     PROMPT_REGISTER = "prompt_register"
+    DRIVER_INFO_ADD = "driver_info_add"
 
 
 class CallSubmitEvent(pydantic.BaseModel):
@@ -182,6 +183,8 @@ class DebuggerInfoEvent(pydantic.BaseModel):
     debugger_host: str
     debugger_port: int
     debugger_enabled: bool
+    source_dir: str
+    trim_level: int
     timestamp: int
 
 

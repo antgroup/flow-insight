@@ -48,6 +48,8 @@ class DebuggerInfo(pydantic.BaseModel):
     debugger_host: str
     debugger_port: int
     debugger_enabled: bool
+    source_dir: str
+    trim_level: int
 
 
 class CallerInfo(pydantic.BaseModel):
@@ -66,6 +68,8 @@ class DebugSession(pydantic.BaseModel):
     service: Optional[Service] = None
     method: Method
     span_id: str
+    source_dir: str
+    trim_level: int
 
 
 class DebugCommand(Enum):

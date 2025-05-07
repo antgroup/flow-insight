@@ -318,6 +318,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
   const [activeSessions, setActiveSessions] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [selectedSourceDir, setSelectedSourceDir] = useState<string | null>(null);
+  const [selectedTrimLevel, setSelectedTrimLevel] = useState<number | null>(null);
   const [threads, setThreads] = useState<any[]>([]);
   const [selectedThread, setSelectedThread] = useState<number | null>(null);
   const [stackFrames, setStackFrames] = useState<any[]>([]);
@@ -359,13 +361,28 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
       selectedSession &&
       selectedThread &&
       selectedFrame &&
-      selectedSourceFile
+      selectedSourceFile &&
+      selectedSourceDir &&
+      selectedTrimLevel
     ) {
       setLoading(true);
-      checkDebugSessionPaused(selectedSession, processCmdType);
+      checkDebugSessionPaused(
+        selectedSession,
+        processCmdType,
+        selectedSourceDir,
+        selectedTrimLevel
+      );
     }
     // eslint-disable-next-line
-  }, [processCmdType, selectedSession, selectedThread, selectedFrame, selectedSourceFile]);
+  }, [
+    processCmdType,
+    selectedSession,
+    selectedThread,
+    selectedFrame,
+    selectedSourceFile,
+    selectedSourceDir,
+    selectedTrimLevel,
+  ]);
 
   // Fetch debug sessions when a node is selected
   // eslint-disable-next-line
@@ -431,6 +448,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
         );
         if (!currentActiveSessions) {
           setSelectedSession(null);
+          setSelectedSourceDir(null);
+          setSelectedTrimLevel(null);
           setThreads([]);
           setStackFrames([]);
           setSelectedThread(null);
@@ -442,7 +461,12 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
     }
   };
 
-  const checkDebugSessionPaused = async (session: string, processCmdType: string) => {
+  const checkDebugSessionPaused = async (
+    session: string,
+    processCmdType: string,
+    sourceDir: string,
+    trimLevel: number
+  ) => {
     if (pollInterval) {
       clearInterval(pollInterval);
     }
@@ -480,7 +504,9 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
                 session,
                 selectedThread,
                 isStep ? frames[0].id : selectedFrame,
-                isStep ? frames[0].source : selectedSourceFile
+                isStep ? frames[0].source : selectedSourceFile,
+                sourceDir,
+                trimLevel
               );
             }
             if (isStep) {
@@ -539,6 +565,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
 
       await fetchActiveDebugSessions();
       setSelectedSession(session.spanId);
+      setSelectedSourceDir(session.sourceDir);
+      setSelectedTrimLevel(session.trimLevel);
 
       const threadIds = await fetchThreads(session.spanId);
       // Try to pause the execution
@@ -552,6 +580,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
       setIsInitializing(false);
       setTimeout(async () => {
         setSelectedSession(session.spanId);
+        setSelectedSourceDir(session.sourceDir);
+        setSelectedTrimLevel(session.trimLevel);
         if (threadIds) {
           await fetchStackTrace(session.spanId, threadIds[0]);
         }
@@ -583,6 +613,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
 
       if (selectedSession === spanId) {
         setSelectedSession(null);
+        setSelectedSourceDir(null);
+        setSelectedTrimLevel(null);
         setThreads([]);
         setStackFrames([]);
         setSelectedThread(null);
@@ -640,6 +672,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
       // Clear session data if this was the selected session
       if (selectedSession === spanId) {
         setSelectedSession(null);
+        setSelectedSourceDir(null);
+        setSelectedTrimLevel(null);
         setThreads([]);
         setStackFrames([]);
         setSelectedThread(null);
@@ -657,17 +691,24 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
     spanId: string,
     threadId: number,
     frameId: number,
-    source: any
+    source: any,
+    sourceDir: string,
+    trimLevel: number
   ): Promise<string | null> => {
     if (!flowId || !source) {
       return null;
     }
+    if (source.path[0] === '/') {
+      source.path = source.path.slice(1);
+    }
+    const relativePath = source.path.split('/').slice(trimLevel).join('/');
+    const sourcePath = sourceDir + '/' + relativePath;
 
     setLoadingSourceCode(true);
     try {
       // 1. Open the file
       const openResponse = await apiService.sendDebugCommand(flowId, spanId, 'evaluate', {
-        expression: `_f_visual_debug_var_ = open("${source.path}")`,
+        expression: `_f_visual_debug_var_ = open("${sourcePath}")`,
         thread_id: threadId,
         frame_id: frameId,
       });
@@ -1257,6 +1298,8 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
                               onClick={async () => {
                                 if (activeSessions.includes(session.spanId) && !isInitializing) {
                                   setSelectedSession(session.spanId);
+                                  setSelectedSourceDir(session.sourceDir);
+                                  setSelectedTrimLevel(session.trimLevel);
 
                                   const threadIds = await fetchThreads(session.spanId);
                                   if (threadIds) {

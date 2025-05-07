@@ -289,6 +289,8 @@ class InfluxDBStorageClient(StorageClient):
             self._add_tag_if_present(tags, record_dict, "debugger_host")
             self._add_tag_if_present(tags, record_dict, "debugger_port")
             self._add_tag_if_present(tags, record_dict, "debugger_enabled")
+            self._add_tag_if_present(tags, record_dict, "source_dir")
+            self._add_tag_if_present(tags, record_dict, "trim_level")
 
             fields = {"count": 1}
 

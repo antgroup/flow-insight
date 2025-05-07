@@ -538,6 +538,8 @@ export class ApiService {
       serviceInfo: session.service ? [session.service.serviceName, session.service.instanceId] : [],
       funcName: session.method.name,
       spanId: session.spanId,
+      sourceDir: session.sourceDir,
+      trimLevel: session.trimLevel,
     }));
   }
 

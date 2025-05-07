@@ -85,6 +85,8 @@ export type DebugSession = {
   serviceInfo: string[];
   funcName: string;
   spanId: string;
+  sourceDir: string;
+  trimLevel: number;
 };
 
 export type Breakpoint = {

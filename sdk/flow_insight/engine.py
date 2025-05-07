@@ -54,7 +54,7 @@ class InsightEngine:
         self,
         snapshot_storage_type: StorageType,
         persist_storage_type: PersistStorageType,
-        snapshot_duration_s: int = 1800,
+        snapshot_duration_s: int = 600,
         **persist_storage_config,
     ):
         self._persist_storage = PersistStorage(persist_storage_type, **persist_storage_config)
@@ -84,7 +84,15 @@ class InsightEngine:
                 for span_id in span_ids:
                     if filter_active and span_id not in self._debug_sessions.get(flow_id, {}):
                         continue
-                    ret.append(DebugSession(service=service, method=method, span_id=span_id))
+                    ret.append(
+                        DebugSession(
+                            service=service,
+                            method=method,
+                            span_id=span_id,
+                            source_dir=debugger_info.source_dir,
+                            trim_level=debugger_info.trim_level,
+                        )
+                    )
             return ret
         ret = []
         service = (
@@ -93,7 +101,15 @@ class InsightEngine:
         method = Method(name=method_name)
         debugger_infos = await snapshot.get_debugger_info(flow_id, service, method)
         for span_id, debugger_info in debugger_infos.items():
-            ret.append(DebugSession(service=service, method=method, span_id=span_id))
+            ret.append(
+                DebugSession(
+                    service=service,
+                    method=method,
+                    span_id=span_id,
+                    source_dir=debugger_info.source_dir,
+                    trim_level=debugger_info.trim_level,
+                )
+            )
         return ret
 
     async def get_breakpoints(
@@ -347,7 +363,6 @@ class InsightEngine:
         if not self._recover_task_done:
             async with self._recover_lock:
                 if not self._recover_task_done:
-                    print("Waiting for recover task to complete")
                     await self.recover()
                     self._recover_task_done = True
 
@@ -408,8 +423,10 @@ class InsightEngine:
         print(f"Recovered {len(latest_snapshot.restore_snapshots())} snapshots")
 
     async def replay(self, flow_id: str, end_time: Optional[str] = None):
+        should_take_snapshot = False
         if end_time is None and self._persist_storage_type == PersistStorageType.INFLUXDB:
             end_time = int(time.time() * 1000)
+            should_take_snapshot = True
         elif end_time is None:
             return None
         end_time = int(end_time)
@@ -446,7 +463,7 @@ class InsightEngine:
 
         await self._do_replay(events, latest_snapshot)
 
-        if end_time - latest_timestamp >= 30000:
+        if end_time - latest_timestamp >= 30000 or should_take_snapshot:
             latest_snapshot.store_snapshot(str(end_time))
             self._snapshots[f"{flow_id}:{str(end_time)}"] = latest_snapshot
 
@@ -797,6 +814,8 @@ class InsightEngine:
                 debugger_host=debugger_host,
                 debugger_port=debugger_port,
                 debugger_enabled=debugger_enabled,
+                source_dir=debugger_info.source_dir,
+                trim_level=debugger_info.trim_level,
             ),
         )
 
