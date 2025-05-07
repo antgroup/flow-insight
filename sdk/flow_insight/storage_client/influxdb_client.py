@@ -9,12 +9,12 @@ from flow_insight.storage.persist.model import RecordType, internal_flow_id
 
 
 class InfluxDBStorageClient(StorageClient):
-    def __init__(self, server_url: str, username: str = None, password: str = None):
+    def __init__(
+        self, server_url: str, username: str = None, password: str = None, session_id: str = None
+    ):
         super().__init__()
         self.server_url = server_url.rstrip("/")
-        self.db_name = "flow_insight"
-        self.batch_size = 3
-        self.batch_data = []
+        self.db_name = f"flow_insight_{session_id}"
         self.username = username
         self.password = password
         self.sync_client = httpx.Client(timeout=30.0)
@@ -33,7 +33,7 @@ class InfluxDBStorageClient(StorageClient):
             response = self.sync_client.post(f"{self.server_url}/query", params=params)
             response.raise_for_status()
         except Exception as e:
-            print(f"Error creating database: {e}")
+            print(f"Error creating database: {e} {self.server_url}")
 
     async def async_ping(self):
         """Check if the InfluxDB server is reachable"""
@@ -102,7 +102,7 @@ class InfluxDBStorageClient(StorageClient):
 
             # Write to InfluxDB
             point = self._create_point("flow_insight.call", tags, {"count": 1}, timestamp_ns)
-            self._add_to_batch(point)
+            self._write(point)
 
         elif record_type == RecordType.CALL_BEGIN:
             # Extract fields from CallBeginEvent
@@ -115,7 +115,7 @@ class InfluxDBStorageClient(StorageClient):
 
             # Write to InfluxDB
             point = self._create_point("flow_insight.call", tags, {"count": 1}, timestamp_ns)
-            self._add_to_batch(point)
+            self._write(point)
 
         elif record_type == RecordType.CALL_END:
             # Extract fields from CallEndEvent
@@ -133,7 +133,7 @@ class InfluxDBStorageClient(StorageClient):
 
             # Write to InfluxDB
             point = self._create_point("flow_insight.call", tags, fields, timestamp_ns)
-            self._add_to_batch(point)
+            self._write(point)
 
         elif record_type == RecordType.OBJECT_GET:
             # Extract fields from ObjectGetEvent
@@ -145,7 +145,7 @@ class InfluxDBStorageClient(StorageClient):
 
             # Write to InfluxDB
             point = self._create_point("flow_insight.object", tags, {"count": 1}, timestamp_ns)
-            self._add_to_batch(point)
+            self._write(point)
 
         elif record_type == RecordType.OBJECT_PUT:
             # Extract fields from ObjectPutEvent
@@ -165,7 +165,7 @@ class InfluxDBStorageClient(StorageClient):
 
             # Write to InfluxDB
             point = self._create_point("flow_insight.object", tags, fields, timestamp_ns)
-            self._add_to_batch(point)
+            self._write(point)
 
         elif record_type == RecordType.CONTEXT_ADD:
             # Extract fields from ContextEvent
@@ -188,7 +188,7 @@ class InfluxDBStorageClient(StorageClient):
                 context_point = self._create_point(
                     "flow_insight.context", context_tags, {"count": 1}, timestamp_ns
                 )
-                self._add_to_batch(context_point)
+                self._write(context_point)
 
         elif record_type == RecordType.RESOURCE_USAGE_ADD:
             # Extract fields from ResourceUsageEvent
@@ -208,16 +208,13 @@ class InfluxDBStorageClient(StorageClient):
 
                 fields = {"count": 1}
 
-                if "base" in usage_model:
-                    resource_tags["base"] = usage_model["base"]
-
-                if "used" in usage_model:
-                    fields["used"] = float(usage_model["used"])
+                resource_tags["base"] = usage_model["base"]
+                resource_tags["used"] = str(usage_model["used"])
 
                 resource_point = self._create_point(
                     "flow_insight.resource", resource_tags, fields, timestamp_ns
                 )
-                self._add_to_batch(resource_point)
+                self._write(resource_point)
 
         elif record_type == RecordType.DEBUGGER_INFO_ADD:
             # Extract fields from DebuggerInfoEvent
@@ -227,16 +224,13 @@ class InfluxDBStorageClient(StorageClient):
             self._add_tag_if_present(tags, record_dict, "method_name")
             self._add_tag_if_present(tags, record_dict, "span_id")
             self._add_tag_if_present(tags, record_dict, "debugger_host")
+            self._add_tag_if_present(tags, record_dict, "debugger_port")
+            self._add_tag_if_present(tags, record_dict, "debugger_enabled")
 
             fields = {"count": 1}
 
-            if "debugger_port" in record_dict:
-                tags["debugger_port"] = str(record_dict["debugger_port"])
-            if "debugger_enabled" in record_dict:
-                tags["debugger_enabled"] = str(record_dict["debugger_enabled"])
-
             point = self._create_point("flow_insight.debugger", tags, fields, timestamp_ns)
-            self._add_to_batch(point)
+            self._write(point)
 
         elif record_type == RecordType.SERVICE_PHYSICAL_STATS_ADD:
             # Process BatchServicePhysicalStatsEvent
@@ -275,7 +269,7 @@ class InfluxDBStorageClient(StorageClient):
                         {"percent": float(stats["cpu_percent"])},
                         timestamp_ns,
                     )
-                    self._add_to_batch(cpu_point)
+                    self._write(cpu_point)
 
                 # Memory metrics
                 memory_info = stats.get("memory_info", {})
@@ -287,7 +281,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"value": float(memory_info[mem_key])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(mem_point)
+                        self._write(mem_point)
 
                 # Required resources - store as a tag to help with reconstructing the service stats
                 required_resources = stats.get("required_resources", {})
@@ -301,7 +295,7 @@ class InfluxDBStorageClient(StorageClient):
                         {"value": float(resource_value)},
                         timestamp_ns,
                     )
-                    self._add_to_batch(resource_point)
+                    self._write(resource_point)
 
                 # GPU metrics
                 for device_index, device in enumerate(stats.get("devices", {}).get("gpu", [])):
@@ -318,7 +312,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"value": float(device["memory_total"])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(gpu_mem_total_point)
+                        self._write(gpu_mem_total_point)
 
                     if "memory_used" in device:
                         gpu_mem_point = self._create_point(
@@ -327,7 +321,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"used": float(device["memory_used"])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(gpu_mem_point)
+                        self._write(gpu_mem_point)
 
                     if "utilization" in device:
                         gpu_util_point = self._create_point(
@@ -336,7 +330,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"percent": float(device["utilization"])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(gpu_util_point)
+                        self._write(gpu_util_point)
 
         elif record_type == RecordType.NODE_PHYSICAL_STATS_ADD:
             # Process BatchNodePhysicalStatsEvent
@@ -366,7 +360,7 @@ class InfluxDBStorageClient(StorageClient):
                         {"percent": float(node_stat["cpu_percent"])},
                         timestamp_ns,
                     )
-                    self._add_to_batch(cpu_point)
+                    self._write(cpu_point)
 
                 # Memory metrics
                 memory_info = node_stat.get("memory_info", {})
@@ -378,7 +372,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"value": float(memory_info[mem_key])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(mem_point)
+                        self._write(mem_point)
 
                 # Resource metrics
                 for resource_name, resource_usage in node_stat.get("resources", {}).items():
@@ -392,7 +386,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"value": float(resource_usage["total"])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(total_point)
+                        self._write(total_point)
 
                     if "available" in resource_usage:
                         avail_point = self._create_point(
@@ -401,7 +395,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"value": float(resource_usage["available"])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(avail_point)
+                        self._write(avail_point)
 
                 # GPU metrics
                 for device_index, device in enumerate(node_stat.get("devices", {}).get("gpu", [])):
@@ -418,7 +412,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"value": float(device["memory_total"])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(gpu_mem_total_point)
+                        self._write(gpu_mem_total_point)
 
                     if "memory_used" in device:
                         gpu_mem_point = self._create_point(
@@ -427,7 +421,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"used": float(device["memory_used"])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(gpu_mem_point)
+                        self._write(gpu_mem_point)
 
                     if "utilization" in device:
                         gpu_util_point = self._create_point(
@@ -436,7 +430,7 @@ class InfluxDBStorageClient(StorageClient):
                             {"percent": float(device["utilization"])},
                             timestamp_ns,
                         )
-                        self._add_to_batch(gpu_util_point)
+                        self._write(gpu_util_point)
 
         elif record_type == RecordType.PROMPT_REGISTER:
             # Process PromptRegisterEvent
@@ -459,11 +453,7 @@ class InfluxDBStorageClient(StorageClient):
                 tags["prompt_preview"] = prompt
 
             point = self._create_point("flow_insight.prompt", tags, {"count": 1}, timestamp_ns)
-            self._add_to_batch(point)
-
-        # Flush batch if we've accumulated enough points
-        if len(self.batch_data) >= self.batch_size:
-            self._flush_batch()
+            self._write(point)
 
     def _add_tag_if_present(self, tags_dict, record_dict, field_name):
         """Add a tag if the field is present and not None in the record"""
@@ -492,16 +482,7 @@ class InfluxDBStorageClient(StorageClient):
         else:
             return f"{measurement} {field_str} {timestamp}"
 
-    def _add_to_batch(self, point):
-        """Add a point to the batch"""
-        self.batch_data.append(point)
-
-    def _flush_batch(self):
-        """Flush the batch to InfluxDB"""
-        if not self.batch_data:
-            return
-
-        data = "\n".join(self.batch_data)
+    def _write(self, data):
         try:
             params = {"db": self.db_name, "precision": "ns"}
             if self.username and self.password:
@@ -511,16 +492,10 @@ class InfluxDBStorageClient(StorageClient):
                 f"{self.server_url}/write", params=params, content=data
             )
             response.raise_for_status()
-            self.batch_data = []
         except Exception as e:
             print(f"Error flushing batch to InfluxDB: {e}")
 
-    async def _async_flush_batch(self):
-        """Asynchronously flush the batch to InfluxDB"""
-        if not self.batch_data:
-            return
-
-        data = "\n".join(self.batch_data)
+    async def _async_write(self, data):
         try:
             params = {"db": self.db_name, "precision": "ns"}
             if self.username and self.password:
@@ -530,16 +505,12 @@ class InfluxDBStorageClient(StorageClient):
                 f"{self.server_url}/write", params=params, content=data
             )
             response.raise_for_status()
-            self.batch_data = []
         except Exception as e:
             print(f"Error flushing batch to InfluxDB: {e}")
 
     async def async_emit_record(self, record_type: RecordType, record: BaseModel):
         """Asynchronously emit a record to InfluxDB"""
         self._process_record(record_type, record)
-        # For async, we'll flush asynchronously
-        if len(self.batch_data) >= self.batch_size:
-            await self._async_flush_batch()
 
     def sync_emit_record(self, record_type: RecordType, record: BaseModel):
         """Synchronously emit a record to InfluxDB"""

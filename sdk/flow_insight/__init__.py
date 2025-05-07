@@ -4,7 +4,7 @@ from flow_insight.api.fastapi_api import FastAPIInsightServer
 from flow_insight.client import InsightClient
 
 # Storage types
-from flow_insight.storage.persist.base import StorageType
+from flow_insight.storage.persist.base import StorageType as PersistStorageType
 
 # Models
 from flow_insight.storage.persist.model import (
@@ -33,6 +33,7 @@ from flow_insight.storage.persist.model import (
     ServiceState,
     UsageModel,
 )
+from flow_insight.storage.snapshot.base import StorageType as SnapshotStorageType
 
 __all__ = [
     # Clients
@@ -54,7 +55,8 @@ __all__ = [
     "BatchNodePhysicalStatsEvent",
     "PromptRegisterEvent",
     # Storage
-    "StorageType",
+    "PersistStorageType",
+    "SnapshotStorageType",
     "NodePhysicalStats",
     "BatchNodePhysicalStats",
     "ServicePhysicalStats",

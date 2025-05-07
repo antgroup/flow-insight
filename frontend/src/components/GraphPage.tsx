@@ -28,9 +28,6 @@ import {
   FlameGraphData,
 } from '../types';
 
-// Create an ApiService instance
-const apiService = new ApiService({ baseUrl: '' });
-
 type ElementData = Service | Method | FunctionNode;
 
 type RouteParams = Record<string, string | undefined>;
@@ -61,7 +58,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
   autoRefresh: initialAutoRefresh = false,
   selectedElementId: initialSelectedElementId,
   colorScheme: customColorScheme,
-  apiService: externalApiService,
+  apiService,
 }) => {
   const { flowId: routeFlowId } = useParams<RouteParams>();
   const [graphData, setGraphData] = useState<GraphData | null>(initialGraphData || null);
@@ -90,9 +87,6 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const [rightDrawerOpen, setRightDrawerOpen] = useState(true);
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
 
-  // Use the provided API service or the local one
-  const activeApiService = externalApiService || apiService;
-
   const [currentTimestamp, setCurrentTimestamp] = useState<number>(Date.now());
   const [isLatestTime, setIsLatestTime] = useState<boolean>(true);
 
@@ -119,7 +113,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
       }
 
       try {
-        const graphData = await activeApiService.getGraphData(
+        const graphData = await apiService.getGraphData(
           id,
           stackMode,
           isLatestTime ? undefined : timestamp
@@ -137,7 +131,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         setError(err instanceof Error ? err.message : 'Failed to fetch graph data');
       }
     },
-    [activeApiService]
+    [apiService]
   );
 
   // Update currentFlowId when route FlowId changes
@@ -153,7 +147,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
       (async () => {
         try {
           // Get flow creation time from API
-          const creationTime = await activeApiService.getFlowCreationTime(currentFlowId);
+          const creationTime = await apiService.getFlowCreationTime(currentFlowId);
           const now = Date.now();
           // Update timeline range with the flow creation time
           setTimelineRange([creationTime, now]);
@@ -163,7 +157,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         }
       })();
     }
-  }, [currentFlowId, activeApiService]);
+  }, [currentFlowId, apiService]);
 
   // Initial data fetch
   useEffect(() => {
@@ -172,16 +166,16 @@ const GraphPage: React.FC<GraphPageProps> = ({
         await fetchGraphData(currentFlowId, false);
         await fetchGraphData(currentFlowId, true);
         try {
-          const data = await activeApiService.getPhysicalViewData(currentFlowId);
+          const data = await apiService.getPhysicalViewData(currentFlowId);
           setPhysicalViewData(data);
-          const flameData = await activeApiService.getFlameGraphData(currentFlowId);
+          const flameData = await apiService.getFlameGraphData(currentFlowId);
           setFlameData(flameData);
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch view data');
         }
       })();
     }
-  }, [currentFlowId, fetchGraphData, activeApiService]);
+  }, [currentFlowId, fetchGraphData, apiService]);
 
   // Update the timeline range periodically if auto-refresh is enabled
   useEffect(() => {
@@ -213,7 +207,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
     if (currentViewType === 'physical') {
       await fetchGraphData(currentFlowId, false, isLatestTime, timestamp);
       try {
-        const data = await activeApiService.getPhysicalViewData(
+        const data = await apiService.getPhysicalViewData(
           currentFlowId!,
           isLatestTime ? undefined : currentTimestamp
         );
@@ -225,12 +219,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
     if (currentViewType === 'flame' || currentViewType === 'analysis') {
       await fetchGraphData(currentFlowId, false);
       try {
-        const data = await activeApiService.getPhysicalViewData(
+        const data = await apiService.getPhysicalViewData(
           currentFlowId!,
           isLatestTime ? undefined : currentTimestamp
         );
         setPhysicalViewData(data);
-        const flameData = await activeApiService.getFlameGraphData(
+        const flameData = await apiService.getFlameGraphData(
           currentFlowId!,
           isLatestTime ? undefined : currentTimestamp
         );
@@ -439,7 +433,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
               <DebugPanel
                 flowId={currentFlowId}
                 selectedElement={infoCardData}
-                apiService={activeApiService}
+                apiService={apiService}
                 expanded={debugPanelOpen}
               />
 
@@ -654,7 +648,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             searchTerm={searchTerm}
             autoRefresh={autoRefresh}
             setViewType={setCurrentViewType}
-            apiService={activeApiService}
+            apiService={apiService}
             currentTimestamp={currentTimestamp}
           />
         )}
@@ -673,7 +667,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             searchTerm={searchTerm}
             autoRefresh={autoRefresh}
             setViewType={setCurrentViewType}
-            apiService={activeApiService}
+            apiService={apiService}
             currentTimestamp={currentTimestamp}
           />
         )}
@@ -728,7 +722,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
               graphData={graphData}
               physicalViewData={physicalViewData}
               flameData={flameData}
-              apiService={activeApiService}
+              apiService={apiService}
             />
           </Box>
         )}

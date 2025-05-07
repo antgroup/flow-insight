@@ -299,7 +299,9 @@ export class ApiService {
     );
     const resourceUsageMap: Record<string, ATResourceUsage> = apiResourceUsage.reduce(
       (acc, resource) => {
-        acc[resource.service.instanceId] = resource;
+        if (resource.service) {
+          acc[resource.service.instanceId] = resource;
+        }
         return acc;
       },
       {} as Record<string, ATResourceUsage>
@@ -447,7 +449,9 @@ export class ApiService {
     );
     const resourceUsageMap: Record<string, ATResourceUsage> = apiResourceUsage.reduce(
       (acc, resource) => {
-        acc[resource.service.instanceId] = resource;
+        if (resource.service) {
+          acc[resource.service.instanceId] = resource;
+        }
         return acc;
       },
       {} as Record<string, ATResourceUsage>

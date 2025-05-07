@@ -9,7 +9,9 @@ from flow_insight.storage.persist.model import RecordType
 
 
 class InfluxDBStorageBackend(StorageBackend):
-    def __init__(self, server_url: str, username: str = None, password: str = None):
+    def __init__(
+        self, server_url: str, username: str = None, password: str = None, session_id: str = None
+    ):
         """Initialize the storage backend to work with InfluxDB.
 
         Args:
@@ -19,7 +21,7 @@ class InfluxDBStorageBackend(StorageBackend):
         """
         self.server_url = server_url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=30.0)
-        self.db_name = "flow_insight"  # Default database name
+        self.db_name = f"flow_insight_{session_id}"  # Default database name
         self.username = username
         self.password = password
         self._flow_creation_times = {}  # flow_id -> creation time
@@ -138,8 +140,7 @@ class InfluxDBStorageBackend(StorageBackend):
         Returns:
             The creation time in milliseconds, or -1 if not found
         """
-        # If we don't have the creation time yet, initialize the connection
-        if not self._flow_creation_times and flow_id not in self._flow_creation_times:
+        if not self._flow_creation_times or flow_id not in self._flow_creation_times:
             await self._start()
 
         return self._flow_creation_times.get(flow_id, -1)
@@ -204,7 +205,7 @@ class InfluxDBStorageBackend(StorageBackend):
             SELECT *
             FROM  /flow_insight.*/
             WHERE flow_id = '{flow_id}'
-            AND time >= {start_time_ns}ns AND time <= {end_time_ns}ns
+            AND time >= {start_time_ns}ns AND time < {end_time_ns}ns
         """
         params = {"q": query, "db": self.db_name, "epoch": "ns"}
         if self.username and self.password:
@@ -315,57 +316,57 @@ class InfluxDBStorageBackend(StorageBackend):
             result = results[0]
             return {
                 "flow_id": result["flow_id"],
-                "source_service": result["source_service"],
-                "source_instance_id": result["source_instance_id"],
-                "source_method": result["source_method"],
-                "target_service": result["target_service"],
-                "target_instance_id": result["target_instance_id"],
-                "target_method": result["target_method"],
-                "parent_span_id": result["parent_span_id"],
+                "source_service": result.get("source_service", None),
+                "source_instance_id": result.get("source_instance_id", None),
+                "source_method": result.get("source_method", None),
+                "target_service": result.get("target_service", None),
+                "target_instance_id": result.get("target_instance_id", None),
+                "target_method": result.get("target_method", None),
+                "parent_span_id": result.get("parent_span_id", None),
                 "timestamp": result["time"] // 1_000_000,
             }
         elif record_type == RecordType.CALL_BEGIN:
             result = results[0]
             return {
                 "flow_id": result["flow_id"],
-                "source_service": result["source_service"],
-                "source_instance_id": result["source_instance_id"],
-                "source_method": result["source_method"],
-                "parent_span_id": result["parent_span_id"],
-                "span_id": result["span_id"],
+                "source_service": result.get("source_service", None),
+                "source_instance_id": result.get("source_instance_id", None),
+                "source_method": result.get("source_method", None),
+                "parent_span_id": result.get("parent_span_id", None),
+                "span_id": result.get("span_id", None),
                 "timestamp": result["time"] // 1_000_000,
             }
         elif record_type == RecordType.CALL_END:
             result = results[0]
             return {
                 "flow_id": result["flow_id"],
-                "target_service": result["target_service"],
-                "target_instance_id": result["target_instance_id"],
-                "target_method": result["target_method"],
-                "duration": result["duration"],
-                "span_id": result["span_id"],
+                "target_service": result.get("target_service", None),
+                "target_instance_id": result.get("target_instance_id", None),
+                "target_method": result.get("target_method", None),
+                "duration": result.get("duration", None),
+                "span_id": result.get("span_id", None),
                 "timestamp": result["time"] // 1_000_000,
             }
         elif record_type == RecordType.OBJECT_GET:
             result = results[0]
             return {
                 "flow_id": result["flow_id"],
-                "object_id": result["object_id"],
-                "receiver_service": result["receiver_service"],
-                "receiver_instance_id": result["receiver_instance_id"],
-                "receiver_method": result["receiver_method"],
+                "object_id": result.get("object_id", None),
+                "receiver_service": result.get("receiver_service", None),
+                "receiver_instance_id": result.get("receiver_instance_id", None),
+                "receiver_method": result.get("receiver_method", None),
                 "timestamp": result["time"] // 1_000_000,
             }
         elif record_type == RecordType.OBJECT_PUT:
             result = results[0]
             return {
                 "flow_id": result["flow_id"],
-                "object_id": result["object_id"],
-                "object_size": result["size"],
-                "object_pos": result["object_pos"],
-                "sender_service": result["sender_service"],
-                "sender_instance_id": result["sender_instance_id"],
-                "sender_method": result["sender_method"],
+                "object_id": result.get("object_id", None),
+                "object_size": result.get("size", None),
+                "object_pos": result.get("object_pos", None),
+                "sender_service": result.get("sender_service", None),
+                "sender_instance_id": result.get("sender_instance_id", None),
+                "sender_method": result.get("sender_method", None),
                 "timestamp": result["time"] // 1_000_000,
             }
         elif record_type == RecordType.CONTEXT_ADD:
@@ -387,7 +388,7 @@ class InfluxDBStorageBackend(StorageBackend):
             for result in results:
                 if result["resource_name"] is not None:
                     resource_data[result["resource_name"]] = {
-                        "used": result["used"],
+                        "used": 0 if result["used"] is None else float(result["used"]),
                         "base": result["base"],
                     }
             result = results[0]
@@ -404,12 +405,12 @@ class InfluxDBStorageBackend(StorageBackend):
             return {
                 "flow_id": result["flow_id"],
                 "span_id": result["span_id"],
-                "service_name": result["service_name"],
-                "instance_id": result["instance_id"],
-                "method_name": result["method_name"],
+                "service_name": result.get("service_name", None),
+                "instance_id": result.get("instance_id", None),
+                "method_name": result.get("method_name", None),
                 "debugger_host": result["debugger_host"],
-                "debugger_port": result["debugger_port"],
-                "debugger_enabled": result["debugger_enabled"],
+                "debugger_port": int(result["debugger_port"]),
+                "debugger_enabled": result["debugger_enabled"].lower() == "true",
                 "timestamp": result["time"] // 1_000_000,
             }
         elif record_type == RecordType.SERVICE_PHYSICAL_STATS_ADD:
@@ -423,40 +424,43 @@ class InfluxDBStorageBackend(StorageBackend):
 
                 if measurement == "flow_insight.service.cpu":
                     # CPU stats
-                    service_cpu[result.get("service", "")] = {
+                    service_cpu[result.get("instance_id", "")] = {
                         "percent": result.get("percent", 0.0),
                         "node_id": result.get("node_id", ""),
                         "state": result.get("state", ""),
                         "pid": result.get("pid", ""),
+                        "service": result.get("service", ""),
                     }
                 elif measurement.startswith("flow_insight.service.memory"):
                     # Memory stats
-                    service = result.get("service", "")
+                    instance_id = result.get("instance_id", "")
                     mem_type = measurement.split(".")[-1]  # Get rss, vms, etc.
 
-                    if service not in service_memory:
-                        service_memory[service] = {}
+                    if instance_id not in service_memory:
+                        service_memory[instance_id] = {}
 
-                    service_memory[service][mem_type] = result.get("value", 0.0)
+                    service_memory[instance_id][mem_type] = result.get("value", 0.0)
                 elif measurement == "flow_insight.service.required_resource":
                     # Required resources
-                    service = result.get("service", "")
+                    instance_id = result.get("instance_id", "")
                     resource_name = result.get("resource_name", "")
 
-                    if service not in service_required_resources:
-                        service_required_resources[service] = {}
+                    if instance_id not in service_required_resources:
+                        service_required_resources[instance_id] = {}
 
-                    service_required_resources[service][resource_name] = result.get("value", 0.0)
+                    service_required_resources[instance_id][resource_name] = result.get(
+                        "value", 0.0
+                    )
                 elif measurement.startswith("flow_insight.service.gpu"):
                     # GPU stats
-                    service = result.get("service", "")
+                    instance_id = result.get("instance_id", "")
                     device_index = result.get("device_index", "0")
 
-                    if service not in service_gpu:
-                        service_gpu[service] = {}
+                    if instance_id not in service_gpu:
+                        service_gpu[instance_id] = {}
 
-                    if device_index not in service_gpu[service]:
-                        service_gpu[service][device_index] = {
+                    if device_index not in service_gpu[instance_id]:
+                        service_gpu[instance_id][device_index] = {
                             "name": result.get("device_name", ""),
                             "uuid": result.get("device_uuid", ""),
                             "index": int(device_index),
@@ -466,30 +470,30 @@ class InfluxDBStorageBackend(StorageBackend):
                     # Add gpu memory or utilization
                     if "memory" in measurement:
                         if "memory_total" in measurement:
-                            service_gpu[service][device_index]["memory_total"] = result.get(
+                            service_gpu[instance_id][device_index]["memory_total"] = result.get(
                                 "value", 0.0
                             )
                         else:
-                            service_gpu[service][device_index]["memory_used"] = result.get(
+                            service_gpu[instance_id][device_index]["memory_used"] = result.get(
                                 "used", 0.0
                             )
                     elif "utilization" in measurement:
-                        service_gpu[service][device_index]["utilization"] = result.get(
+                        service_gpu[instance_id][device_index]["utilization"] = result.get(
                             "percent", 0.0
                         )
 
             # Reconstruct the stats structure
             stats_list = []
-            for service, cpu_info in service_cpu.items():
-                memory_info = service_memory.get(service, {})
-                gpu_devices = list(service_gpu.get(service, {}).values())
-                required_resources = service_required_resources.get(service, {})
+            for instance_id, cpu_info in service_cpu.items():
+                memory_info = service_memory.get(instance_id, {})
+                gpu_devices = list(service_gpu.get(instance_id, {}).values())
+                required_resources = service_required_resources.get(instance_id, {})
 
                 stats_list.append(
                     {
                         "service": {
-                            "service_name": service,
-                            "instance_id": results[0].get("instance_id", ""),
+                            "service_name": cpu_info.get("service", ""),
+                            "instance_id": instance_id,
                         },
                         "stats": {
                             "node_id": cpu_info.get("node_id", ""),
