@@ -14,9 +14,9 @@ from flow_insight.storage.persist.model import (
     CallSubmitEvent,
     ContextEvent,
     DebuggerInfoEvent,
+    MetaInfoRegisterEvent,
     ObjectGetEvent,
     ObjectPutEvent,
-    MetaInfoRegisterEvent,
     ResourceUsageEvent,
     ServicePhysicalStatsRecord,
     internal_flow_id,
@@ -88,9 +88,6 @@ class InsightEngine:
                             service=service,
                             method=method,
                             span_id=span_id,
-                            source_dir=debugger_info.source_dir,
-                            trim_level=debugger_info.trim_level,
-                            trim_prefix=debugger_info.trim_prefix,
                         )
                     )
             return ret
@@ -106,9 +103,6 @@ class InsightEngine:
                     service=service,
                     method=method,
                     span_id=span_id,
-                    source_dir=debugger_info.source_dir,
-                    trim_level=debugger_info.trim_level,
-                    trim_prefix=debugger_info.trim_prefix,
                 )
             )
         return ret
@@ -806,9 +800,6 @@ class InsightEngine:
                 debugger_host=debugger_host,
                 debugger_port=debugger_port,
                 debugger_enabled=debugger_enabled,
-                source_dir=debugger_info.source_dir,
-                trim_level=debugger_info.trim_level,
-                trim_prefix=debugger_info.trim_prefix,
             ),
         )
 

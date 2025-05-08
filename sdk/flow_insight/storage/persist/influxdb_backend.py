@@ -416,9 +416,6 @@ class InfluxDBStorageBackend(StorageBackend):
                 "debugger_host": result["debugger_host"],
                 "debugger_port": int(result["debugger_port"]),
                 "debugger_enabled": result["debugger_enabled"].lower() == "true",
-                "source_dir": result["source_dir"],
-                "trim_level": int(result["trim_level"]),
-                "trim_prefix": result["trim_prefix"],
                 "timestamp": result["time"] // 1_000_000,
             }
         elif record_type == RecordType.SERVICE_PHYSICAL_STATS_ADD:

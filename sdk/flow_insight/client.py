@@ -7,9 +7,9 @@ from flow_insight.storage.persist.model import (
     CallSubmitEvent,
     ContextEvent,
     DebuggerInfoEvent,
+    MetaInfoRegisterEvent,
     ObjectGetEvent,
     ObjectPutEvent,
-    MetaInfoRegisterEvent,
     RecordType,
     ResourceUsageEvent,
 )
@@ -60,7 +60,9 @@ class InsightClient:
                 RecordType.NODE_PHYSICAL_STATS_ADD, event
             )
         elif isinstance(event, MetaInfoRegisterEvent):
-            return await self._storage_client.async_emit_record(RecordType.META_INFO_REGISTER, event)
+            return await self._storage_client.async_emit_record(
+                RecordType.META_INFO_REGISTER, event
+            )
         else:
             raise ValueError(f"Unsupported event type: {type(event)}")
 

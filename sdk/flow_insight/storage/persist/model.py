@@ -183,9 +183,6 @@ class DebuggerInfoEvent(pydantic.BaseModel):
     debugger_host: str
     debugger_port: int
     debugger_enabled: bool
-    source_dir: str
-    trim_level: int
-    trim_prefix: str
     timestamp: int
 
 

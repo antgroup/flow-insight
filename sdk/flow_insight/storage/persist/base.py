@@ -9,9 +9,9 @@ from flow_insight.storage.persist.model import (
     CallSubmitEvent,
     ContextEvent,
     DebuggerInfoEvent,
+    MetaInfoRegisterEvent,
     ObjectGetEvent,
     ObjectPutEvent,
-    MetaInfoRegisterEvent,
     RecordType,
     ResourceUsageEvent,
 )

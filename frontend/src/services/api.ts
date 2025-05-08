@@ -538,9 +538,6 @@ export class ApiService {
       serviceInfo: session.service ? [session.service.serviceName, session.service.instanceId] : [],
       funcName: session.method.name,
       spanId: session.spanId,
-      sourceDir: session.sourceDir,
-      trimLevel: session.trimLevel,
-      trimPrefix: session.trimPrefix,
     }));
   }
 
@@ -584,7 +581,7 @@ export class ApiService {
     flowId: string,
     spanId: string,
     command: string,
-    args: Record<string, any>,
+    args: Record<string, any>
   ): Promise<any> {
     const path = `debug_cmd`;
     const response = await this.request<ApiResponse<any>>(
