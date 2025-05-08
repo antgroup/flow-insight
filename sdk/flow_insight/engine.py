@@ -384,7 +384,6 @@ class InsightEngine:
 
     async def periodic_snapshot(self):
         while True:
-            await asyncio.sleep(self._snapshot_duration_s)
             for flow_id in await self._persist_storage.get_flow_ids():
                 await self.try_take_snapshot(flow_id)
             await asyncio.sleep(self._snapshot_duration_s)
@@ -440,7 +439,6 @@ class InsightEngine:
         if latest_timestamp == -1:
             latest_snapshot = SnapshotStorage(self._snapshot_storage_type)
         else:
-            print(f"found snapshot {latest_timestamp}")
             latest_snapshot = self._snapshots[f"{flow_id}:{str(latest_timestamp)}"].take_snapshot()
 
         if end_time - latest_timestamp <= 2 * 1000:

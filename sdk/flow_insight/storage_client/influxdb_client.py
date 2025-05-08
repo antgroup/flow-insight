@@ -368,32 +368,29 @@ class InfluxDBStorageClient(StorageClient):
                     gpu_tags["device_uuid"] = device.get("uuid", "")
                     gpu_tags["gpu_index"] = str(device_index)
 
-                    if "memory_total" in device:
-                        gpu_mem_total_point = self._create_point(
-                            "flow_insight.service.gpu.memory_total",
-                            gpu_tags,
-                            {"value": float(device["memory_total"])},
-                            timestamp_ns,
-                        )
-                        self._write(gpu_mem_total_point)
+                    gpu_mem_total_point = self._create_point(
+                        "flow_insight.service.gpu.memory_total",
+                        gpu_tags,
+                        {"value": float(device.get("memory_total", 0))},
+                        timestamp_ns,
+                    )
+                    self._write(gpu_mem_total_point)
 
-                    if "memory_used" in device:
-                        gpu_mem_point = self._create_point(
-                            "flow_insight.service.gpu.memory",
-                            gpu_tags,
-                            {"used": float(device["memory_used"])},
-                            timestamp_ns,
-                        )
-                        self._write(gpu_mem_point)
+                    gpu_mem_point = self._create_point(
+                        "flow_insight.service.gpu.memory",
+                        gpu_tags,
+                        {"used": float(device.get("memory_used", 0))},
+                        timestamp_ns,
+                    )
+                    self._write(gpu_mem_point)
 
-                    if "utilization" in device:
-                        gpu_util_point = self._create_point(
-                            "flow_insight.service.gpu.utilization",
-                            gpu_tags,
-                            {"percent": float(device["utilization"])},
-                            timestamp_ns,
-                        )
-                        self._write(gpu_util_point)
+                    gpu_util_point = self._create_point(
+                        "flow_insight.service.gpu.utilization",
+                        gpu_tags,
+                        {"percent": float(device.get("utilization", 0))},
+                        timestamp_ns,
+                    )
+                    self._write(gpu_util_point)
 
         elif record_type == RecordType.NODE_PHYSICAL_STATS_ADD:
             # Process BatchNodePhysicalStatsEvent
@@ -416,14 +413,13 @@ class InfluxDBStorageClient(StorageClient):
                 }
 
                 # CPU usage
-                if "cpu_percent" in node_stat:
-                    cpu_point = self._create_point(
-                        "flow_insight.node.cpu",
-                        node_tags,
-                        {"percent": float(node_stat["cpu_percent"])},
-                        timestamp_ns,
-                    )
-                    self._write(cpu_point)
+                cpu_point = self._create_point(
+                    "flow_insight.node.cpu",
+                    node_tags,
+                    {"percent": float(node_stat.get("cpu_percent", 0))},
+                    timestamp_ns,
+                )
+                self._write(cpu_point)
 
                 # Memory metrics
                 memory_info = node_stat.get("memory_info", {})
@@ -442,23 +438,21 @@ class InfluxDBStorageClient(StorageClient):
                     resource_tags = {**node_tags, "resource_name": resource_name}
 
                     # Record total and available resource
-                    if "total" in resource_usage:
-                        total_point = self._create_point(
-                            "flow_insight.resource.total",
-                            resource_tags,
-                            {"value": float(resource_usage["total"])},
-                            timestamp_ns,
-                        )
-                        self._write(total_point)
+                    total_point = self._create_point(
+                        "flow_insight.resource.total",
+                        resource_tags,
+                        {"value": float(resource_usage.get("total", 0))},
+                        timestamp_ns,
+                    )
+                    self._write(total_point)
 
-                    if "available" in resource_usage:
-                        avail_point = self._create_point(
-                            "flow_insight.resource.available",
-                            resource_tags,
-                            {"value": float(resource_usage["available"])},
-                            timestamp_ns,
-                        )
-                        self._write(avail_point)
+                    avail_point = self._create_point(
+                        "flow_insight.resource.available",
+                        resource_tags,
+                        {"value": float(resource_usage.get("available", 0))},
+                        timestamp_ns,
+                    )
+                    self._write(avail_point)
 
                 # GPU metrics
                 for device_index, device in enumerate(node_stat.get("devices", {}).get("gpu", [])):
@@ -468,32 +462,29 @@ class InfluxDBStorageClient(StorageClient):
                     gpu_tags["device_uuid"] = device.get("uuid", "")
                     gpu_tags["gpu_index"] = str(device_index)
 
-                    if "memory_total" in device:
-                        gpu_mem_total_point = self._create_point(
-                            "flow_insight.node.gpu.memory_total",
-                            gpu_tags,
-                            {"value": float(device["memory_total"])},
-                            timestamp_ns,
-                        )
-                        self._write(gpu_mem_total_point)
+                    gpu_mem_total_point = self._create_point(
+                        "flow_insight.node.gpu.memory_total",
+                        gpu_tags,
+                        {"value": float(device.get("memory_total", 0))},
+                        timestamp_ns,
+                    )
+                    self._write(gpu_mem_total_point)
 
-                    if "memory_used" in device:
-                        gpu_mem_point = self._create_point(
-                            "flow_insight.node.gpu.memory",
-                            gpu_tags,
-                            {"used": float(device["memory_used"])},
-                            timestamp_ns,
-                        )
-                        self._write(gpu_mem_point)
+                    gpu_mem_point = self._create_point(
+                        "flow_insight.node.gpu.memory",
+                        gpu_tags,
+                        {"used": float(device.get("memory_used", 0))},
+                        timestamp_ns,
+                    )
+                    self._write(gpu_mem_point)
 
-                    if "utilization" in device:
-                        gpu_util_point = self._create_point(
-                            "flow_insight.node.gpu.utilization",
-                            gpu_tags,
-                            {"percent": float(device["utilization"])},
-                            timestamp_ns,
-                        )
-                        self._write(gpu_util_point)
+                    gpu_util_point = self._create_point(
+                        "flow_insight.node.gpu.utilization",
+                        gpu_tags,
+                        {"percent": float(device.get("utilization", 0))},
+                        timestamp_ns,
+                    )
+                    self._write(gpu_util_point)
 
         elif record_type == RecordType.META_INFO_REGISTER:
             # Process MetaInfoRegisterEvent

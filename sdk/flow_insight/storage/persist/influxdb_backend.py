@@ -28,7 +28,25 @@ class InfluxDBStorageBackend(StorageBackend):
         self._flow_creation_times = {}  # flow_id -> creation time
 
     async def get_flow_ids(self) -> List[str]:
-        return list(self._flow_creation_times.keys())
+        ret = []
+        query = 'SELECT first(count) as creation_time FROM "flow_insight.call" GROUP BY flow_id'
+
+        params = {"q": query, "db": self.db_name, "epoch": "ms"}
+        if self.username and self.password:
+            params["u"] = self.username
+            params["p"] = self.password
+
+        result = await self.client.get(f"{self.server_url}/query", params=params)
+        result.raise_for_status()
+        data = result.json()
+
+        if data.get("results") and data["results"][0].get("series"):
+            for series in data["results"][0]["series"]:
+                tags = series.get("tags", {})
+                flow_id = tags.get("flow_id")
+                ret.append(flow_id)
+
+        return ret
 
     async def _create_database_if_not_exists(self):
         """Create the InfluxDB database if it doesn't exist."""
