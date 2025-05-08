@@ -54,7 +54,6 @@ class SnapshotStorage:
         self._storage["context_info"] = defaultdict(list)
         self._storage["resource_usage"] = defaultdict(list)
         self._storage["prompt"] = ""
-        self._storage["driver_info"] = defaultdict(str)
 
         self._storage["flame_graph_aggregated"] = defaultdict(
             lambda: defaultdict(
@@ -315,9 +314,3 @@ class SnapshotStorage:
 
     async def set_prompt(self, prompt: str):
         self._storage["prompt"] = prompt
-
-    async def set_driver_info(self, flow_id: str, driver_ip: str):
-        self._storage["driver_info"][flow_id] = driver_ip
-
-    async def get_driver_info(self, flow_id: str):
-        return self._storage["driver_info"][flow_id]

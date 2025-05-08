@@ -9,7 +9,7 @@ from flow_insight.storage.persist.model import (
     DebuggerInfoEvent,
     ObjectGetEvent,
     ObjectPutEvent,
-    PromptRegisterEvent,
+    MetaInfoRegisterEvent,
     RecordType,
     ResourceUsageEvent,
 )
@@ -59,8 +59,8 @@ class InsightClient:
             return await self._storage_client.async_emit_record(
                 RecordType.NODE_PHYSICAL_STATS_ADD, event
             )
-        elif isinstance(event, PromptRegisterEvent):
-            return await self._storage_client.async_emit_record(RecordType.PROMPT_REGISTER, event)
+        elif isinstance(event, MetaInfoRegisterEvent):
+            return await self._storage_client.async_emit_record(RecordType.META_INFO_REGISTER, event)
         else:
             raise ValueError(f"Unsupported event type: {type(event)}")
 
@@ -90,8 +90,8 @@ class InsightClient:
             )
         elif isinstance(event, BatchNodePhysicalStatsEvent):
             return self._storage_client.sync_emit_record(RecordType.NODE_PHYSICAL_STATS_ADD, event)
-        elif isinstance(event, PromptRegisterEvent):
-            return self._storage_client.sync_emit_record(RecordType.PROMPT_REGISTER, event)
+        elif isinstance(event, MetaInfoRegisterEvent):
+            return self._storage_client.sync_emit_record(RecordType.META_INFO_REGISTER, event)
         else:
             raise ValueError(f"Unsupported event type: {type(event)}")
 

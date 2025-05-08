@@ -11,7 +11,7 @@ from flow_insight.storage.persist.model import (
     DebuggerInfoEvent,
     ObjectGetEvent,
     ObjectPutEvent,
-    PromptRegisterEvent,
+    MetaInfoRegisterEvent,
     RecordType,
     ResourceUsageEvent,
 )
@@ -28,7 +28,7 @@ EVENT_TYPE_MAP = {
     DebuggerInfoEvent: RecordType.DEBUGGER_INFO_ADD.value,
     BatchServicePhysicalStatsEvent: RecordType.SERVICE_PHYSICAL_STATS_ADD.value,
     BatchNodePhysicalStatsEvent: RecordType.NODE_PHYSICAL_STATS_ADD.value,
-    PromptRegisterEvent: RecordType.PROMPT_REGISTER.value,
+    MetaInfoRegisterEvent: RecordType.META_INFO_REGISTER.value,
 }
 
 REVERSE_EVENT_TYPE_MAP = {v: k for k, v in EVENT_TYPE_MAP.items()}

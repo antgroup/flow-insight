@@ -9,6 +9,7 @@ Flow Insight is an advanced visualization and debugging tool for distributed sys
 - **Multiple Visualization Views** - Analyze your distributed system from different perspectives
 - **Interactive Debugging** - Debug your application with an integrated debugging panel
 - **AI-Powered Analysis** - Get intelligent insights about your system's behavior
+- **Persist Backend** - Supporting disk or influxdb persist backend
 
 ## 📋 Table of Contents
 
@@ -18,6 +19,7 @@ Flow Insight is an advanced visualization and debugging tool for distributed sys
 - [Components](#-components)
 - [Views](#-views)
 - [SDK](#-sdk)
+- [Integrations](#-integrations)
 - [Documentation](#-documentation)
 - [Contributing](#-contributing)
 
@@ -25,7 +27,7 @@ Flow Insight is an advanced visualization and debugging tool for distributed sys
 
 ### Prerequisites
 
-- Node.js (v14 or later)
+- Node.js
 - npm or yarn
 - Python 3.7+
 
@@ -73,11 +75,18 @@ function App() {
 ```python
 from flow_insight import InsightClient
 from flow_insight import CallBeginEvent, CallEndEvent
-from flow_insight import StorageType
+from flow_insight import PersistStorageType
 
 # Initialize the client with server URL and storage type
-client = InsightClient(server_url="http://your-insight-server:8000", 
-                       storage_type=StorageType.MEMORY)
+client = InsightClient(server_url="http://your-insight-server", 
+                       storage_type=PersistStorageType.DISK)
+
+# or start with influxdb backend
+client = InsightClient(server_url="http://influxdb_url", 
+                       storage_type=PersistStorageType.INFLUXDB,
+                       username="",
+                       password="",
+                       session_id="")
 
 # Emit a call begin event
 call_begin_event = CallBeginEvent(
@@ -86,7 +95,8 @@ call_begin_event = CallBeginEvent(
     source_instance_id="worker-1",
     source_method="calculate_embeddings",
     parent_span_id="parent-span-123",
-    span_id="span-456"
+    span_id="span-456",
+    timestamp=int(time.time()*1000)
 )
 client.emit_event(call_begin_event)
 
@@ -99,7 +109,8 @@ call_end_event = CallEndEvent(
     target_instance_id="worker-1",
     target_method="calculate_embeddings",
     duration=0.235,
-    span_id="span-456"
+    span_id="span-456",
+    timestamp=int(time.time()*1000)
 )
 client.emit_event(call_end_event)
 
@@ -196,7 +207,7 @@ The Flow Insight SDK provides Python libraries for instrumenting your distribute
   - Methods for recording various event types
   - Connection to different storage backends
 
-- **FastAPIInsightServer**: FastAPI-based server for collecting and storing telemetry
+- **FastAPIInsightServer**: FastAPI-based server as api gateway
 
 ### Client Methods
 
@@ -221,21 +232,19 @@ The `InsightClient` provides both synchronous and asynchronous methods:
 - `DebuggerInfoEvent`: Provide debugging information including host and port
 - `BatchServicePhysicalStatsEvent`: Collect statistics across multiple services
 - `BatchNodePhysicalStatsEvent`: Collect statistics across multiple nodes
-- `PromptRegisterEvent`: Register prompt templates for AI components
+- `MetaInfoRegisterEvent`: Register meta info
 
 ### Storage Options
 
 The SDK supports multiple storage backends:
-- [x] In-memory storage for development
-- [ ] Prometheus based Persistent storage for production
+- [x] Disk storage for development
+- [x] InfluxDB based Persistent storage for production
 
-## 📚 Documentation
+## 🔗 Integrations
 
-For comprehensive documentation, visit our [documentation site](https://antgroup.github.io/flowinsight).
+### Ray Integration
 
-## 👥 Contributing
-
-We welcome contributions from the community! Please check out our [Contributing Guidelines](CONTRIBUTING.md) for more information on how to get started.
+Flow Insight is fully integrated with [Ray](https://ray.io) through [Ant-Ray](https://github.com/antgroup/ant-ray), providing powerful visualization and debugging capabilities for Ray applications.
 
 ## 🙏 Acknowledgements
 

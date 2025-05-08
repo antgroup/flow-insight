@@ -291,6 +291,7 @@ class InfluxDBStorageClient(StorageClient):
             self._add_tag_if_present(tags, record_dict, "debugger_enabled")
             self._add_tag_if_present(tags, record_dict, "source_dir")
             self._add_tag_if_present(tags, record_dict, "trim_level")
+            self._add_tag_if_present(tags, record_dict, "trim_prefix")
 
             fields = {"count": 1}
 
@@ -497,19 +498,19 @@ class InfluxDBStorageClient(StorageClient):
                         )
                         self._write(gpu_util_point)
 
-        elif record_type == RecordType.PROMPT_REGISTER:
-            # Process PromptRegisterEvent
+        elif record_type == RecordType.META_INFO_REGISTER:
+            # Process MetaInfoRegisterEvent
             tags = {
                 "flow_id": flow_id,
                 "event_id": event_id,
-                "event_type": "prompt_register",
+                "event_type": "meta_info_register",
             }
 
             # Also store the actual prompt as a tag
             prompt = record_dict.get("prompt", "")
             tags["prompt"] = base64.b64encode(prompt.encode()).decode()
 
-            point = self._create_point("flow_insight.prompt", tags, {"count": 1}, timestamp_ns)
+            point = self._create_point("flow_insight.meta_info", tags, {"count": 1}, timestamp_ns)
             self._write(point)
 
     def _add_tag_if_present(self, tags_dict, record_dict, field_name):

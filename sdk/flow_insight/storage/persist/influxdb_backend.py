@@ -201,7 +201,7 @@ class InfluxDBStorageBackend(StorageBackend):
                 "flow_insight.resource.total",
                 "flow_insight.resource.available",
             ],
-            RecordType.PROMPT_REGISTER: ["flow_insight.prompt"],
+            RecordType.META_INFO_REGISTER: ["flow_insight.meta_info"],
             RecordType.DRIVER_INFO_ADD: ["flow_insight.driver"],
         }
         start_time_ns = start_time * 1_000_000  # Convert ms to ns
@@ -418,6 +418,7 @@ class InfluxDBStorageBackend(StorageBackend):
                 "debugger_enabled": result["debugger_enabled"].lower() == "true",
                 "source_dir": result["source_dir"],
                 "trim_level": int(result["trim_level"]),
+                "trim_prefix": result["trim_prefix"],
                 "timestamp": result["time"] // 1_000_000,
             }
         elif record_type == RecordType.SERVICE_PHYSICAL_STATS_ADD:
@@ -602,7 +603,7 @@ class InfluxDBStorageBackend(StorageBackend):
                 "stats": {"stats": node_stats_list},
                 "timestamp": results[0]["time"] // 1_000_000,
             }
-        elif record_type == RecordType.PROMPT_REGISTER:
+        elif record_type == RecordType.META_INFO_REGISTER:
             result = results[0]
             return {
                 "flow_id": result["flow_id"],

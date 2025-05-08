@@ -24,7 +24,7 @@ from flow_insight import (
     DebuggerInfoEvent,
     ObjectGetEvent,
     ObjectPutEvent,
-    PromptRegisterEvent,
+    MetaInfoRegisterEvent,
     ResourceUsageEvent,
 )
 from flow_insight import BatchNodePhysicalStats, ServicePhysicalStatsRecord
@@ -427,7 +427,7 @@ async def emit_prompt_register(client):
                 "Explain the observed latency spikes in the data processing pipeline."
             ]
             
-            prompt_event = PromptRegisterEvent(prompt=random.choice(prompts), timestamp=int(time.time()*1000))
+            prompt_event = MetaInfoRegisterEvent(prompt=random.choice(prompts), timestamp=int(time.time()*1000))
             await client.async_emit_event(prompt_event)
             
             await asyncio.sleep(30)  # Register a new prompt every 30 seconds

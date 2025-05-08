@@ -139,6 +139,7 @@ export type ATDebugSession = {
   spanId: string;
   sourceDir: string;
   trimLevel: number;
+  trimPrefix: string;
 };
 
 export type ATContext = {

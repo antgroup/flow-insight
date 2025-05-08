@@ -16,7 +16,7 @@ from flow_insight.storage.persist.model import (
     DebuggerInfoEvent,
     ObjectGetEvent,
     ObjectPutEvent,
-    PromptRegisterEvent,
+    MetaInfoRegisterEvent,
     ResourceUsageEvent,
     ServicePhysicalStatsRecord,
     internal_flow_id,
@@ -54,7 +54,7 @@ class InsightEngine:
         self,
         snapshot_storage_type: StorageType,
         persist_storage_type: PersistStorageType,
-        snapshot_duration_s: int = 600,
+        snapshot_duration_s: int = 300,
         **persist_storage_config,
     ):
         self._persist_storage = PersistStorage(persist_storage_type, **persist_storage_config)
@@ -64,7 +64,6 @@ class InsightEngine:
         self._snapshots = {"latest": SnapshotStorage(snapshot_storage_type)}
         self._recover_lock = asyncio.Lock()
         self._snapshot_duration_s = snapshot_duration_s
-        self._snapshot_lock = defaultdict(asyncio.Lock)
 
     async def get_debug_sessions(
         self,
@@ -91,6 +90,7 @@ class InsightEngine:
                             span_id=span_id,
                             source_dir=debugger_info.source_dir,
                             trim_level=debugger_info.trim_level,
+                            trim_prefix=debugger_info.trim_prefix,
                         )
                     )
             return ret
@@ -108,6 +108,7 @@ class InsightEngine:
                     span_id=span_id,
                     source_dir=debugger_info.source_dir,
                     trim_level=debugger_info.trim_level,
+                    trim_prefix=debugger_info.trim_prefix,
                 )
             )
         return ret
@@ -380,8 +381,8 @@ class InsightEngine:
             await self.emit_service_physical_stats(event)
         elif isinstance(event, BatchNodePhysicalStatsEvent):
             await self.emit_node_physical_stats(event)
-        elif isinstance(event, PromptRegisterEvent):
-            await self.emit_prompt(event)
+        elif isinstance(event, MetaInfoRegisterEvent):
+            await self.emit_meta_info(event)
         else:
             raise ValueError(f"Unknown event type: {type(event)}")
 
@@ -397,11 +398,10 @@ class InsightEngine:
     async def try_take_snapshot(self, flow_id: str):
         current = int(time.time() * 1000)
         snapshot = await self.replay(flow_id, str(current))
-        async with self._snapshot_lock[flow_id]:
-            if f"{flow_id}:{current}" not in self._snapshots:
-                snapshot.store_snapshot(current)
-                self._snapshots[f"{flow_id}:{current}"] = snapshot
-                print(f"Snapshot taken for flow {flow_id} at {current}")
+        if f"{flow_id}:{current}" not in self._snapshots:
+            snapshot.store_snapshot(current)
+            self._snapshots[f"{flow_id}:{current}"] = snapshot
+            print(f"Snapshot taken for flow {flow_id} at {current}")
 
     async def recover(self):
         latest_snapshot = self._snapshots["latest"]
@@ -417,10 +417,8 @@ class InsightEngine:
         asyncio.create_task(self.periodic_snapshot())
 
     async def replay(self, flow_id: str, end_time: Optional[str] = None):
-        should_take_snapshot = False
         if end_time is None and self._persist_storage_type == PersistStorageType.INFLUXDB:
             end_time = int(time.time() * 1000)
-            should_take_snapshot = True
         elif end_time is None:
             return None
         end_time = int(end_time)
@@ -451,20 +449,15 @@ class InsightEngine:
             print(f"found snapshot {latest_timestamp}")
             latest_snapshot = self._snapshots[f"{flow_id}:{str(latest_timestamp)}"].take_snapshot()
 
+        if end_time - latest_timestamp <= 2 * 1000:
+            return latest_snapshot
+
         events = await self._persist_storage.query_events(flow_id, latest_timestamp, end_time)
         events.extend(
             await self._persist_storage.query_events(internal_flow_id, latest_timestamp, end_time)
         )
 
         await self._do_replay(events, latest_snapshot)
-
-        async with self._snapshot_lock[flow_id]:
-            if end_time - latest_timestamp >= 30000 or (
-                should_take_snapshot and latest_timestamp == -1
-            ):
-                latest_snapshot.store_snapshot(str(end_time))
-                self._snapshots[f"{flow_id}:{str(end_time)}"] = latest_snapshot
-                print(f"Here Snapshot taken for flow {flow_id} at {end_time}")
 
         return latest_snapshot
 
@@ -490,8 +483,8 @@ class InsightEngine:
                 await self.emit_service_physical_stats(event, snapshot)
             elif isinstance(event, BatchNodePhysicalStatsEvent):
                 await self.emit_node_physical_stats(event, snapshot)
-            elif isinstance(event, PromptRegisterEvent):
-                await self.emit_prompt(event, snapshot)
+            elif isinstance(event, MetaInfoRegisterEvent):
+                await self.emit_meta_info(event, snapshot)
             else:
                 raise ValueError(f"Unknown event type: {type(event)}")
 
@@ -815,6 +808,7 @@ class InsightEngine:
                 debugger_enabled=debugger_enabled,
                 source_dir=debugger_info.source_dir,
                 trim_level=debugger_info.trim_level,
+                trim_prefix=debugger_info.trim_prefix,
             ),
         )
 
@@ -852,9 +846,9 @@ class InsightEngine:
             snapshot = self._snapshots["latest"]
         await snapshot.batch_add_node_physical_stats(stats)
 
-    async def emit_prompt(
-        self, prompt: PromptRegisterEvent, snapshot: Optional[SnapshotStorage] = None
+    async def emit_meta_info(
+        self, meta_info: MetaInfoRegisterEvent, snapshot: Optional[SnapshotStorage] = None
     ):
         if snapshot is None:
             snapshot = self._snapshots["latest"]
-        await snapshot.set_prompt(prompt.prompt)
+        await snapshot.set_prompt(meta_info.prompt)

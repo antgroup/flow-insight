@@ -21,7 +21,7 @@ from flow_insight.storage.persist.model import (
     DebuggerInfoEvent,
     ObjectGetEvent,
     ObjectPutEvent,
-    PromptRegisterEvent,
+    MetaInfoRegisterEvent,
     RecordType,
     ResourceUsageEvent,
 )
@@ -132,8 +132,8 @@ class FastAPIInsightServer(APIInterface):
             record = BatchServicePhysicalStatsEvent(**record)
         elif record_type == RecordType.NODE_PHYSICAL_STATS_ADD.value:
             record = BatchNodePhysicalStatsEvent(**record)
-        elif record_type == RecordType.PROMPT_REGISTER.value:
-            record = PromptRegisterEvent(**record)
+        elif record_type == RecordType.META_INFO_REGISTER.value:
+            record = MetaInfoRegisterEvent(**record)
         else:
             raise ValueError(f"Invalid record type: {record_type}")
         await self.engine.record_event(record)
@@ -198,7 +198,7 @@ class FastAPIInsightServer(APIInterface):
         try:
             snapshot = await self.engine.replay(flow_id, None)
             breakpoints = [
-                Breakpoint(line=bp["line"], source=bp["source"]) for bp in breakpoints_data
+                Breakpoint(line=bp["line"], source=bp["sourceFile"]) for bp in breakpoints_data
             ]
             result = await self.engine.set_breakpoints(flow_id, span_id, breakpoints, snapshot)
             return JSONResponse(

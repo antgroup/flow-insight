@@ -87,6 +87,7 @@ export type DebugSession = {
   spanId: string;
   sourceDir: string;
   trimLevel: number;
+  trimPrefix: string;
 };
 
 export type Breakpoint = {

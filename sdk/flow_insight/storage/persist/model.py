@@ -100,7 +100,7 @@ class RecordType(Enum):
     DEBUGGER_INFO_ADD = "debugger_info_add"
     SERVICE_PHYSICAL_STATS_ADD = "service_physical_stats_add"
     NODE_PHYSICAL_STATS_ADD = "node_physical_stats_add"
-    PROMPT_REGISTER = "prompt_register"
+    META_INFO_REGISTER = "meta_info_register"
     DRIVER_INFO_ADD = "driver_info_add"
 
 
@@ -185,6 +185,7 @@ class DebuggerInfoEvent(pydantic.BaseModel):
     debugger_enabled: bool
     source_dir: str
     trim_level: int
+    trim_prefix: str
     timestamp: int
 
 
@@ -200,7 +201,7 @@ class BatchNodePhysicalStatsEvent(pydantic.BaseModel):
     timestamp: int
 
 
-class PromptRegisterEvent(pydantic.BaseModel):
+class MetaInfoRegisterEvent(pydantic.BaseModel):
     flow_id: Optional[str] = internal_flow_id
     prompt: str
     timestamp: int

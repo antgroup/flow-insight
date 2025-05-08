@@ -24,7 +24,7 @@ from flow_insight.storage.persist.model import (
     NodeResourceUsage,
     ObjectGetEvent,
     ObjectPutEvent,
-    PromptRegisterEvent,
+    MetaInfoRegisterEvent,
     RecordType,
     ResourceUsageEvent,
     Service,
@@ -53,7 +53,7 @@ __all__ = [
     "DebuggerInfoEvent",
     "BatchServicePhysicalStatsEvent",
     "BatchNodePhysicalStatsEvent",
-    "PromptRegisterEvent",
+    "MetaInfoRegisterEvent",
     # Storage
     "PersistStorageType",
     "SnapshotStorageType",
