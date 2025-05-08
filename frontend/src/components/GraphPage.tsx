@@ -227,12 +227,14 @@ const GraphPage: React.FC<GraphPageProps> = ({
   }, [currentFlowId, fetchGraphData, apiService]);
 
   // eslint-disable-next-line
-  const fetchDatas = async (isLatest?: boolean, timestamp?: number) => {
+  const fetchDatas = async (isLatest?: boolean, timestamp?: number, showLoading = true) => {
     const useLatestTime = isLatest !== undefined ? isLatest : isLatestTime;
     const useTimestamp = timestamp !== undefined ? timestamp : currentTimestamp;
 
     try {
-      setUpdating(true);
+      if (showLoading) {
+        setUpdating(true);
+      }
 
       if (currentViewType === 'call_stack') {
         await fetchGraphData(currentFlowId, true, useLatestTime, useTimestamp);
@@ -272,14 +274,16 @@ const GraphPage: React.FC<GraphPageProps> = ({
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to fetch data');
     } finally {
-      setUpdating(false);
+      if (showLoading) {
+        setUpdating(false);
+      }
     }
   };
   // Auto-refresh effect for call stack view
   useEffect(() => {
     if (autoRefresh) {
       const intervalId = setInterval(async () => {
-        await fetchDatas();
+        await fetchDatas(undefined, undefined, false);
       }, 2000);
 
       autoRefreshIntervalRef.current = intervalId;
@@ -314,7 +318,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
     setCurrentTimestamp(now);
     setIsLatestTime(true);
 
-    await fetchDatas(true);
+    await fetchDatas(true, undefined, false);
   }, [fetchDatas]);
 
   const handleSearchChange = useCallback((term: string) => {

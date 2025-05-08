@@ -1,6 +1,6 @@
 {
-  "name": "@ant-ray/flow-insight",
-  "version": "0.1.1",
+  "name": "@aeonsule/flow-insight",
+  "version": "0.5.20",
   "type": "module",
   "description": "A React component library for distributed system visualization and insights",
   "main": "dist/index.js",
