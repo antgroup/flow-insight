@@ -26,3 +26,6 @@ class PersistStorage:
 
     async def get_flow_creation_time(self, flow_id: str) -> int:
         return await self.backend.get_flow_creation_time(flow_id)
+
+    async def get_flow_ids(self) -> List[str]:
+        return await self.backend.get_flow_ids()

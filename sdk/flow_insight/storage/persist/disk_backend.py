@@ -71,6 +71,9 @@ class DiskPersistStorageBackend(StorageBackend):
     async def get_flow_creation_time(self, flow_id: str) -> int:
         return self._flow_creation_time.get(flow_id, -1)
 
+    async def get_flow_ids(self) -> List[str]:
+        return list(self._flow_creation_time.keys())
+
     async def record_event(self, event: Any):
         """Record a time series event.
 

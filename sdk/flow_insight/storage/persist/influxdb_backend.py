@@ -27,6 +27,9 @@ class InfluxDBStorageBackend(StorageBackend):
         self.password = password
         self._flow_creation_times = {}  # flow_id -> creation time
 
+    async def get_flow_ids(self) -> List[str]:
+        return list(self._flow_creation_times.keys())
+
     async def _create_database_if_not_exists(self):
         """Create the InfluxDB database if it doesn't exist."""
         try:

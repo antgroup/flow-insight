@@ -62,9 +62,9 @@ class InsightEngine:
         self._snapshot_storage_type = snapshot_storage_type
         self._debug_sessions = defaultdict(dict)
         self._snapshots = {"latest": SnapshotStorage(snapshot_storage_type)}
-        self._recover_task_done = False
         self._recover_lock = asyncio.Lock()
         self._snapshot_duration_s = snapshot_duration_s
+        self._snapshot_lock = defaultdict(asyncio.Lock)
 
     async def get_debug_sessions(
         self,
@@ -360,12 +360,6 @@ class InsightEngine:
         return await self._persist_storage.get_flow_creation_time(flow_id)
 
     async def record_event(self, event: any):
-        if not self._recover_task_done:
-            async with self._recover_lock:
-                if not self._recover_task_done:
-                    await self.recover()
-                    self._recover_task_done = True
-
         if isinstance(event, CallSubmitEvent):
             await self.emit_call_submit(event)
         elif isinstance(event, CallBeginEvent):
@@ -392,23 +386,22 @@ class InsightEngine:
             raise ValueError(f"Unknown event type: {type(event)}")
 
         asyncio.create_task(self._persist_storage.record_event(event))
-        asyncio.create_task(self.try_take_snapshot(event.flow_id))
+
+    async def periodic_snapshot(self):
+        while True:
+            await asyncio.sleep(self._snapshot_duration_s)
+            for flow_id in await self._persist_storage.get_flow_ids():
+                await self.try_take_snapshot(flow_id)
+            await asyncio.sleep(self._snapshot_duration_s)
 
     async def try_take_snapshot(self, flow_id: str):
-        latest_snapshot_time = -1
-        for key in self._snapshots.keys():
-            if key.startswith(flow_id):
-                latest_snapshot_time = max(latest_snapshot_time, int(key.split(":")[-1]))
         current = int(time.time() * 1000)
-        if (
-            latest_snapshot_time > 0
-            and current - latest_snapshot_time < self._snapshot_duration_s * 1000
-        ):
-            return
         snapshot = await self.replay(flow_id, str(current))
-        if f"{flow_id}:{current}" not in self._snapshots:
-            snapshot.store_snapshot(current)
-            self._snapshots[f"{flow_id}:{current}"] = snapshot
+        async with self._snapshot_lock[flow_id]:
+            if f"{flow_id}:{current}" not in self._snapshots:
+                snapshot.store_snapshot(current)
+                self._snapshots[f"{flow_id}:{current}"] = snapshot
+                print(f"Snapshot taken for flow {flow_id} at {current}")
 
     async def recover(self):
         latest_snapshot = self._snapshots["latest"]
@@ -421,6 +414,7 @@ class InsightEngine:
             self._snapshots[label] = snapshot
 
         print(f"Recovered {len(latest_snapshot.restore_snapshots())} snapshots")
+        asyncio.create_task(self.periodic_snapshot())
 
     async def replay(self, flow_id: str, end_time: Optional[str] = None):
         should_take_snapshot = False
@@ -454,6 +448,7 @@ class InsightEngine:
         if latest_timestamp == -1:
             latest_snapshot = SnapshotStorage(self._snapshot_storage_type)
         else:
+            print(f"found snapshot {latest_timestamp}")
             latest_snapshot = self._snapshots[f"{flow_id}:{str(latest_timestamp)}"].take_snapshot()
 
         events = await self._persist_storage.query_events(flow_id, latest_timestamp, end_time)
@@ -463,9 +458,13 @@ class InsightEngine:
 
         await self._do_replay(events, latest_snapshot)
 
-        if end_time - latest_timestamp >= 30000 or should_take_snapshot:
-            latest_snapshot.store_snapshot(str(end_time))
-            self._snapshots[f"{flow_id}:{str(end_time)}"] = latest_snapshot
+        async with self._snapshot_lock[flow_id]:
+            if end_time - latest_timestamp >= 30000 or (
+                should_take_snapshot and latest_timestamp == -1
+            ):
+                latest_snapshot.store_snapshot(str(end_time))
+                self._snapshots[f"{flow_id}:{str(end_time)}"] = latest_snapshot
+                print(f"Here Snapshot taken for flow {flow_id} at {end_time}")
 
         return latest_snapshot
 

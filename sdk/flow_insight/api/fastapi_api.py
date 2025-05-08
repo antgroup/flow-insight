@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, Dict, List, Optional
@@ -93,6 +94,7 @@ class FastAPIInsightServer(APIInterface):
         config = uvicorn.Config(self.app, host=host, port=port)
         server = uvicorn.Server(config)
         logger.info(f"Insight FastAPI server running at http://{host}:{port}")
+        asyncio.create_task(self.engine.recover())
         await server.serve()
 
     async def _parse_request(self, request: Request) -> Dict[str, Any]:
