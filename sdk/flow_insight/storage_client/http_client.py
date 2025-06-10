@@ -14,15 +14,20 @@ class HTTPStorageClient(StorageClient):
 
     async def _async_request_server(self, endpoint: str, data: dict = None, method: str = "POST"):
         url = f"{self._server_url}/{endpoint}"
-        if method == "POST":
-            response = await self._async_client.post(url, json=data)
-        elif method == "GET":
-            response = await self._async_client.get(url, params=data)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
+        while True:
+            try:
+                if method == "POST":
+                    response = await self._async_client.post(url, json=data)
+                elif method == "GET":
+                    response = await self._async_client.get(url, params=data)
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
 
-        response.raise_for_status()
-        return response.json() if response.content else None
+                response.raise_for_status()
+                return response.json() if response.content else None
+            except Exception as e:
+                print(f"Error sending request to {url}: {e}")
+                continue
 
     async def async_ping(self):
         try:
@@ -44,15 +49,20 @@ class HTTPStorageClient(StorageClient):
 
     def _sync_request_server(self, endpoint: str, data: dict = None, method: str = "POST"):
         url = f"{self._server_url}/{endpoint}"
-        if method == "POST":
-            response = self._sync_client.post(url, json=data)
-        elif method == "GET":
-            response = self._sync_client.get(url, params=data)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
+        while True:
+            try:
+                if method == "POST":
+                    response = self._sync_client.post(url, json=data)
+                elif method == "GET":
+                    response = self._sync_client.get(url, params=data)
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
 
-        response.raise_for_status()
-        return response.json() if response.content else None
+                response.raise_for_status()
+                return response.json() if response.content else None
+            except Exception as e:
+                print(f"Error sending request to {url}: {e}")
+                continue
 
     async def async_emit_record(self, record_type: RecordType, record: BaseModel):
         data = {"record_type": record_type.value, "record": record.model_dump()}

@@ -387,7 +387,7 @@ class InsightEngine:
         while True:
             for flow_id in await self._persist_storage.get_flow_ids():
                 await self.try_take_snapshot(flow_id)
-            await asyncio.sleep(10)
+            await asyncio.sleep(600)
 
     async def try_take_snapshot(self, flow_id: str):
         async with self._snapshot_lock[flow_id]:
@@ -431,19 +431,17 @@ class InsightEngine:
         asyncio.create_task(self.periodic_snapshot())
 
     async def replay(self, flow_id: str, end_time: Optional[str] = None):
+        if end_time is None and self._persist_storage_type == PersistStorageType.INFLUXDB:
+            end_time = int(time.time() * 1000)
+        elif end_time is None:
+            return None
+        end_time = int(end_time)
+        creation_time = await self._persist_storage.get_flow_creation_time(flow_id)
+        if creation_time == -1:
+            return None
+        if end_time < creation_time:
+            return SnapshotStorage(self._snapshot_storage_type)
         async with self._snapshot_lock[flow_id]:
-            if end_time is None and self._persist_storage_type == PersistStorageType.INFLUXDB:
-                end_time = int(time.time() * 1000)
-            elif end_time is None:
-                return None
-            end_time = int(end_time)
-            creation_time = await self._persist_storage.get_flow_creation_time(flow_id)
-            if creation_time == -1:
-                return None
-
-            if end_time < creation_time:
-                return SnapshotStorage(self._snapshot_storage_type)
-
             latest_snapshot = None
             latest_timestamp = -1
             keys = sorted(
