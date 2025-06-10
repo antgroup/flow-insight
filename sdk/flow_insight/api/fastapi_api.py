@@ -91,7 +91,7 @@ class FastAPIInsightServer(APIInterface):
 
     async def run(self, host: str, port: int):
         """Run the HTTP server."""
-        config = uvicorn.Config(self.app, host=host, port=port)
+        config = uvicorn.Config(self.app, host=host, port=port, access_log=False)
         server = uvicorn.Server(config)
         logger.info(f"Insight FastAPI server running at http://{host}:{port}")
         asyncio.create_task(self.engine.recover())
