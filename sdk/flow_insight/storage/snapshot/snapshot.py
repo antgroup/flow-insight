@@ -35,7 +35,7 @@ class SnapshotStorage:
         )
         self._storage_backend = storage_backend
         self._storage["services"] = defaultdict(set)
-        self._storage["methods"] = defaultdict(lambda: defaultdict(set))
+        self._storage["methods"] = defaultdict(lambda: defaultdict(list))
         self._storage["functions"] = defaultdict(set)
         self._storage["method_id_map"] = defaultdict(dict)
         self._storage["method_counter"] = defaultdict(int)
@@ -184,7 +184,8 @@ class SnapshotStorage:
         self._storage["method_id_map"][flow_id][(service, method)] = "method" + str(
             self._storage["method_counter"][flow_id]
         )
-        self._storage["methods"][flow_id][service].add(method)
+        if method not in self._storage["methods"][flow_id][service]:
+            self._storage["methods"][flow_id][service].append(method)
 
     async def add_function(self, flow_id: str, function: Method):
         if function.name not in self._storage["functions"][flow_id]:
