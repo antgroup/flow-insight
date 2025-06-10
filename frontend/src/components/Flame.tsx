@@ -14,18 +14,18 @@ type FlameVisualizationProps = {
   graphData: GraphData;
   physicalViewData?: PhysicalViewData | null;
   colorMode?:
-    | 'warm'
-    | 'cold'
-    | 'red'
-    | 'orange'
-    | 'yellow'
-    | 'green'
-    | 'pastelgreen'
-    | 'blue'
-    | 'aqua'
-    | 'allocation'
-    | 'differential'
-    | 'nodejs';
+  | 'warm'
+  | 'cold'
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'pastelgreen'
+  | 'blue'
+  | 'aqua'
+  | 'allocation'
+  | 'differential'
+  | 'nodejs';
   currentTimestamp?: number;
 };
 
@@ -806,8 +806,7 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
           g.attr(
             'transform',
             d =>
-              `translate(${d.x0},${
-                inverted ? yScale(d.depth) : (height || totalHeight) - yScale(d.depth) - cellHeight
+              `translate(${d.x0},${inverted ? yScale(d.depth) : (height || totalHeight) - yScale(d.depth) - cellHeight
               })`
           );
 
@@ -820,10 +819,9 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
             .attr(
               'transform',
               d =>
-                `translate(${d.x0},${
-                  inverted
-                    ? yScale(d.depth)
-                    : (height || totalHeight) - yScale(d.depth) - cellHeight
+                `translate(${d.x0},${inverted
+                  ? yScale(d.depth)
+                  : (height || totalHeight) - yScale(d.depth) - cellHeight
                 })`
             );
 
@@ -1582,29 +1580,17 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
         return { name: '_root', customValue: 0, children: [] };
       }
 
+      // Debug: Track original data size to ensure all points are included
+      console.log(`Processing ${data.aggregated.length} aggregated data points and ${data.parentStartTimes.length} parent start times`);
+
       // Find max value for normalization
       let maxValue = 0;
       let minValue = Infinity;
+
+      // First pass: calculate all original values including running processes
+      const calculatedValues = new Map<string, number>();
+
       data.aggregated.forEach(node => {
-        if (node.value && node.value > maxValue) {
-          maxValue = node.value;
-        }
-        if (node.value && node.value < minValue && node.value > 0) {
-          minValue = node.value;
-        }
-      });
-
-      // If no positive values found, set minValue to 0
-      if (minValue === Infinity) {
-        minValue = 0;
-      }
-
-      // Create a map of function names to their nodes for quick lookup
-      const nodeMap = new Map<string, FlameNode>();
-
-      // First pass: create all nodes with normalized values
-      data.aggregated.forEach(node => {
-        // Store the original value for display
         let originalValue = node.value || 0;
 
         // For nodes with original value of 0, try to calculate from startTime if available
@@ -1619,23 +1605,60 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
           }
         }
 
+        // Ensure all data points have at least a minimum value for visibility
+        if (originalValue <= 0) {
+          originalValue = 0.001; // Minimum visible value
+        }
+
+        calculatedValues.set(node.name, originalValue);
+
+        if (originalValue > maxValue) {
+          maxValue = originalValue;
+        }
+        if (originalValue < minValue) {
+          minValue = originalValue;
+        }
+      });
+
+      // If no positive values found, set reasonable defaults
+      if (minValue === Infinity || maxValue === 0) {
+        minValue = 0.001;
+        maxValue = 1;
+      }
+
+      // Create a map of function names to their nodes for quick lookup
+      const nodeMap = new Map<string, FlameNode>();
+
+      // Second pass: create all nodes with normalized values
+      data.aggregated.forEach(node => {
+        const originalValue = calculatedValues.get(node.name) || 0.001;
+
         // Calculate normalized value for sizing
         // For flame graphs, we want to preserve the relative proportions
         // but ensure small values are still visible
         let normalizedValue = originalValue;
 
-        // Apply a more conservative normalization to prevent excessive scaling
-        if (normalizedValue > 0 && maxValue > minValue) {
+        // Apply normalization to ensure all data points are visible
+        if (maxValue > minValue && maxValue > 0) {
           // For very large ranges, use a more moderate scaling approach
           if (maxValue / minValue > 100) {
-            // Use square root scaling for better distribution
-            normalizedValue = Math.sqrt(normalizedValue / maxValue) * maxValue;
+            // Use square root scaling for better distribution while preserving relative sizes
+            const scalingFactor = Math.sqrt(originalValue / maxValue);
+            normalizedValue = scalingFactor * maxValue;
 
-            // Ensure minimum visible size
+            // Ensure minimum visible size (1% of max value)
             if (normalizedValue < maxValue * 0.01) {
               normalizedValue = maxValue * 0.01;
             }
+          } else {
+            // For smaller ranges, preserve the original proportions
+            normalizedValue = originalValue;
           }
+        }
+
+        // Final safety check: ensure all nodes have a minimum normalized value for visibility
+        if (normalizedValue <= 0) {
+          normalizedValue = Math.max(maxValue * 0.001, 0.001); // Very small but visible
         }
 
         // Create node with empty children array
@@ -1711,6 +1734,12 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
               if (startTime > 0) {
                 originalValue = currentTimestamp / 1000 - startTime; // Convert to seconds since startTime is in seconds
               }
+
+              // Ensure all parent nodes are visible
+              if (originalValue <= 0) {
+                originalValue = 0.001; // Minimum visible value
+              }
+
               const parentDataCopy: FlameNode = {
                 name: callerNodeId,
                 customValue: originalValue,
@@ -1760,6 +1789,12 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
           if (startTime > 0) {
             originalValue = currentTimestamp / 1000 - startTime; // Convert to seconds since startTime is in seconds
           }
+
+          // Ensure running processes are always visible
+          if (originalValue <= 0) {
+            originalValue = 0.001; // Minimum visible value for running processes
+          }
+
           const nodeDataCopy: FlameNode = {
             name: calleeId,
             customValue: originalValue,
@@ -1814,12 +1849,16 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
         }
       }
 
+      // Ensure all nodes from the original data are included
+      const orphanedNodes = Array.from(nodeMap.values()).filter(
+        node => !addedAsChild.has(node.name) && node.name !== '_main' && !childrens.has(node.name)
+      );
+
       mainNode.children = [
         ...(mainNode.children || []),
-        ...Array.from(nodeMap.values()).filter(
-          node => !addedAsChild.has(node.name) && node.name !== '_main' && !childrens.has(node.name)
-        ),
+        ...orphanedNodes,
       ];
+
       // Calculate total value of all children
       let totalChildrenValue = 0;
       if (mainNode.children) {
@@ -1828,10 +1867,9 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
         });
       }
 
-      // If root node value is less than total children value, adjust it
-      if (mainNode.customValue < totalChildrenValue) {
-        mainNode.customValue = totalChildrenValue;
-      }
+      // Ensure the main node has a proper value based on its children
+      mainNode.customValue = Math.max(totalChildrenValue, 0.001);
+      mainNode.originalValue = Math.max(totalChildrenValue, 0.001);
 
       // IMPORTANT: Make sure no nodes are hidden by default
       // This is the key fix - ensure no nodes have hide=true initially
@@ -1848,6 +1886,18 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
 
       // Apply the fix to make all nodes visible
       ensureNodesVisible(mainNode);
+
+      // Debug: Count total nodes in the final tree
+      const countNodes = (node: FlameNode): number => {
+        let count = 1;
+        if (node.children) {
+          count += node.children.reduce((sum, child) => sum + countNodes(child), 0);
+        }
+        return count;
+      };
+
+      const totalNodesInTree = countNodes(mainNode);
+      console.log(`Final flame tree contains ${totalNodesInTree} nodes (including main node)`);
 
       return mainNode;
     };
