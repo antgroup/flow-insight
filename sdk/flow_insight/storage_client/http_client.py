@@ -1,9 +1,13 @@
 import httpx
 from pydantic import BaseModel
+import logging
 
 from flow_insight.storage.persist.base import StorageClient
 from flow_insight.storage.persist.model import RecordType
 
+
+httpx_logger = logging.getLogger("httpx")
+httpx_logger.setLevel(logging.WARNING)
 
 class HTTPStorageClient(StorageClient):
     def __init__(self, server_url: str):

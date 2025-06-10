@@ -178,6 +178,7 @@ class SnapshotStorage:
         if (
             service in self._storage["methods"][flow_id]
             and method in self._storage["methods"][flow_id][service]
+            and (service, method) in self._storage["method_id_map"][flow_id]
         ):
             return
         self._storage["method_counter"][flow_id] += 1
