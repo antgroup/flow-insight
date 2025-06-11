@@ -319,21 +319,15 @@ class FastAPIInsightServer(APIInterface):
         flow_id = data.get("flow_id", "")
         end_time = data.get("end_time", None)
 
-        try:
-            snapshot = await self.engine.replay(flow_id, end_time)
-            flame_data = await self.engine.get_flame_graph_data(flow_id, snapshot)
-            return JSONResponse(
-                rest_response(
-                    result=True,
-                    msg="Flame graph data retrieved successfully.",
-                    data=flame_data.model_dump(),
-                )
+        snapshot = await self.engine.replay(flow_id, end_time)
+        flame_data = await self.engine.get_flame_graph_data(flow_id, snapshot)
+        return JSONResponse(
+            rest_response(
+                result=True,
+                msg="Flame graph data retrieved successfully.",
+                data=flame_data.model_dump(),
             )
-        except Exception as e:
-            logger.error(f"Error retrieving flame graph data: {str(e)}")
-            return JSONResponse(
-                rest_response(result=False, msg=f"Error retrieving flame graph data: {str(e)}")
-            )
+        )
 
     async def get_physical_view_data(self, request: Request) -> JSONResponse:
         """Get physical view data for visualization."""

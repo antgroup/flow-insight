@@ -129,6 +129,7 @@ export type FlameGraphNode = {
   count?: number;
   totalInParent?: Array<{
     callerNodeId: string;
+    parentSpanId: string;
     duration: number;
     count: number;
     startTime: number;
@@ -143,6 +144,7 @@ export type FlameGraphData = {
     startTimes: Array<{
       callerId: string;
       startTime: number;
+      parentSpanId: string;
     }>;
   }>;
 };

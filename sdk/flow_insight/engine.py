@@ -531,7 +531,13 @@ class InsightEngine:
         start_time = call_submit.timestamp
 
         await snapshot.set_start_time(
-            flow_id, source_service, source_method, target_service, target_method, start_time
+            flow_id,
+            source_service,
+            source_method,
+            target_service,
+            target_method,
+            start_time,
+            call_submit.parent_span_id,
         )
         await snapshot.update_flow_record(
             flow_id,
@@ -685,7 +691,20 @@ class InsightEngine:
                 total_in_parent = defaultdict(list)
             start_times = await snapshot.get_start_time(flow_id, func_id[0], func_id[1])
             for i, func_data in enumerate(func_datas):
-                caller_info = await snapshot.get_caller_info(flow_id, func_data.span_id)
+                parent_span_id, caller_info = await snapshot.get_caller_info(
+                    flow_id, func_data.span_id
+                )
+                func_start_time = 0
+                found = False
+                for caller_info_pair, v in start_times.items():
+                    if caller_info_pair == (caller_info.service, caller_info.method):
+                        for pspan, start_time in v:
+                            if pspan == parent_span_id:
+                                func_start_time = start_time
+                                found = True
+                                break
+                    if found:
+                        break
                 caller_service = caller_info.service
                 caller_method = caller_info.method
                 if caller_service is not None:
@@ -697,9 +716,10 @@ class InsightEngine:
                     caller_node_id = caller_method.name
                 total_in_parent[caller_node_id].append(
                     {
+                        "parent_span_id": parent_span_id,
                         "duration": func_data.duration,
                         "count": 1,
-                        "start_time": start_times[i],
+                        "start_time": func_start_time,
                     }
                 )
             visited[func_id] = total_in_parent
@@ -710,6 +730,7 @@ class InsightEngine:
                 for i in v:
                     total_in_parent_struct.append(
                         TotalInParent(
+                            parent_span_id=i["parent_span_id"],
                             caller_node_id=k,
                             duration=i["duration"],
                             count=i["count"],
@@ -733,16 +754,20 @@ class InsightEngine:
         start_times = await snapshot.get_start_times(flow_id)
         for callee_id, start_timesC in start_times.items():
             if callee_id not in visited:
-                start_timesC = [
-                    {
-                        "caller_id": f"{service.service_name}:{service.instance_id}.{method.name}"
-                        if service is not None
-                        else method.name,
-                        "start_time": v,
-                    }
-                    for (service, method), v in start_timesC.items()
-                    if v > 0
-                ]
+                start_time_array = []
+                for (service, method), v in start_timesC.items():
+                    for (parent_span_id, i) in v:
+                        start_time_array.append(
+                            {
+                                "caller_id": (
+                                    f"{service.service_name}:{service.instance_id}.{method.name}"
+                                    if service is not None
+                                    else method.name
+                                ),
+                                "start_time": i,
+                                "parent_span_id": parent_span_id,
+                            }
+                        )
                 (callee_service, callee_method) = callee_id
                 str_id = (
                     (
@@ -755,7 +780,7 @@ class InsightEngine:
                 parent_start_times.append(
                     ParentStartTimes(
                         callee_id=str_id,
-                        start_times=start_timesC,
+                        start_times=start_time_array,
                     )
                 )
 
@@ -778,7 +803,7 @@ class InsightEngine:
         span_id = call_end.span_id
         await snapshot.del_debugger_info(flow_id, target_service, target_method, span_id)
 
-        caller_info = await snapshot.get_caller_info(flow_id, span_id)
+        _, caller_info = await snapshot.get_caller_info(flow_id, span_id)
         await snapshot.update_flow_record(
             flow_id,
             caller_info.service,
@@ -845,7 +870,9 @@ class InsightEngine:
             else None
         )
         method = Method(name=call_begin.source_method)
-        await snapshot.add_caller_info(flow_id, span_id, CallerInfo(service=service, method=method))
+        await snapshot.add_caller_info(
+            flow_id, span_id, CallerInfo(service=service, method=method), call_begin.parent_span_id
+        )
 
     async def emit_service_physical_stats(
         self,

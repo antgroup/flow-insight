@@ -57,6 +57,7 @@ export type ATFlameGraphNode = {
   count: number;
   totalInParent: {
     callerNodeId: string;
+    parentSpanId: string;
     duration: number;
     count: number;
     startTime: number;
@@ -69,6 +70,7 @@ export type ParentStartTime = {
   startTimes: {
     callerId: string;
     startTime: number;
+    parentSpanId: string;
   }[];
 };
 

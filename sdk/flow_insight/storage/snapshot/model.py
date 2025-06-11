@@ -56,9 +56,9 @@ class CallerInfo(pydantic.BaseModel):
 
 
 class FlameDataAggregated(pydantic.BaseModel):
-    total_time: float
+    duration: float
     call_count: int
-    durations: Dict[str, float]
+    span_id: str
     service_name: str
 
 
@@ -112,6 +112,7 @@ class CallGraphData(pydantic.BaseModel):
 
 class TotalInParent(pydantic.BaseModel):
     caller_node_id: str
+    parent_span_id: str
     duration: float
     count: int
     start_time: int
