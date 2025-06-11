@@ -698,9 +698,9 @@ class InsightEngine:
                         caller_node_id = caller_method.name
                     total_in_parent[caller_node_id]["duration"] += duration
                     total_in_parent[caller_node_id]["count"] += 1
-                    if "start_time" not in total_in_parent[caller_node_id]:
+                    if "start_time" not in total_in_parent[caller_node_id] or total_in_parent[caller_node_id]["start_time"] == 0:
                         total_in_parent[caller_node_id]["start_time"] = start_times.get(
-                            caller_node_id, 0
+                            (caller_service, caller_method), 0
                         )
             visited[func_id] = total_in_parent
             service, method = func_id
@@ -727,16 +727,16 @@ class InsightEngine:
 
         parent_start_times = []
         start_times = await snapshot.get_start_times(flow_id)
-        for callee_id, start_times in start_times.items():
+        for callee_id, start_timesC in start_times.items():
             if callee_id not in visited:
-                start_times = [
+                start_timesC = [
                     {
                         "caller_id": f"{service.service_name}:{service.instance_id}.{method.name}"
                         if service is not None
                         else method.name,
                         "start_time": v,
                     }
-                    for (service, method), v in start_times.items()
+                    for (service, method), v in start_timesC.items()
                     if v > 0
                 ]
                 (callee_service, callee_method) = callee_id
@@ -751,7 +751,7 @@ class InsightEngine:
                 parent_start_times.append(
                     ParentStartTimes(
                         callee_id=str_id,
-                        start_times=start_times,
+                        start_times=start_timesC,
                     )
                 )
 

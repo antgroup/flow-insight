@@ -146,3 +146,31 @@ export type FlameGraphData = {
     }>;
   }>;
 };
+
+export type GanttTask = {
+  id: string;
+  name: string;
+  start: Date;
+  end: Date;
+  progress: number;
+  type: 'task' | 'milestone' | 'project';
+  isDisabled?: boolean;
+  styles?: {
+    progressColor?: string;
+    progressSelectedColor?: string;
+    backgroundColor?: string;
+    backgroundSelectedColor?: string;
+  };
+  dependencies?: string[];
+  serviceName?: string;
+  instanceId?: string;
+  isRunning?: boolean;
+};
+
+export type GanttData = {
+  tasks: GanttTask[];
+  dependencies: Array<{
+    from: string;
+    to: string;
+  }>;
+};

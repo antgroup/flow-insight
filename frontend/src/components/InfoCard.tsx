@@ -8,7 +8,7 @@ type InfoCardProps = {
   data: Node | null;
   visible: boolean;
   graphData: GraphData;
-  currentView?: 'logical' | 'physical' | 'flame' | 'call_stack' | 'analysis';
+  currentView?: 'logical' | 'physical' | 'flame' | 'call_stack' | 'analysis' | 'gantt';
   onNavigateToLogicalView?: (nodeId: string) => void;
   isOpen: boolean; // New prop to control visibility
 };

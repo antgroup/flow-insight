@@ -21,6 +21,7 @@ import InsightPanel from './Analysis';
 import DebugPanel from './DebugPanel';
 import ElementsPanel from './ElementsPanel';
 import FlameVisualization, { FlameVisualizationHandle } from './Flame';
+import GanttVisualization, { GanttVisualizationHandle } from './Gantt';
 import InfoCard from './InfoCard';
 import PhysicalVisualization, { PhysicalVisualizationHandle } from './Physical';
 import Visualization, { colorScheme, VisualizationHandle } from './Visualization';
@@ -45,7 +46,7 @@ type GraphPageProps = {
   physicalViewData?: PhysicalViewData | null;
   flameData?: FlameGraphData | null;
   flowId?: string;
-  initialViewType?: 'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis';
+  initialViewType?: 'logical' | 'call_stack' | 'physical' | 'flame' | 'gantt' | 'analysis';
   autoRefresh?: boolean;
   onElementClick?: (data: ElementData, skip_zoom?: boolean) => void;
   selectedElementId?: string | null;
@@ -80,11 +81,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(initialAutoRefresh);
   const [currentViewType, setCurrentViewType] = useState<
-    'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis'
+    'logical' | 'call_stack' | 'physical' | 'flame' | 'gantt' | 'analysis'
   >(initialViewType || 'logical');
   const visualizationRef = useRef<VisualizationHandle>(null);
   const physicalVisualizationRef = useRef<PhysicalVisualizationHandle>(null);
   const flameVisualizationRef = useRef<FlameVisualizationHandle>(null);
+  const ganttVisualizationRef = useRef<GanttVisualizationHandle>(null);
   const autoRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [updating, setUpdating] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -227,22 +229,23 @@ const GraphPage: React.FC<GraphPageProps> = ({
   }, [currentFlowId, fetchGraphData, apiService]);
 
   // eslint-disable-next-line
-  const fetchDatas = async (isLatest?: boolean, timestamp?: number, showLoading = true) => {
+  const fetchDatas = async (isLatest?: boolean, timestamp?: number, showLoading = true, viewType?: string) => {
     const useLatestTime = isLatest !== undefined ? isLatest : isLatestTime;
     const useTimestamp = timestamp !== undefined ? timestamp : currentTimestamp;
+    const targetViewType = viewType || currentViewType;
 
     try {
       if (showLoading) {
         setUpdating(true);
       }
 
-      if (currentViewType === 'call_stack') {
+      if (targetViewType === 'call_stack') {
         await fetchGraphData(currentFlowId, true, useLatestTime, useTimestamp);
       }
-      if (currentViewType === 'logical') {
+      if (targetViewType === 'logical') {
         await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
       }
-      if (currentViewType === 'physical') {
+      if (targetViewType === 'physical') {
         await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
         try {
           const data = await apiService.getPhysicalViewData(
@@ -254,7 +257,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
           setError(err instanceof Error ? err.message : 'Failed to fetch physical view data');
         }
       }
-      if (currentViewType === 'flame' || currentViewType === 'analysis') {
+      if (targetViewType === 'flame' || targetViewType === 'gantt' || targetViewType === 'analysis') {
         await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
         try {
           const data = await apiService.getPhysicalViewData(
@@ -326,12 +329,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
   }, []);
 
   const handleViewTypeChange = useCallback(
-    async (viewType: 'logical' | 'call_stack' | 'physical' | 'flame' | 'analysis') => {
+    async (viewType: 'logical' | 'call_stack' | 'physical' | 'flame' | 'gantt' | 'analysis') => {
       // First change to the new view type
       setCurrentViewType(viewType);
 
-      // Then fetch data for this view type with the current time settings
-      await fetchDatas(isLatestTime, currentTimestamp);
+      // Then fetch data for this view type with the current time settings, passing the viewType explicitly
+      await fetchDatas(isLatestTime, currentTimestamp, true, viewType);
     },
     [fetchDatas, isLatestTime, currentTimestamp]
   );
@@ -426,6 +429,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
         break;
       case 'flame':
         flameVisualizationRef.current?.exportSvg();
+        break;
+      case 'gantt':
+        ganttVisualizationRef.current?.exportSvg();
         break;
       case 'analysis':
         // Export analysis report via global function set by Analysis component
@@ -629,6 +635,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 </ToggleButton>
                 <ToggleButton value="flame" aria-label="flame graph view" disabled={updating}>
                   Flame Graph
+                </ToggleButton>
+                <ToggleButton value="gantt" aria-label="gantt view" disabled={updating}>
+                  Gantt
                 </ToggleButton>
                 <ToggleButton value="analysis" aria-label="analysis view" disabled={updating}>
                   Analysis
@@ -883,27 +892,28 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   currentViewType === 'call_stack' ||
                   currentViewType === 'physical' ||
                   currentViewType === 'flame' ||
+                  currentViewType === 'gantt' ||
                   currentViewType === 'analysis') && (
-                  <Tooltip title="Export as SVG">
-                    <IconButton
-                      onClick={handleExportSvg}
-                      size="small"
-                      sx={{
-                        backgroundColor: 'white',
-                        boxShadow: 1,
-                        padding: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        '&:hover': {
-                          backgroundColor: 'grey.100',
-                        },
-                      }}
-                    >
-                      <Download size={16} />
-                    </IconButton>
-                  </Tooltip>
-                )}
+                    <Tooltip title="Export as SVG">
+                      <IconButton
+                        onClick={handleExportSvg}
+                        size="small"
+                        sx={{
+                          backgroundColor: 'white',
+                          boxShadow: 1,
+                          padding: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          '&:hover': {
+                            backgroundColor: 'grey.100',
+                          },
+                        }}
+                      >
+                        <Download size={16} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
 
                 <Tooltip title={debugPanelOpen ? 'Hide debug panel' : 'Show debug panel'}>
                   <IconButton
@@ -1135,6 +1145,47 @@ const GraphPage: React.FC<GraphPageProps> = ({
             ) : (
               <div className="loading-container">
                 <p>No flame graph data available</p>
+              </div>
+            )}
+          </div>
+        )}
+        {flameData && currentViewType === 'gantt' && (
+          <div
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              width: '100%',
+              height: '600px',
+            }}
+          >
+            {updating ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%',
+                }}
+              >
+                <CircularProgress />
+              </Box>
+            ) : flameData ? (
+              <GanttVisualization
+                ref={ganttVisualizationRef}
+                flameData={flameData}
+                onElementClick={handleElementClick}
+                selectedElementId={selectedElementId}
+                flowId={currentFlowId}
+                onUpdate={handleUpdate}
+                updating={updating}
+                searchTerm={searchTerm}
+                // eslint-disable-next-line
+                graphData={graphData!}
+                currentTimestamp={currentTimestamp}
+              />
+            ) : (
+              <div className="loading-container">
+                <p>No gantt data available</p>
               </div>
             )}
           </div>

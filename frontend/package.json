@@ -1,6 +1,6 @@
 {
   "name": "@aeonsule/flow-insight",
-  "version": "0.7.0",
+  "version": "0.7.6",
   "type": "module",
   "description": "A React component library for distributed system visualization and insights",
   "main": "dist/index.js",
@@ -58,6 +58,7 @@
     "dagre": "^0.8.5",
     "dagre-d3": "^0.6.4",
     "framer-motion": "^12.8.2",
+    "gantt-task-react": "^0.3.9",
     "js-tiktoken": "^1.0.19",
     "lucide-react": "^0.503.0",
     "mermaid": "^11.6.0",
