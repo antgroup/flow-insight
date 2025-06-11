@@ -19,32 +19,50 @@ export type GanttVisualizationHandle = {
     exportSvg: () => void;
 };
 
-// Enhanced task interface with grouping support
+// Enhanced task interface with hierarchical tree support
 interface CustomTask {
     id: string;
     name: string;
+    fullName: string; // Full service:instance.method name
     startTime: number;
     endTime: number;
     progress: number;
-    type: 'main' | 'group' | 'completed' | 'running';
+    type: 'main' | 'method'; // method = function with execution count
     serviceName?: string;
-    groupId?: string;
-    level: number; // 0 = root, 1 = group, 2 = task
+    methodName?: string;
+    parentId?: string;
+    level: number; // 0 = main, 1 = service, 2 = method, 3 = execution
     isCollapsed?: boolean;
-    children?: CustomTask[];
-    dependencies?: string[];
+    children: CustomTask[];
+    callers: string[]; // Who calls this
+    callees: string[]; // Who this calls
     color?: string;
+    executionCount?: number; // Number of executions
 }
 
-// Group structure
-interface TaskGroup {
+// Tree node structure for building hierarchy (matching FlameNode pattern)
+interface TreeNode {
     id: string;
     name: string;
-    tasks: CustomTask[];
-    isCollapsed: boolean;
-    color: string;
-    startTime: number;
-    endTime: number;
+    fullName: string;
+    type: 'method';
+    serviceName?: string;
+    methodName?: string;
+    children: Map<string, TreeNode>;
+    executions: Array<{
+        startTime: number;
+        endTime: number;
+        type: 'completed' | 'running';
+    }>;
+    callers: Set<string>;
+    callees: Set<string>;
+    totalInParent?: Array<{
+        callerNodeId: string;
+        duration: number;
+        count: number;
+        startTime: number;
+    }>;
+    count?: number;
 }
 
 // Time scale modes
@@ -89,236 +107,459 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         const svgRef = useRef<SVGSVGElement>(null);
         const containerRef = useRef<HTMLDivElement>(null);
         const [tasks, setTasks] = useState<CustomTask[]>([]);
-        const [groups, setGroups] = useState<TaskGroup[]>([]);
         const [timeScale, setTimeScale] = useState<TimeScale>('seconds');
         const [zoomLevel, setZoomLevel] = useState(1);
-        const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+        const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
         const [hoveredTask, setHoveredTask] = useState<string | null>(null);
 
         // Chart dimensions
         const chartHeight = 500;
         const rowHeight = 40;
-        const groupRowHeight = 45;
-        const labelWidth = 280;
+        const serviceRowHeight = 45;
+        const methodRowHeight = 42;
+        const labelWidth = 320;
         const timelineHeight = 50;
+        const indentWidth = 20;
 
-        // Transform flameData to grouped tasks
-        const transformFlameDataToGroupedTasks = (data: FlameGraphData): { tasks: CustomTask[], groups: TaskGroup[] } => {
+        // Transform flameData to hierarchical tree tasks
+        const transformFlameDataToTreeTasks = (data: FlameGraphData): CustomTask[] => {
             if (!data || !data.aggregated || !Array.isArray(data.aggregated)) {
                 console.warn('Invalid flame graph data format:', data);
-                return { tasks: [], groups: [] };
+                return [];
             }
 
-            const customTasks: CustomTask[] = [];
-            const taskGroups: TaskGroup[] = [];
-            const callerGroupMap = new Map<string, TaskGroup>();
-            const dependencyMap = new Map<string, string[]>(); // callee -> callers
-            let taskIdCounter = 0;
-
-            // Helper function to format display name
-            const formatDisplayName = (name: string): string => {
-                if (name === '_main') return 'Main Execution Flow';
-
-                const match = name.match(/^(.+?):(.+?)\.(.+)$/);
-                if (match) {
-                    const [_, serviceName, _instanceId, func] = match;
-                    return func;
+            // Helper function to parse service.method from full name
+            const parseServiceMethod = (fullName: string): { serviceName: string, methodName: string, displayName: string } => {
+                if (fullName === '_main') {
+                    return { serviceName: 'System', methodName: 'main', displayName: 'Main Execution Flow' };
                 }
-                return name;
+
+                const match = fullName.match(/^(.+?):(.+?)\.(.+)$/);
+                if (match) {
+                    const [_, serviceName, _instanceId, methodName] = match;
+                    return {
+                        serviceName,
+                        methodName,
+                        displayName: `${serviceName}.${methodName}`
+                    };
+                }
+
+                // Fallback for non-standard names
+                const parts = fullName.split('.');
+                if (parts.length >= 2) {
+                    return {
+                        serviceName: parts[0],
+                        methodName: parts[parts.length - 1],
+                        displayName: `${parts[0]}.${parts[parts.length - 1]}`
+                    };
+                }
+
+                return { serviceName: 'Unknown', methodName: fullName, displayName: fullName };
             };
 
-            // Helper function to extract function name from full path
-            const extractFunctionName = (name: string): string => {
-                const match = name.match(/^(.+?):(.+?)\.(.+)$/);
-                if (match) {
-                    return match[3]; // Just the function name
-                }
-                return name.split('.').pop() || name;
-            };
-
-            // Collect all timing data for main task calculation
+            // Build recursive call tree structure exactly like Flame.tsx
+            const nodeMap = new Map<string, TreeNode>();
+            const addedAsChild = new Set<string>();
             const allStartTimes: number[] = [];
             const allEndTimes: number[] = [];
 
-            // First pass: Build dependency relationships from parentStartTimes
-            if (data.parentStartTimes) {
-                data.parentStartTimes.forEach(({ calleeId, startTimes }) => {
-                    startTimes.forEach(({ callerId }) => {
-                        if (callerId) {
-                            if (!dependencyMap.has(calleeId)) {
-                                dependencyMap.set(calleeId, []);
-                            }
-                            dependencyMap.get(calleeId)!.push(callerId);
-                        }
-                    });
-                });
-            }
-
-            // Process completed tasks and group by calling dependencies
-            data.aggregated.forEach((node, nodeIndex) => {
-                if (node.totalInParent && node.totalInParent.length > 0) {
-                    node.totalInParent.forEach(entry => {
-                        if (entry.startTime > 0 && entry.duration > 0) {
-                            const startTime = entry.startTime;
-                            const endTime = startTime + (entry.duration * 1000);
-
-                            allStartTimes.push(startTime);
-                            allEndTimes.push(endTime);
-
-                            // Determine caller group for this task
-                            const callers = dependencyMap.get(node.name) || [];
-                            const primaryCaller = callers.length > 0 ? callers[0] : 'Root';
-                            const callerDisplayName = primaryCaller === 'Root' ? 'Root Functions' : formatDisplayName(primaryCaller);
-
-                            // Get or create caller group
-                            if (!callerGroupMap.has(primaryCaller)) {
-                                const groupColor = CALLER_COLORS[callerGroupMap.size % CALLER_COLORS.length];
-                                const group: TaskGroup = {
-                                    id: `group-${primaryCaller}`,
-                                    name: `Called by: ${callerDisplayName}`,
-                                    tasks: [],
-                                    isCollapsed: false,
-                                    color: groupColor,
-                                    startTime: startTime,
-                                    endTime: endTime
-                                };
-                                callerGroupMap.set(primaryCaller, group);
-                                taskGroups.push(group);
-                            }
-
-                            const group = callerGroupMap.get(primaryCaller)!;
-                            group.startTime = Math.min(group.startTime, startTime);
-                            group.endTime = Math.max(group.endTime, endTime);
-
-                            const task: CustomTask = {
-                                id: `task-${taskIdCounter++}`,
-                                name: formatDisplayName(node.name),
-                                startTime: startTime,
-                                endTime: endTime,
-                                progress: 100,
-                                type: 'completed',
-                                groupId: group.id,
-                                level: 2,
-                                color: group.color,
-                                dependencies: callers
-                            };
-
-                            group.tasks.push(task);
-                            customTasks.push(task);
-                        }
-                    });
+            // Helper to get or create function node (matching Flame.tsx pattern)
+            const getFunctionNode = (fullName: string): TreeNode => {
+                if (!nodeMap.has(fullName)) {
+                    const { serviceName, methodName, displayName } = parseServiceMethod(fullName);
+                    const functionNode: TreeNode = {
+                        id: fullName,
+                        name: displayName,
+                        fullName,
+                        type: 'method',
+                        serviceName,
+                        methodName,
+                        children: new Map(),
+                        executions: [],
+                        callers: new Set(),
+                        callees: new Set()
+                    };
+                    nodeMap.set(fullName, functionNode);
                 }
+                return nodeMap.get(fullName)!;
+            };
+
+            // Create main node
+            const mainNode: TreeNode = {
+                id: '_main',
+                name: 'Main Execution Flow',
+                fullName: '_main',
+                type: 'method',
+                serviceName: '_main',
+                methodName: '_main',
+                children: new Map(),
+                executions: [],
+                callers: new Set(),
+                callees: new Set()
+            };
+            nodeMap.set('_main', mainNode);
+
+            // Process all aggregated data first to create base nodes (like Flame.tsx)
+            data.aggregated.forEach(node => {
+                const functionNode = getFunctionNode(node.name);
+                // Store totalInParent data for hierarchy building
+                functionNode.totalInParent = node.totalInParent;
+                functionNode.count = node.count;
             });
 
-            // Process running tasks
-            if (data.parentStartTimes) {
-                data.parentStartTimes.forEach(({ calleeId, startTimes }) => {
-                    startTimes.forEach(({ startTime, callerId }) => {
-                        if (startTime > 0 && startTime < currentTimestamp) {
-                            allStartTimes.push(startTime);
-                            allEndTimes.push(currentTimestamp);
+            // fillParent function exactly like Flame.tsx
+            const fillParent = (
+                nodeMap: Map<string, TreeNode>,
+                data: FlameGraphData,
+                nodeData: TreeNode,
+                callerNodeId: string,
+                startTime: number,
+                duration: number,
+                count: number,
+                isRunning: boolean
+            ) => {
+                addedAsChild.add(nodeData.fullName);
+                const parentNode = nodeMap.get(callerNodeId);
 
-                            // Determine caller group for this running task
-                            const callers = callerId ? [callerId] : dependencyMap.get(calleeId) || [];
-                            const primaryCaller = callers.length > 0 ? callers[0] : 'Root';
-                            const callerDisplayName = primaryCaller === 'Root' ? 'Root Functions' : formatDisplayName(primaryCaller);
+                const nodeDataCopy: TreeNode = {
+                    id: nodeData.id,
+                    name: nodeData.name,
+                    fullName: nodeData.fullName,
+                    type: nodeData.type,
+                    serviceName: nodeData.serviceName,
+                    methodName: nodeData.methodName,
+                    children: new Map(nodeData.children),
+                    executions: [{
+                        startTime,
+                        endTime: startTime + (duration * 1000),
+                        type: isRunning ? 'running' : 'completed'
+                    }],
+                    callers: new Set(nodeData.callers),
+                    callees: new Set(nodeData.callees)
+                };
 
-                            // Get or create caller group
-                            if (!callerGroupMap.has(primaryCaller)) {
-                                const groupColor = CALLER_COLORS[callerGroupMap.size % CALLER_COLORS.length];
-                                const group: TaskGroup = {
-                                    id: `group-${primaryCaller}`,
-                                    name: `Called by: ${callerDisplayName}`,
-                                    tasks: [],
-                                    isCollapsed: false,
-                                    color: groupColor,
-                                    startTime: startTime,
-                                    endTime: currentTimestamp
-                                };
-                                callerGroupMap.set(primaryCaller, group);
-                                taskGroups.push(group);
+                if (parentNode) {
+                    // Add as child to existing parent
+                    parentNode.children.set(nodeData.fullName, nodeDataCopy);
+                    return;
+                } else {
+                    // Need to create parent hierarchy - recursive call like Flame.tsx
+                    const startTimesData = data.parentStartTimes?.find(
+                        item => item.calleeId === callerNodeId
+                    )?.startTimes;
+
+                    if (startTimesData) {
+                        for (const { callerId, startTime: parentStartTime } of startTimesData) {
+                            let originalValue = 0;
+                            if (parentStartTime > 0) {
+                                originalValue = (currentTimestamp - parentStartTime) / 1000;
                             }
 
-                            const group = callerGroupMap.get(primaryCaller)!;
-                            group.startTime = Math.min(group.startTime, startTime);
-                            group.endTime = Math.max(group.endTime, currentTimestamp);
+                            // Ensure all parent nodes are visible
+                            if (originalValue <= 0) {
+                                originalValue = 0.001;
+                            }
 
-                            const task: CustomTask = {
-                                id: `running-${taskIdCounter++}`,
-                                name: `${formatDisplayName(calleeId)}`,
+                            const parentDataCopy: TreeNode = {
+                                id: callerNodeId,
+                                name: parseServiceMethod(callerNodeId).displayName,
+                                fullName: callerNodeId,
+                                type: 'method',
+                                serviceName: parseServiceMethod(callerNodeId).serviceName,
+                                methodName: parseServiceMethod(callerNodeId).methodName,
+                                children: new Map([[nodeData.fullName, nodeDataCopy]]),
+                                executions: [{
+                                    startTime: parentStartTime,
+                                    endTime: currentTimestamp,
+                                    type: 'running'
+                                }],
+                                callers: new Set(),
+                                callees: new Set([nodeData.fullName])
+                            };
+                            nodeMap.set(callerNodeId, parentDataCopy);
+
+                            const ancestor = nodeMap.get(callerId);
+                            if (ancestor) {
+                                addedAsChild.add(callerNodeId);
+                                ancestor.children.set(callerNodeId, parentDataCopy);
+                            } else {
+                                fillParent(
+                                    nodeMap,
+                                    data,
+                                    parentDataCopy,
+                                    callerId,
+                                    parentStartTime,
+                                    originalValue,
+                                    1,
+                                    true
+                                );
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Second pass: build the hierarchy exactly like Flame.tsx
+            nodeMap.forEach(nodeData => {
+                const parentData = nodeData.totalInParent || [];
+
+                // If this node has parents, add it as a child to each parent
+                parentData.forEach(({ callerNodeId, duration, count, startTime }) => {
+                    if (startTime > 0 && duration > 0) {
+                        allStartTimes.push(startTime);
+                        allEndTimes.push(startTime + (duration * 1000));
+                        fillParent(nodeMap, data, nodeData, callerNodeId, startTime, duration, count, false);
+                    }
+                });
+            });
+
+            // Third pass: Process running tasks exactly like Flame.tsx
+            if (data.parentStartTimes) {
+                data.parentStartTimes.forEach(({ calleeId, startTimes }) => {
+                    startTimes.forEach(({ callerId, startTime }) => {
+                        let originalValue = 0;
+                        if (startTime > 0) {
+                            originalValue = (currentTimestamp - startTime) / 1000;
+                        }
+
+                        // Ensure running processes are always visible
+                        if (originalValue <= 0) {
+                            originalValue = 0.001;
+                        }
+
+                        allStartTimes.push(startTime);
+                        allEndTimes.push(currentTimestamp);
+
+                        const nodeDataCopy: TreeNode = {
+                            id: calleeId,
+                            name: parseServiceMethod(calleeId).displayName,
+                            fullName: calleeId,
+                            type: 'method',
+                            serviceName: parseServiceMethod(calleeId).serviceName,
+                            methodName: parseServiceMethod(calleeId).methodName,
+                            children: new Map(),
+                            executions: [{
                                 startTime: startTime,
                                 endTime: currentTimestamp,
-                                progress: 100,
-                                type: 'running',
-                                groupId: group.id,
-                                level: 2,
-                                color: group.color,
-                                dependencies: callers
-                            };
+                                type: 'running'
+                            }],
+                            callers: new Set(),
+                            callees: new Set()
+                        };
 
-                            group.tasks.push(task);
-                            customTasks.push(task);
+                        if (!nodeMap.has(calleeId)) {
+                            nodeMap.set(calleeId, nodeDataCopy);
+                            fillParent(nodeMap, data, nodeDataCopy, callerId, startTime, originalValue, 1, true);
                         }
                     });
                 });
             }
+
+            // Fix children relationships recursively exactly like Flame.tsx
+            while (true) {
+                let changed = false;
+                nodeMap.forEach(node => {
+                    const copyNode = (nodeData: TreeNode): TreeNode => {
+                        return {
+                            ...nodeData,
+                            children: new Map(nodeData.children),
+                            executions: [...nodeData.executions],
+                            callers: new Set(nodeData.callers),
+                            callees: new Set(nodeData.callees)
+                        };
+                    };
+
+                    const fixChildren = (nodeData: TreeNode): boolean => {
+                        let changed = false;
+                        const realNode = nodeMap.get(nodeData.fullName);
+
+                        // Create deep copies of children
+                        const newChildren = new Map<string, TreeNode>();
+                        if (realNode && realNode.children) {
+                            realNode.children.forEach((child, key) => {
+                                changed = changed || fixChildren(child);
+                                newChildren.set(key, copyNode(child));
+                            });
+                        }
+
+                        if (nodeData.children && nodeData.children.size !== newChildren.size) {
+                            changed = true;
+                        }
+                        nodeData.children = newChildren;
+                        return changed;
+                    };
+
+                    changed = changed || fixChildren(node);
+                });
+
+                if (!changed) {
+                    break;
+                }
+            }
+
+            // Handle orphaned nodes exactly like Flame.tsx
+            const childrenNodes = new Set<string>();
+            if (mainNode.children) {
+                mainNode.children.forEach((child) => {
+                    childrenNodes.add(child.fullName);
+                });
+            }
+
+            // Ensure all nodes from the original data are included
+            const orphanedNodes = Array.from(nodeMap.values()).filter(
+                node => !addedAsChild.has(node.fullName) &&
+                    node.fullName !== '_main' &&
+                    !childrenNodes.has(node.fullName)
+            );
+
+            // Add orphaned nodes to main node
+            orphanedNodes.forEach(orphanNode => {
+                mainNode.children.set(orphanNode.fullName, orphanNode);
+            });
+
+            // Convert recursive call tree to flat task list
+            const flatTasks: CustomTask[] = [];
 
             // Create main task if we have timing data
             if (allStartTimes.length > 0 && allEndTimes.length > 0) {
                 const mainStartTime = Math.min(...allStartTimes);
                 const mainEndTime = Math.max(...allEndTimes);
 
-                const mainTask: CustomTask = {
+                flatTasks.push({
                     id: 'main-task',
                     name: 'Main Execution Flow',
+                    fullName: '_main',
                     startTime: mainStartTime,
                     endTime: mainEndTime,
                     progress: 100,
                     type: 'main',
                     level: 0,
+                    children: [],
+                    callers: [],
+                    callees: [],
                     color: COLORS.primary
-                };
-
-                customTasks.unshift(mainTask);
+                });
             }
 
-            // Sort groups and tasks by start time
-            taskGroups.sort((a, b) => a.startTime - b.startTime);
-            taskGroups.forEach(group => {
-                group.tasks.sort((a, b) => a.startTime - b.startTime);
-            });
+            // Recursive function to add function and its children to flat list
+            const addFunctionToList = (functionNode: TreeNode, level: number, colorIndex: number): void => {
+                if (functionNode.executions.length === 0 && functionNode.children.size === 0) return;
 
-            console.log(`Created ${customTasks.length} tasks in ${taskGroups.length} groups`);
-            return { tasks: customTasks, groups: taskGroups };
+                const functionColor = CALLER_COLORS[colorIndex % CALLER_COLORS.length];
+
+                // Calculate function timing from all executions
+                let functionStartTime = Infinity;
+                let functionEndTime = 0;
+
+                if (functionNode.executions.length > 0) {
+                    functionStartTime = Math.min(...functionNode.executions.map(e => e.startTime));
+                    functionEndTime = Math.max(...functionNode.executions.map(e => e.endTime));
+                } else if (functionNode.children.size > 0) {
+                    // If no direct executions, use children timing
+                    const childExecutions: any[] = [];
+                    functionNode.children.forEach(child => {
+                        childExecutions.push(...child.executions);
+                    });
+                    if (childExecutions.length > 0) {
+                        functionStartTime = Math.min(...childExecutions.map(e => e.startTime));
+                        functionEndTime = Math.max(...childExecutions.map(e => e.endTime));
+                    }
+                }
+
+                if (functionStartTime === Infinity) {
+                    functionStartTime = allStartTimes.length > 0 ? Math.min(...allStartTimes) : 0;
+                    functionEndTime = allEndTimes.length > 0 ? Math.max(...allEndTimes) : 1000;
+                }
+
+                // Add function task
+                const functionTask: CustomTask = {
+                    id: functionNode.id,
+                    name: `${functionNode.name} (${functionNode.executions.length}x)`,
+                    fullName: functionNode.fullName,
+                    startTime: functionStartTime,
+                    endTime: functionEndTime,
+                    progress: 100,
+                    type: 'method',
+                    serviceName: functionNode.serviceName,
+                    methodName: functionNode.methodName,
+                    level: level,
+                    children: [],
+                    callers: Array.from(functionNode.callers),
+                    callees: Array.from(functionNode.callees),
+                    color: functionColor,
+                    executionCount: functionNode.executions.length
+                };
+                flatTasks.push(functionTask);
+
+                // Skip individual execution tasks - showing count in function name is sufficient
+
+                // Recursively add child functions (callees) in proper order
+                const sortedCallees = Array.from(functionNode.children.values())
+                    .sort((a, b) => {
+                        const aStart = a.executions.length > 0 ? Math.min(...a.executions.map(e => e.startTime)) : 0;
+                        const bStart = b.executions.length > 0 ? Math.min(...b.executions.map(e => e.startTime)) : 0;
+                        return aStart - bStart;
+                    });
+
+                sortedCallees.forEach(calleeNode => {
+                    addFunctionToList(calleeNode, level + 1, colorIndex + 1);
+                });
+            };
+
+            // Add main node and its recursive call tree
+            if (mainNode.children.size > 0) {
+                const sortedMainChildren = Array.from(mainNode.children.values())
+                    .sort((a, b) => {
+                        const aStart = a.executions.length > 0 ? Math.min(...a.executions.map(e => e.startTime)) : 0;
+                        const bStart = b.executions.length > 0 ? Math.min(...b.executions.map(e => e.startTime)) : 0;
+                        return aStart - bStart;
+                    });
+
+                sortedMainChildren.forEach((rootFunction, index) => {
+                    addFunctionToList(rootFunction, 1, index);
+                });
+            }
+
+            console.log(`Created recursive call tree with ${flatTasks.length} total tasks, ${mainNode.children.size} root functions`);
+            return flatTasks;
         };
 
-        // Get visible tasks based on collapsed groups
+        // Get visible tasks based on collapsed nodes in call tree hierarchy
         const getVisibleTasks = (): CustomTask[] => {
             const visibleTasks: CustomTask[] = [];
 
-            // Add main task
-            const mainTask = tasks.find(t => t.type === 'main');
-            if (mainTask) visibleTasks.push(mainTask);
+            // Helper function to check if any parent is collapsed
+            const isParentCollapsed = (task: CustomTask): boolean => {
+                if (task.parentId && collapsedNodes.has(task.parentId)) {
+                    return true;
+                }
 
-            // Add group headers and their tasks
-            groups.forEach(group => {
-                // Add group header task
-                const groupTask: CustomTask = {
-                    id: group.id,
-                    name: `${group.name} (${group.tasks.length} tasks)`,
-                    startTime: group.startTime,
-                    endTime: group.endTime,
-                    progress: Math.round(group.tasks.reduce((acc, t) => acc + t.progress, 0) / group.tasks.length),
-                    type: 'group',
-                    level: 1,
-                    isCollapsed: collapsedGroups.has(group.id),
-                    color: group.color
-                };
-                visibleTasks.push(groupTask);
+                // Check if any caller (parent in call tree) is collapsed
+                for (const caller of task.callers) {
+                    if (collapsedNodes.has(caller)) {
+                        return true;
+                    }
+                }
 
-                // Add group tasks if not collapsed
-                if (!collapsedGroups.has(group.id)) {
-                    visibleTasks.push(...group.tasks);
+                return false;
+            };
+
+            tasks.forEach(task => {
+                // Always show main task
+                if (task.type === 'main') {
+                    visibleTasks.push(task);
+                    return;
+                }
+
+                // Show method tasks (functions) with collapse state
+                if (task.type === 'method') {
+                    if (!isParentCollapsed(task)) {
+                        visibleTasks.push({
+                            ...task,
+                            isCollapsed: collapsedNodes.has(task.id)
+                        });
+                    }
+                    return;
                 }
             });
 
@@ -401,72 +642,73 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
         // Handle task click
         const handleTaskClick = (task: CustomTask) => {
-            if (task.type === 'group') {
-                // Toggle group collapse
-                const newCollapsed = new Set(collapsedGroups);
+            // Handle collapse/expand for method nodes (functions)
+            if (task.type === 'method') {
+                const newCollapsed = new Set(collapsedNodes);
                 if (newCollapsed.has(task.id)) {
                     newCollapsed.delete(task.id);
                 } else {
                     newCollapsed.add(task.id);
                 }
-                setCollapsedGroups(newCollapsed);
+                setCollapsedNodes(newCollapsed);
+
+                // Also handle function inspection on method click
+                const taskName = task.methodName || task.name;
+                const durationSeconds = (task.endTime - task.startTime) / 1000;
+
+                let elementData: any = {
+                    id: task.id,
+                    type: 'function',
+                    name: taskName,
+                    data: {
+                        startTime: new Date(task.startTime),
+                        endTime: new Date(task.endTime),
+                        duration: durationSeconds,
+                        progress: task.progress,
+                    },
+                };
+
+                // Look for matching method in graphData
+                if (graphData) {
+                    const method = graphData.methods.find(m =>
+                        taskName.includes(m.name) || m.name.includes(taskName.split('.').pop() || '')
+                    );
+
+                    if (method) {
+                        elementData = {
+                            id: method.id,
+                            type: 'method',
+                            name: method.name,
+                            instanceId: method.instanceId,
+                            serviceName: method.serviceName,
+                            data: elementData.data,
+                        };
+                    } else {
+                        const func = graphData.functions.find(f => f.name === taskName);
+                        if (func) {
+                            elementData = {
+                                id: func.id,
+                                type: 'function',
+                                name: func.name,
+                                data: elementData.data,
+                            };
+                        }
+                    }
+                }
+
+                onElementClick(elementData, true);
                 return;
             }
 
+            // Don't handle clicks on main task
             if (task.type === 'main') return;
-
-            const taskName = task.name;
-            const durationSeconds = (task.endTime - task.startTime) / 1000;
-
-            let elementData: any = {
-                id: task.id,
-                type: 'function',
-                name: taskName,
-                data: {
-                    startTime: new Date(task.startTime),
-                    endTime: new Date(task.endTime),
-                    duration: durationSeconds,
-                    progress: task.progress,
-                },
-            };
-
-            // Look for matching method in graphData
-            if (graphData) {
-                const method = graphData.methods.find(m =>
-                    taskName.includes(m.name) || m.name.includes(taskName.split('.').pop() || '')
-                );
-
-                if (method) {
-                    elementData = {
-                        id: method.id,
-                        type: 'method',
-                        name: method.name,
-                        instanceId: method.instanceId,
-                        serviceName: method.serviceName,
-                        data: elementData.data,
-                    };
-                } else {
-                    const func = graphData.functions.find(f => f.name === taskName);
-                    if (func) {
-                        elementData = {
-                            id: func.id,
-                            type: 'function',
-                            name: func.name,
-                            data: elementData.data,
-                        };
-                    }
-                }
-            }
-
-            onElementClick(elementData, true);
         };
 
         // Update tasks when flameData changes
         useEffect(() => {
             if (flameData) {
-                const { tasks: newTasks, groups: newGroups } = transformFlameDataToGroupedTasks(flameData);
+                const newTasks = transformFlameDataToTreeTasks(flameData);
                 setTasks(newTasks);
-                setGroups(newGroups);
             }
         }, [flameData, currentTimestamp]);
 
@@ -540,18 +782,28 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         }
 
         const { minTime, maxTime, pixelsPerUnit, unitLabel } = getTimeScaleInfo(filteredTasks, timeScale);
-        const chartWidth = Math.max(1200, timeToX(maxTime, minTime, pixelsPerUnit, timeScale) + 200);
+
+        // Extend timeline beyond execution flow for better visualization
+        const executionWidth = timeToX(maxTime, minTime, pixelsPerUnit, timeScale);
+        const timelinePadding = executionWidth * 0.2; // 20% padding on each side
+        const chartWidth = Math.max(1200, labelWidth + executionWidth + timelinePadding + 200);
 
         // Calculate total height with proper spacing for each task type
         let totalHeight = timelineHeight + 60;
         filteredTasks.forEach(task => {
-            totalHeight += task.type === 'group' ? groupRowHeight : rowHeight;
+            if (task.type === 'method') {
+                totalHeight += methodRowHeight;
+            } else {
+                totalHeight += rowHeight;
+            }
         });
 
-        // Generate timeline ticks
+        // Generate timeline ticks extending beyond execution flow
         const generateTimelineTicks = () => {
             const ticks = [];
             const totalDuration = maxTime - minTime;
+            const extendedDuration = totalDuration * 1.4; // Extend 40% beyond actual duration
+
             let tickInterval: number;
 
             switch (timeScale) {
@@ -571,7 +823,11 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     tickInterval = 1000;
             }
 
-            for (let time = minTime; time <= maxTime; time += tickInterval) {
+            // Start before minTime and extend beyond maxTime
+            const startTime = minTime - (totalDuration * 0.1);
+            const endTime = maxTime + (totalDuration * 0.3);
+
+            for (let time = startTime; time <= endTime; time += tickInterval) {
                 ticks.push(time);
             }
 
@@ -602,7 +858,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '16px' }}>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                             <span style={{ fontSize: '14px', color: COLORS.textLight, fontWeight: '500' }}>
-                                {filteredTasks.length} tasks • {groups.length} groups
+                                {filteredTasks.length} visible • {tasks.filter(t => t.type === 'method').length} functions
                             </span>
                         </div>
                     </div>
@@ -722,7 +978,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                 borderRadius: '3px',
                                 boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)'
                             }}></div>
-                            <span style={{ fontWeight: '500' }}>Caller Groups (click to expand/collapse)</span>
+                            <span style={{ fontWeight: '500' }}>Function Calls (click to expand/collapse)</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <div style={{
@@ -861,34 +1117,44 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                             })}
                         </g>
 
-                        {/* Enhanced Task Rows */}
+                        {/* Enhanced Task Rows with Tree Structure */}
                         {filteredTasks.map((task, index) => {
                             // Calculate y position with proper spacing for different row heights
                             let y = timelineHeight + 20;
                             for (let i = 0; i < index; i++) {
-                                y += filteredTasks[i].type === 'group' ? groupRowHeight : rowHeight;
+                                const prevTask = filteredTasks[i];
+                                if (prevTask.type === 'method') {
+                                    y += methodRowHeight;
+                                } else {
+                                    y += rowHeight;
+                                }
                             }
                             const taskStartX = labelWidth + timeToX(task.startTime, minTime, pixelsPerUnit, timeScale);
                             const taskEndX = labelWidth + timeToX(task.endTime, minTime, pixelsPerUnit, timeScale);
                             const taskWidth = Math.max(3, taskEndX - taskStartX);
 
-                            const isGroup = task.type === 'group';
+                            const isMethod = task.type === 'method';
                             const isMain = task.type === 'main';
                             const isHovered = hoveredTask === task.id;
                             const isSelected = selectedElementId === task.id;
+                            const isCollapsible = isMethod;
 
-                            const currentRowHeight = isGroup ? groupRowHeight : rowHeight;
-                            const barHeight = currentRowHeight - 10;
+                            const currentRowHeight = isMethod ? methodRowHeight : rowHeight;
+                            const barHeight = currentRowHeight - 12;
+                            const indent = task.level * indentWidth;
 
                             let taskColor = task.color || COLORS.neutral;
                             let gradientId = 'completedGradient';
 
                             if (isMain) {
                                 gradientId = 'mainGradient';
-                            } else if (task.type === 'running') {
-                                gradientId = 'runningGradient';
-                            } else if (isGroup) {
+                                taskColor = COLORS.primary;
+                            } else if (isMethod) {
+                                gradientId = 'completedGradient';
                                 taskColor = task.color || COLORS.info;
+                            } else if (task.name.includes('🔄')) {
+                                gradientId = 'runningGradient';
+                                taskColor = COLORS.warning;
                             }
 
                             const duration = (task.endTime - task.startTime) / 1000;
@@ -909,12 +1175,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                         style={{ transition: 'all 0.2s ease' }}
                                     />
 
-                                    {/* Task Label with Enhanced Typography */}
+                                    {/* Task Label with Tree Structure */}
                                     <g>
-                                        {/* Group expand/collapse icon */}
-                                        {isGroup && (
+                                        {/* Tree expand/collapse icon */}
+                                        {isCollapsible && (
                                             <text
-                                                x={15}
+                                                x={indent + 15}
                                                 y={y + currentRowHeight / 2 + 2}
                                                 fontSize="12"
                                                 fill={taskColor}
@@ -926,39 +1192,92 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                             </text>
                                         )}
 
+                                        {/* Tree indentation lines */}
+                                        {task.level > 0 && (
+                                            <g>
+                                                {/* Horizontal connector */}
+                                                <line
+                                                    x1={indent}
+                                                    y1={y + currentRowHeight / 2}
+                                                    x2={indent + 12}
+                                                    y2={y + currentRowHeight / 2}
+                                                    stroke={COLORS.border}
+                                                    strokeWidth={1}
+                                                />
+                                                {/* Vertical connector */}
+                                                <line
+                                                    x1={indent}
+                                                    y1={y - 10}
+                                                    x2={indent}
+                                                    y2={y + currentRowHeight / 2}
+                                                    stroke={COLORS.border}
+                                                    strokeWidth={1}
+                                                />
+                                            </g>
+                                        )}
+
+                                        {/* Method/Function icon */}
+                                        {isMethod && (
+                                            <text
+                                                x={indent + (isCollapsible ? 35 : 15)}
+                                                y={y + currentRowHeight / 2 + 2}
+                                                fontSize="12"
+                                                fill={taskColor}
+                                                textAnchor="start"
+                                            >
+                                                📞
+                                            </text>
+                                        )}
+
                                         {/* Task name */}
                                         <text
-                                            x={isGroup ? 35 : 15}
+                                            x={indent + (isCollapsible ? 52 : isMethod ? 32 : 15)}
                                             y={y + currentRowHeight / 2 - 2}
-                                            fontSize={isMain ? "14" : isGroup ? "13" : "12"}
+                                            fontSize={isMain ? "14" : isMethod ? "12" : "11"}
                                             fill={isMain ? COLORS.primary : COLORS.text}
                                             textAnchor="start"
-                                            fontWeight={isMain ? "700" : isGroup ? "600" : "500"}
+                                            fontWeight={isMain ? "700" : isMethod ? "600" : "500"}
                                             style={{
                                                 userSelect: 'none',
-                                                cursor: isGroup ? 'pointer' : 'default'
+                                                cursor: isCollapsible ? 'pointer' : 'default'
                                             }}
-                                            onClick={() => isGroup && handleTaskClick(task)}
+                                            onClick={() => isCollapsible && handleTaskClick(task)}
                                         >
                                             {task.name}
                                         </text>
 
-                                        {/* Duration subtitle */}
-                                        <text
-                                            x={isGroup ? 35 : 15}
-                                            y={y + currentRowHeight / 2 + 12}
-                                            fontSize="10"
-                                            fill={COLORS.textLight}
-                                            textAnchor="start"
-                                            fontWeight="400"
-                                        >
-                                            {duration.toFixed(3)}s • {task.progress}%
-                                        </text>
+                                        {/* Call relationship indicators */}
+                                        {task.callers.length > 0 && (
+                                            <text
+                                                x={indent + (isCollapsible ? 52 : isMethod ? 32 : 15)}
+                                                y={y + currentRowHeight / 2 + 12}
+                                                fontSize="9"
+                                                fill={COLORS.textLight}
+                                                textAnchor="start"
+                                                fontWeight="400"
+                                            >
+                                                📞 Called by: {task.callers.length} • Calls: {task.callees.length}
+                                            </text>
+                                        )}
+
+                                        {/* Duration info */}
+                                        {!isMethod && (
+                                            <text
+                                                x={indent + (isCollapsible ? 52 : isMethod ? 32 : 15)}
+                                                y={y + currentRowHeight / 2 + (task.callers.length > 0 ? 22 : 12)}
+                                                fontSize="9"
+                                                fill={COLORS.textLight}
+                                                textAnchor="start"
+                                                fontWeight="400"
+                                            >
+                                                ⏱️ {duration.toFixed(3)}s
+                                            </text>
+                                        )}
                                     </g>
 
                                     {/* Enhanced Task Bar */}
                                     <g
-                                        style={{ cursor: isGroup ? 'pointer' : 'default' }}
+                                        style={{ cursor: isCollapsible ? 'pointer' : 'default' }}
                                         onMouseEnter={() => setHoveredTask(task.id)}
                                         onMouseLeave={() => setHoveredTask(null)}
                                         onClick={() => handleTaskClick(task)}
@@ -976,23 +1295,23 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                         {/* Main bar */}
                                         <rect
                                             x={taskStartX}
-                                            y={y + 5}
+                                            y={y + 6}
                                             width={taskWidth}
                                             height={barHeight}
-                                            fill={isMain || isGroup ? `url(#${gradientId})` : (task.type === 'running' ? `url(#${gradientId})` : `url(#${gradientId})`)}
+                                            fill={`url(#${gradientId})`}
                                             stroke={isHovered ? 'white' : taskColor}
                                             strokeWidth={isHovered ? 3 : 1}
-                                            rx={6}
-                                            opacity={isHovered ? 0.9 : 0.85}
+                                            rx={isMethod ? 6 : 4}
+                                            opacity={isHovered ? 0.9 : (isMethod ? 0.8 : 0.85)}
                                             filter="url(#dropShadow)"
                                             style={{ transition: 'all 0.2s ease' }}
                                         />
 
                                         {/* Running task indicator */}
-                                        {task.type === 'running' && (
+                                        {task.name.includes('🔄') && (
                                             <rect
                                                 x={taskStartX + 2}
-                                                y={y + 7}
+                                                y={y + 8}
                                                 width={taskWidth - 4}
                                                 height={barHeight - 4}
                                                 fill="rgba(255,255,255,0.2)"
@@ -1018,46 +1337,110 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                             </text>
                                         )}
 
-                                        {/* Hover tooltip background */}
+                                        {/* Smart positioned hover tooltip */}
                                         {isHovered && (
                                             <g>
-                                                <rect
-                                                    x={taskStartX + taskWidth + 10}
-                                                    y={y - 10}
-                                                    width={160}
-                                                    height={50}
-                                                    fill={COLORS.text}
-                                                    stroke={COLORS.border}
-                                                    strokeWidth={1}
-                                                    rx={8}
-                                                    opacity={0.95}
-                                                    filter="url(#dropShadow)"
-                                                />
-                                                <text
-                                                    x={taskStartX + taskWidth + 20}
-                                                    y={y + 5}
-                                                    fontSize="11"
-                                                    fill="white"
-                                                    fontWeight="600"
-                                                >
-                                                    {task.name}
-                                                </text>
-                                                <text
-                                                    x={taskStartX + taskWidth + 20}
-                                                    y={y + 20}
-                                                    fontSize="10"
-                                                    fill="rgba(255,255,255,0.8)"
-                                                >
-                                                    Duration: {duration.toFixed(3)}s
-                                                </text>
-                                                <text
-                                                    x={taskStartX + taskWidth + 20}
-                                                    y={y + 32}
-                                                    fontSize="10"
-                                                    fill="rgba(255,255,255,0.8)"
-                                                >
-                                                    Progress: {task.progress}% • {task.type}
-                                                </text>
+                                                {(() => {
+                                                    const tooltipWidth = 220;
+                                                    const tooltipHeight = 90;
+                                                    const padding = 15;
+                                                    const edgeBuffer = 10;
+
+                                                    // Calculate available space in all directions
+                                                    const spaceRight = chartWidth - (taskStartX + taskWidth);
+                                                    const spaceLeft = taskStartX;
+                                                    const spaceBelow = totalHeight - (y + currentRowHeight);
+                                                    const spaceAbove = y - timelineHeight;
+
+                                                    let tooltipX: number;
+                                                    let tooltipY: number;
+
+                                                    // Determine X position - prefer right, fallback to left
+                                                    if (spaceRight >= tooltipWidth + padding + edgeBuffer) {
+                                                        tooltipX = taskStartX + taskWidth + padding;
+                                                    } else if (spaceLeft >= tooltipWidth + padding + edgeBuffer) {
+                                                        tooltipX = taskStartX - tooltipWidth - padding;
+                                                    } else {
+                                                        // If neither side has enough space, center over the task
+                                                        tooltipX = Math.max(edgeBuffer,
+                                                            Math.min(chartWidth - tooltipWidth - edgeBuffer,
+                                                                taskStartX + taskWidth / 2 - tooltipWidth / 2));
+                                                    }
+
+                                                    // Determine Y position - prefer above, fallback to below
+                                                    if (spaceAbove >= tooltipHeight + padding + edgeBuffer) {
+                                                        tooltipY = y - tooltipHeight - padding;
+                                                    } else if (spaceBelow >= tooltipHeight + padding + edgeBuffer) {
+                                                        tooltipY = y + currentRowHeight + padding;
+                                                    } else {
+                                                        // If neither above nor below has enough space, position at the best available spot
+                                                        if (spaceBelow > spaceAbove) {
+                                                            tooltipY = Math.max(timelineHeight + edgeBuffer,
+                                                                totalHeight - tooltipHeight - edgeBuffer);
+                                                        } else {
+                                                            tooltipY = Math.max(timelineHeight + edgeBuffer,
+                                                                y - tooltipHeight);
+                                                        }
+                                                    }
+
+                                                    // Final bounds checking to ensure tooltip is always visible
+                                                    tooltipX = Math.max(edgeBuffer, Math.min(tooltipX, chartWidth - tooltipWidth - edgeBuffer));
+                                                    tooltipY = Math.max(timelineHeight + edgeBuffer, Math.min(tooltipY, totalHeight - tooltipHeight - edgeBuffer));
+
+                                                    const textX = tooltipX + 12;
+
+                                                    return (
+                                                        <>
+                                                            <rect
+                                                                x={tooltipX}
+                                                                y={tooltipY}
+                                                                width={tooltipWidth}
+                                                                height={tooltipHeight}
+                                                                fill={COLORS.text}
+                                                                stroke={COLORS.border}
+                                                                strokeWidth={1}
+                                                                rx={8}
+                                                                opacity={0.95}
+                                                                filter="url(#dropShadow)"
+                                                            />
+                                                            <text
+                                                                x={textX}
+                                                                y={tooltipY + 18}
+                                                                fontSize="11"
+                                                                fill="white"
+                                                                fontWeight="600"
+                                                            >
+                                                                {task.name.length > 25 ? task.name.substring(0, 25) + '...' : task.name}
+                                                            </text>
+                                                            <text
+                                                                x={textX}
+                                                                y={tooltipY + 35}
+                                                                fontSize="10"
+                                                                fill="rgba(255,255,255,0.8)"
+                                                            >
+                                                                Duration: {duration.toFixed(3)}s
+                                                            </text>
+                                                            <text
+                                                                x={textX}
+                                                                y={tooltipY + 50}
+                                                                fontSize="10"
+                                                                fill="rgba(255,255,255,0.8)"
+                                                            >
+                                                                Type: {task.type} • Level: {task.level}
+                                                            </text>
+                                                            {task.callers.length > 0 && (
+                                                                <text
+                                                                    x={textX}
+                                                                    y={tooltipY + 65}
+                                                                    fontSize="9"
+                                                                    fill="rgba(255,255,255,0.7)"
+                                                                >
+                                                                    Callers: {task.callers.length} • Callees: {task.callees.length}
+                                                                </text>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
                                             </g>
                                         )}
                                     </g>
