@@ -111,6 +111,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         const [zoomLevel, setZoomLevel] = useState(1);
         const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
         const [hoveredTask, setHoveredTask] = useState<{ id: string, index: number } | null>(null);
+        const [tooltipPosition, setTooltipPosition] = useState<{ x: number, y: number } | null>(null);
 
         // Chart dimensions
         const chartHeight = 500;
@@ -1030,7 +1031,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     overflow: 'auto',
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                     maxHeight: '500px',
-                    width: '100%'
+                    width: '100%',
+                    position: 'relative' // Ensure proper stacking context for tooltips
                 }}>
                     <svg
                         ref={svgRef}
@@ -1293,9 +1295,40 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
                                     {/* Enhanced Task Bar */}
                                     <g
-                                        style={{ cursor: isCollapsible ? 'pointer' : 'default' }}
-                                        onMouseEnter={() => setHoveredTask({ id: task.id, index })}
-                                        onMouseLeave={() => setHoveredTask(null)}
+                                        style={{
+                                            cursor: isCollapsible ? 'pointer' : 'default',
+                                            pointerEvents: 'all' // Ensure mouse events are captured
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            console.log('Mouse enter on task:', task.name, 'at y:', y); // Debug log
+                                            setHoveredTask({ id: task.id, index });
+
+                                            // Get mouse position relative to the container
+                                            const rect = containerRef.current?.getBoundingClientRect();
+                                            if (rect) {
+                                                setTooltipPosition({
+                                                    x: e.clientX - rect.left,
+                                                    y: e.clientY - rect.top
+                                                });
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            console.log('Mouse leave on task:', task.name); // Debug log
+                                            setHoveredTask(null);
+                                            setTooltipPosition(null);
+                                        }}
+                                        onMouseMove={(e) => {
+                                            // Update tooltip position as mouse moves
+                                            if (hoveredTask?.id === task.id) {
+                                                const rect = containerRef.current?.getBoundingClientRect();
+                                                if (rect) {
+                                                    setTooltipPosition({
+                                                        x: e.clientX - rect.left,
+                                                        y: e.clientY - rect.top
+                                                    });
+                                                }
+                                            }
+                                        }}
                                         onClick={() => handleTaskClick(task)}
                                     >
                                         {/* Shadow */}
@@ -1353,128 +1386,76 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                             </text>
                                         )}
 
-                                        {/* Smart positioned hover tooltip */}
-                                        {isHovered && (
-                                            <g>
-                                                {(() => {
-                                                    const tooltipWidth = 220;
-                                                    const tooltipHeight = 90;
-                                                    const padding = 15;
-                                                    const edgeBuffer = 10;
-                                                    const minTooltipSpace = tooltipHeight + padding + edgeBuffer;
 
-                                                    // Calculate available space in all directions
-                                                    const spaceRight = chartWidth - (taskStartX + taskWidth);
-                                                    const spaceLeft = taskStartX;
-                                                    const spaceBelow = totalHeight - (y + currentRowHeight);
-                                                    const spaceAbove = y - timelineHeight;
-
-                                                    let tooltipX: number;
-                                                    let tooltipY: number;
-
-                                                    // Determine X position - prefer right, fallback to left
-                                                    if (spaceRight >= tooltipWidth + padding + edgeBuffer) {
-                                                        tooltipX = taskStartX + taskWidth + padding;
-                                                    } else if (spaceLeft >= tooltipWidth + padding + edgeBuffer) {
-                                                        tooltipX = taskStartX - tooltipWidth - padding;
-                                                    } else {
-                                                        // If neither side has enough space, center over the task
-                                                        tooltipX = Math.max(edgeBuffer,
-                                                            Math.min(chartWidth - tooltipWidth - edgeBuffer,
-                                                                taskStartX + taskWidth / 2 - tooltipWidth / 2));
-                                                    }
-
-                                                    // Determine Y position with better handling for top bars
-                                                    if (spaceAbove >= minTooltipSpace) {
-                                                        // Enough space above - position tooltip above the bar
-                                                        tooltipY = y - tooltipHeight - padding;
-                                                    } else if (spaceBelow >= minTooltipSpace) {
-                                                        // Not enough space above but enough below - position tooltip below
-                                                        tooltipY = y + currentRowHeight + padding;
-                                                    } else {
-                                                        // Neither above nor below has enough space
-                                                        // For bars very close to the top, force tooltip to appear to the side or below
-                                                        if (y - timelineHeight < tooltipHeight / 2) {
-                                                            // Bar is very close to timeline - force tooltip below
-                                                            tooltipY = y + currentRowHeight + padding;
-                                                        } else if (spaceBelow > spaceAbove) {
-                                                            // More space below than above
-                                                            tooltipY = Math.max(timelineHeight + edgeBuffer,
-                                                                Math.min(totalHeight - tooltipHeight - edgeBuffer,
-                                                                    y + currentRowHeight + padding));
-                                                        } else {
-                                                            // More space above - but ensure we don't go into timeline
-                                                            tooltipY = Math.max(timelineHeight + edgeBuffer,
-                                                                y - tooltipHeight - padding);
-                                                        }
-                                                    }
-
-                                                    // Final bounds checking to ensure tooltip is always visible and not overlapping timeline
-                                                    tooltipX = Math.max(edgeBuffer, Math.min(tooltipX, chartWidth - tooltipWidth - edgeBuffer));
-                                                    tooltipY = Math.max(timelineHeight + edgeBuffer, Math.min(tooltipY, totalHeight - tooltipHeight - edgeBuffer));
-
-                                                    const textX = tooltipX + 12;
-
-                                                    return (
-                                                        <>
-                                                            <rect
-                                                                x={tooltipX}
-                                                                y={tooltipY}
-                                                                width={tooltipWidth}
-                                                                height={tooltipHeight}
-                                                                fill={COLORS.text}
-                                                                stroke={COLORS.border}
-                                                                strokeWidth={1}
-                                                                rx={8}
-                                                                opacity={0.95}
-                                                                filter="url(#dropShadow)"
-                                                            />
-                                                            <text
-                                                                x={textX}
-                                                                y={tooltipY + 18}
-                                                                fontSize="11"
-                                                                fill="white"
-                                                                fontWeight="600"
-                                                            >
-                                                                {task.name.length > 25 ? task.name.substring(0, 25) + '...' : task.name}
-                                                            </text>
-                                                            <text
-                                                                x={textX}
-                                                                y={tooltipY + 35}
-                                                                fontSize="10"
-                                                                fill="rgba(255,255,255,0.8)"
-                                                            >
-                                                                Duration: {duration.toFixed(3)}s
-                                                            </text>
-                                                            <text
-                                                                x={textX}
-                                                                y={tooltipY + 50}
-                                                                fontSize="10"
-                                                                fill="rgba(255,255,255,0.8)"
-                                                            >
-                                                                Type: {task.type} • Level: {task.level}
-                                                            </text>
-                                                            {task.callers.length > 0 && (
-                                                                <text
-                                                                    x={textX}
-                                                                    y={tooltipY + 65}
-                                                                    fontSize="9"
-                                                                    fill="rgba(255,255,255,0.7)"
-                                                                >
-                                                                    Callers: {task.callers.length} • Callees: {task.callees.length}
-                                                                </text>
-                                                            )}
-                                                        </>
-                                                    );
-                                                })()}
-                                            </g>
-                                        )}
                                     </g>
                                 </g>
                             );
                         })}
                     </svg>
                 </div>
+
+                {/* Floating tooltip - outside SVG container to avoid clipping */}
+                {hoveredTask && tooltipPosition && (() => {
+                    const task = filteredTasks.find(t => t.id === hoveredTask.id);
+                    if (!task) return null;
+
+                    const duration = (task.endTime - task.startTime) / 1000;
+                    const tooltipWidth = 220;
+                    const tooltipHeight = 90;
+
+                    // Get container dimensions
+                    const containerRect = containerRef.current?.getBoundingClientRect();
+                    if (!containerRect) return null;
+
+                    // Calculate position relative to container
+                    let tooltipX = tooltipPosition.x + 15; // Offset from cursor
+                    let tooltipY = tooltipPosition.y - tooltipHeight - 10; // Above cursor
+
+                    // Ensure tooltip stays within container bounds
+                    if (tooltipX + tooltipWidth > containerRect.width) {
+                        tooltipX = tooltipPosition.x - tooltipWidth - 15; // Show to the left
+                    }
+                    if (tooltipY < 0) {
+                        tooltipY = tooltipPosition.y + 15; // Show below cursor
+                    }
+
+                    return (
+                        <div
+                            style={{
+                                position: 'absolute',
+                                left: tooltipX,
+                                top: tooltipY,
+                                width: tooltipWidth,
+                                height: tooltipHeight,
+                                backgroundColor: COLORS.text,
+                                color: 'white',
+                                border: `1px solid ${COLORS.border}`,
+                                borderRadius: '8px',
+                                padding: '12px',
+                                fontSize: '11px',
+                                pointerEvents: 'none',
+                                zIndex: 1000,
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                                opacity: 0.95
+                            }}
+                        >
+                            <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                                {task.name.length > 25 ? task.name.substring(0, 25) + '...' : task.name}
+                            </div>
+                            <div style={{ fontSize: '10px', opacity: 0.8, marginBottom: '2px' }}>
+                                Duration: {duration.toFixed(3)}s
+                            </div>
+                            <div style={{ fontSize: '10px', opacity: 0.8, marginBottom: '2px' }}>
+                                Type: {task.type} • Level: {task.level}
+                            </div>
+                            {task.callers.length > 0 && (
+                                <div style={{ fontSize: '9px', opacity: 0.7 }}>
+                                    Callers: {task.callers.length} • Callees: {task.callees.length}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
             </div>
         );
     }
