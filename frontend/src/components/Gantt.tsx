@@ -110,7 +110,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         const [timeScale, setTimeScale] = useState<TimeScale>('seconds');
         const [zoomLevel, setZoomLevel] = useState(1);
         const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
-        const [hoveredTask, setHoveredTask] = useState<string | null>(null);
+        const [hoveredTask, setHoveredTask] = useState<{ id: string, index: number } | null>(null);
 
         // Chart dimensions
         const chartHeight = 500;
@@ -442,7 +442,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             }
 
             // Recursive function to add function and its children to flat list
-            const addFunctionToList = (functionNode: TreeNode, level: number, colorIndex: number): void => {
+            const addFunctionToList = (functionNode: TreeNode, level: number, colorIndex: number, parentTaskId?: string): void => {
                 if (functionNode.executions.length === 0 && functionNode.children.size === 0) return;
 
                 const functionColor = CALLER_COLORS[colorIndex % CALLER_COLORS.length];
@@ -482,6 +482,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     type: 'method',
                     serviceName: functionNode.serviceName,
                     methodName: functionNode.methodName,
+                    parentId: parentTaskId, // Set the parent ID for proper tree collapse
                     level: level,
                     children: [],
                     callers: Array.from(functionNode.callers),
@@ -502,7 +503,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     });
 
                 sortedCallees.forEach(calleeNode => {
-                    addFunctionToList(calleeNode, level + 1, colorIndex + 1);
+                    addFunctionToList(calleeNode, level + 1, colorIndex + 1, functionTask.id);
                 });
             };
 
@@ -516,7 +517,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     });
 
                 sortedMainChildren.forEach((rootFunction, index) => {
-                    addFunctionToList(rootFunction, 1, index);
+                    addFunctionToList(rootFunction, 1, index, 'main-task');
                 });
             }
 
@@ -528,38 +529,53 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         const getVisibleTasks = (): CustomTask[] => {
             const visibleTasks: CustomTask[] = [];
 
-            // Helper function to check if any parent is collapsed
-            const isParentCollapsed = (task: CustomTask): boolean => {
-                if (task.parentId && collapsedNodes.has(task.parentId)) {
-                    return true;
-                }
+            // Build a map of parent-child relationships from the task list
+            const childrenMap = new Map<string, CustomTask[]>();
+            const parentMap = new Map<string, string>();
 
-                // Check if any caller (parent in call tree) is collapsed
-                for (const caller of task.callers) {
-                    if (collapsedNodes.has(caller)) {
-                        return true;
+            tasks.forEach(task => {
+                if (task.parentId) {
+                    parentMap.set(task.id, task.parentId);
+                    if (!childrenMap.has(task.parentId)) {
+                        childrenMap.set(task.parentId, []);
                     }
+                    childrenMap.get(task.parentId)!.push(task);
+                }
+            });
+
+            // Helper function to check if any ancestor is collapsed
+            const isAncestorCollapsed = (taskId: string): boolean => {
+                const parentId = parentMap.get(taskId);
+                if (!parentId) {
+                    return false; // No parent, so not collapsed by ancestor
                 }
 
-                return false;
+                if (collapsedNodes.has(parentId)) {
+                    return true; // Direct parent is collapsed
+                }
+
+                return isAncestorCollapsed(parentId); // Check recursively up the tree
             };
 
+            // Add tasks that should be visible
             tasks.forEach(task => {
                 // Always show main task
                 if (task.type === 'main') {
-                    visibleTasks.push(task);
+                    visibleTasks.push({
+                        ...task,
+                        isCollapsed: collapsedNodes.has(task.id)
+                    });
                     return;
                 }
 
-                // Show method tasks (functions) with collapse state
+                // Show method tasks if no ancestor is collapsed
                 if (task.type === 'method') {
-                    if (!isParentCollapsed(task)) {
+                    if (!isAncestorCollapsed(task.id)) {
                         visibleTasks.push({
                             ...task,
                             isCollapsed: collapsedNodes.has(task.id)
                         });
                     }
-                    return;
                 }
             });
 
@@ -1135,7 +1151,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
                             const isMethod = task.type === 'method';
                             const isMain = task.type === 'main';
-                            const isHovered = hoveredTask === task.id;
+                            const isHovered = hoveredTask?.id === task.id && hoveredTask?.index === index;
                             const isSelected = selectedElementId === task.id;
                             const isCollapsible = isMethod;
 
@@ -1278,7 +1294,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                     {/* Enhanced Task Bar */}
                                     <g
                                         style={{ cursor: isCollapsible ? 'pointer' : 'default' }}
-                                        onMouseEnter={() => setHoveredTask(task.id)}
+                                        onMouseEnter={() => setHoveredTask({ id: task.id, index })}
                                         onMouseLeave={() => setHoveredTask(null)}
                                         onClick={() => handleTaskClick(task)}
                                     >

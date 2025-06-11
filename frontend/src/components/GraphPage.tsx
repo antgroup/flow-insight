@@ -13,7 +13,7 @@ import {
   InputAdornment,
   CircularProgress,
 } from '@mui/material';
-import { Download, RefreshCw, PanelLeft, PanelRight, Bug, Clock } from 'lucide-react';
+import { Download, RefreshCw, PanelLeft, PanelRight, Bug, Clock, FileText } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -444,6 +444,195 @@ const GraphPage: React.FC<GraphPageProps> = ({
       default:
         console.warn('Export not supported for this view type');
     }
+  };
+
+  // Function to export flame graph data as Chrome tracing JSON
+  const handleExportChromeTracing = () => {
+    if (!flameData) {
+      console.warn('No flame data available for export');
+      return;
+    }
+
+    try {
+      // Convert flame graph data to Chrome tracing format
+      const chromeTracingData = convertFlameDataToChromeTracing(flameData);
+
+      // Create and download the JSON file
+      const jsonString = JSON.stringify(chromeTracingData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `flow-insight-trace-${currentFlowId || 'unknown'}-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export Chrome tracing data:', error);
+    }
+  };
+
+  // Convert FlameGraphData to Chrome tracing format
+  const convertFlameDataToChromeTracing = (data: FlameGraphData) => {
+    const events: any[] = [];
+    let eventId = 0;
+
+    // Helper function to convert timestamp to microseconds
+    const toMicroseconds = (timestamp: number) => timestamp * 1000;
+
+    // Get unique service names first for process IDs
+    const serviceNames = Array.from(new Set([
+      ...(data.aggregated?.map(node =>
+        node.name.includes(':') ? node.name.split(':')[0] : 'Unknown'
+      ) || []),
+      ...(data.parentStartTimes?.map(parent =>
+        parent.calleeId.includes(':') ? parent.calleeId.split(':')[0] : 'Unknown'
+      ) || [])
+    ]));
+
+    // Process aggregated flame data
+    if (data.aggregated) {
+      data.aggregated.forEach((node, nodeIndex) => {
+        const serviceName = node.name.includes(':')
+          ? node.name.split(':')[0]
+          : 'Unknown';
+
+        // Create process and thread IDs based on service
+        const pid = serviceNames.indexOf(serviceName) + 1 || 1;
+        const tid = nodeIndex + 1;
+
+        if (node.totalInParent) {
+          node.totalInParent.forEach((execution, execIndex) => {
+            const startTimeUs = toMicroseconds(execution.startTime);
+            const durationUs = toMicroseconds(execution.duration);
+
+            // Create a complete event (X phase) for each execution
+            events.push({
+              name: node.name,
+              cat: 'function',
+              ph: 'X', // Complete event
+              ts: startTimeUs,
+              dur: durationUs,
+              pid: pid,
+              tid: tid,
+              args: {
+                count: execution.count,
+                caller: execution.callerNodeId,
+                totalCount: node.count || 1
+              }
+            });
+
+            eventId++;
+          });
+        } else {
+          // Fallback for nodes without timing data
+          events.push({
+            name: node.name,
+            cat: 'function',
+            ph: 'I', // Instant event
+            ts: toMicroseconds(currentTimestamp),
+            pid: pid,
+            tid: tid,
+            args: {
+              count: node.count || 1,
+              note: 'No timing data available'
+            }
+          });
+        }
+      });
+    }
+
+    // Process running tasks from parentStartTimes
+    if (data.parentStartTimes) {
+      data.parentStartTimes.forEach((parentData, parentIndex) => {
+        const serviceName = parentData.calleeId.includes(':')
+          ? parentData.calleeId.split(':')[0]
+          : 'Unknown';
+
+        const pid = serviceNames.indexOf(serviceName) + 1 || 1;
+        const tid = parentIndex + 100; // Offset to avoid conflicts
+
+        parentData.startTimes.forEach((startTimeData, startIndex) => {
+          const startTimeUs = toMicroseconds(startTimeData.startTime);
+          const endTimeUs = toMicroseconds(currentTimestamp);
+          const durationUs = endTimeUs - startTimeUs;
+
+          // Create running event
+          events.push({
+            name: parentData.calleeId,
+            cat: 'running',
+            ph: 'X',
+            ts: startTimeUs,
+            dur: durationUs,
+            pid: pid,
+            tid: tid + startIndex,
+            args: {
+              caller: startTimeData.callerId,
+              status: 'running',
+              endTime: 'now'
+            }
+          });
+        });
+      });
+    }
+
+
+
+    // Add process name metadata
+    serviceNames.forEach((serviceName, index) => {
+      events.push({
+        name: 'process_name',
+        ph: 'M',
+        pid: index + 1,
+        args: {
+          name: serviceName
+        }
+      });
+    });
+
+    // Add thread name metadata
+    events.forEach((event, index) => {
+      if (event.ph !== 'M' && event.tid) {
+        events.push({
+          name: 'thread_name',
+          ph: 'M',
+          pid: event.pid,
+          tid: event.tid,
+          args: {
+            name: `Thread-${event.tid}`
+          }
+        });
+      }
+    });
+
+    // Remove duplicate thread metadata
+    const uniqueThreads = new Map();
+    const filteredEvents = events.filter(event => {
+      if (event.name === 'thread_name') {
+        const key = `${event.pid}-${event.tid}`;
+        if (uniqueThreads.has(key)) {
+          return false;
+        }
+        uniqueThreads.set(key, true);
+      }
+      return true;
+    });
+
+    return {
+      traceEvents: filteredEvents.sort((a, b) => (a.ts || 0) - (b.ts || 0)),
+      displayTimeUnit: 'ms',
+      systemTraceEvents: [],
+      otherData: {
+        flowInsight: {
+          flowId: currentFlowId,
+          exportTime: new Date().toISOString(),
+          version: '1.0'
+        }
+      }
+    };
   };
 
   const formatTime = (timestamp: number) => {
@@ -914,6 +1103,28 @@ const GraphPage: React.FC<GraphPageProps> = ({
                       </IconButton>
                     </Tooltip>
                   )}
+
+                {(currentViewType === 'flame' || currentViewType === 'gantt') && flameData && (
+                  <Tooltip title="Export as Chrome Tracing JSON">
+                    <IconButton
+                      onClick={handleExportChromeTracing}
+                      size="small"
+                      sx={{
+                        backgroundColor: 'white',
+                        boxShadow: 1,
+                        padding: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        '&:hover': {
+                          backgroundColor: 'grey.100',
+                        },
+                      }}
+                    >
+                      <FileText size={16} />
+                    </IconButton>
+                  </Tooltip>
+                )}
 
                 <Tooltip title={debugPanelOpen ? 'Hide debug panel' : 'Show debug panel'}>
                   <IconButton
