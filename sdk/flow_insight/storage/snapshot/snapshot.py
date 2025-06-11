@@ -40,8 +40,8 @@ class SnapshotStorage:
         self._storage["method_id_map"] = defaultdict(dict)
         self._storage["method_counter"] = defaultdict(int)
         self._storage["function_counter"] = defaultdict(int)
-        self._storage["flow_record"] = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
-        self._storage["start_time_record"] = defaultdict(lambda: defaultdict(dict))
+        self._storage["flow_record"] = defaultdict(lambda: defaultdict(dict))
+        self._storage["start_time_record"] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
         self._storage["debugger_info"] = defaultdict(lambda: defaultdict(dict))
         self._storage["breakpoints"] = defaultdict(lambda: defaultdict(list))
         self._storage["data_flows"] = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
@@ -56,14 +56,7 @@ class SnapshotStorage:
         self._storage["prompt"] = ""
 
         self._storage["flame_graph_aggregated"] = defaultdict(
-            lambda: defaultdict(
-                lambda: FlameDataAggregated(
-                    service_name="",
-                    total_time=0,
-                    call_count=0,
-                    durations=defaultdict(float),
-                )
-            )
+            lambda: defaultdict(list)
         )
 
     def restore_snapshots(self):
@@ -130,9 +123,7 @@ class SnapshotStorage:
     ):
         source_id = self.get_node_id(source_service, source_method)
         target_id = self.get_node_id(target_service, target_method)
-        if source_id in self._storage["start_time_record"][flow_id][target_id]:
-            return
-        self._storage["start_time_record"][flow_id][target_id][source_id] = start_time
+        self._storage["start_time_record"][flow_id][target_id][source_id].append(start_time)
 
     async def get_start_time(self, flow_id: str, service: Optional[Service], method: Method):
         node_id = self.get_node_id(service, method)
@@ -273,12 +264,10 @@ class SnapshotStorage:
         flow_id: str,
         service: Optional[Service],
         method: Optional[Method],
-        func: Callable[[FlameDataAggregated], FlameDataAggregated],
+        data: FlameDataAggregated,
     ):
         node_id = self.get_node_id(service, method)
-        self._storage["flame_graph_aggregated"][flow_id][node_id] = func(
-            self._storage["flame_graph_aggregated"][flow_id][node_id]
-        )
+        self._storage["flame_graph_aggregated"][flow_id][node_id].append(data)
 
     async def add_caller_info(self, flow_id: str, span_id: str, caller_info: CallerInfo):
         self._storage["caller_info"][flow_id][span_id].append(caller_info)

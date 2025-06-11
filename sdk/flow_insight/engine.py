@@ -678,35 +678,44 @@ class InsightEngine:
         flame_graph_aggregated = await snapshot.get_flame_graph_data(flow_id)
 
         visited = {}
-        for func_id, func_data in flame_graph_aggregated.items():
+        for func_id, func_datas in flame_graph_aggregated.items():
             if func_id in visited:
                 total_in_parent = visited[func_id]
             else:
-                total_in_parent = defaultdict(lambda: {"duration": 0, "count": 0})
+                total_in_parent = defaultdict(list)
             start_times = await snapshot.get_start_time(flow_id, func_id[0], func_id[1])
-            for current_span_id, duration in func_data.durations.items():
-                caller_infos = await snapshot.get_caller_info(flow_id, current_span_id)
-                for caller_info in caller_infos:
-                    caller_service = caller_info.service
-                    caller_method = caller_info.method
-                    if caller_service is not None:
-                        caller_node_id = (
-                            f"{caller_service.service_name}"
-                            f":{caller_service.instance_id}.{caller_method.name}"
-                        )
-                    else:
-                        caller_node_id = caller_method.name
-                    total_in_parent[caller_node_id]["duration"] += duration
-                    total_in_parent[caller_node_id]["count"] += 1
-                    if (
-                        "start_time" not in total_in_parent[caller_node_id]
-                        or total_in_parent[caller_node_id]["start_time"] == 0
-                    ):
-                        total_in_parent[caller_node_id]["start_time"] = start_times.get(
-                            (caller_service, caller_method), 0
-                        )
+            for i, func_data in enumerate(func_datas):
+                caller_info = await snapshot.get_caller_info(flow_id, func_data.span_id)
+                caller_service = caller_info.service
+                caller_method = caller_info.method
+                if caller_service is not None:
+                    caller_node_id = (
+                        f"{caller_service.service_name}"
+                        f":{caller_service.instance_id}.{caller_method.name}"
+                    )
+                else:
+                    caller_node_id = caller_method.name
+                total_in_parent[caller_node_id].append(
+                    {
+                        "duration": func_data.duration,
+                        "count": 1,
+                        "start_time": start_times[i],
+                    }
+                )
             visited[func_id] = total_in_parent
             service, method = func_id
+
+            total_in_parent_struct = []
+            for k, v in total_in_parent.items():
+                for i in v:
+                    total_in_parent_struct.append(
+                        TotalInParent(
+                            caller_node_id=k,
+                            duration=i["duration"],
+                            count=i["count"],
+                            start_time=i["start_time"],
+                        )
+                    )
 
             flame_data.aggregated.append(
                 AggregatedFlameGraphData(
@@ -714,17 +723,9 @@ class InsightEngine:
                     if service is None
                     else f"{service.service_name}:{service.instance_id}.{method.name}",
                     service_name="" if service is None else service.service_name,
-                    value=func_data.total_time,
-                    count=func_data.call_count,
-                    total_in_parent=[
-                        TotalInParent(
-                            caller_node_id=k,
-                            duration=v["duration"],
-                            count=v["count"],
-                            start_time=v["start_time"],
-                        )
-                        for k, v in total_in_parent.items()
-                    ],
+                    value=sum(i.duration for i in total_in_parent_struct),
+                    count=len(total_in_parent_struct),
+                    total_in_parent=total_in_parent_struct,
                 )
             )
 
@@ -777,16 +778,15 @@ class InsightEngine:
         span_id = call_end.span_id
         await snapshot.del_debugger_info(flow_id, target_service, target_method, span_id)
 
-        caller_infos = await snapshot.get_caller_info(flow_id, span_id)
-        for caller_info in caller_infos:
-            await snapshot.update_flow_record(
-                flow_id,
-                caller_info.service,
-                caller_info.method,
-                target_service,
-                target_method,
-                lambda record: record - 1,
-            )
+        caller_info = await snapshot.get_caller_info(flow_id, span_id)
+        await snapshot.update_flow_record(
+            flow_id,
+            caller_info.service,
+            caller_info.method,
+            target_service,
+            target_method,
+            lambda record: record - 1,
+        )
 
         duration = call_end.duration
 
@@ -794,11 +794,11 @@ class InsightEngine:
             flow_id,
             target_service,
             target_method,
-            lambda flame_data: FlameDataAggregated(
-                total_time=flame_data.total_time + duration,
-                call_count=flame_data.call_count + 1,
-                durations={**flame_data.durations, span_id: duration},
-                service_name=flame_data.service_name,
+            FlameDataAggregated(
+                duration=duration,
+                call_count=1,
+                span_id=span_id,
+                service_name=target_service.service_name if target_service is not None else "",
             ),
         )
 
