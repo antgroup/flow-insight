@@ -1361,6 +1361,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                                     const tooltipHeight = 90;
                                                     const padding = 15;
                                                     const edgeBuffer = 10;
+                                                    const minTooltipSpace = tooltipHeight + padding + edgeBuffer;
 
                                                     // Calculate available space in all directions
                                                     const spaceRight = chartWidth - (taskStartX + taskWidth);
@@ -1383,23 +1384,32 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                                                 taskStartX + taskWidth / 2 - tooltipWidth / 2));
                                                     }
 
-                                                    // Determine Y position - prefer above, fallback to below
-                                                    if (spaceAbove >= tooltipHeight + padding + edgeBuffer) {
+                                                    // Determine Y position with better handling for top bars
+                                                    if (spaceAbove >= minTooltipSpace) {
+                                                        // Enough space above - position tooltip above the bar
                                                         tooltipY = y - tooltipHeight - padding;
-                                                    } else if (spaceBelow >= tooltipHeight + padding + edgeBuffer) {
+                                                    } else if (spaceBelow >= minTooltipSpace) {
+                                                        // Not enough space above but enough below - position tooltip below
                                                         tooltipY = y + currentRowHeight + padding;
                                                     } else {
-                                                        // If neither above nor below has enough space, position at the best available spot
-                                                        if (spaceBelow > spaceAbove) {
+                                                        // Neither above nor below has enough space
+                                                        // For bars very close to the top, force tooltip to appear to the side or below
+                                                        if (y - timelineHeight < tooltipHeight / 2) {
+                                                            // Bar is very close to timeline - force tooltip below
+                                                            tooltipY = y + currentRowHeight + padding;
+                                                        } else if (spaceBelow > spaceAbove) {
+                                                            // More space below than above
                                                             tooltipY = Math.max(timelineHeight + edgeBuffer,
-                                                                totalHeight - tooltipHeight - edgeBuffer);
+                                                                Math.min(totalHeight - tooltipHeight - edgeBuffer,
+                                                                    y + currentRowHeight + padding));
                                                         } else {
+                                                            // More space above - but ensure we don't go into timeline
                                                             tooltipY = Math.max(timelineHeight + edgeBuffer,
-                                                                y - tooltipHeight);
+                                                                y - tooltipHeight - padding);
                                                         }
                                                     }
 
-                                                    // Final bounds checking to ensure tooltip is always visible
+                                                    // Final bounds checking to ensure tooltip is always visible and not overlapping timeline
                                                     tooltipX = Math.max(edgeBuffer, Math.min(tooltipX, chartWidth - tooltipWidth - edgeBuffer));
                                                     tooltipY = Math.max(timelineHeight + edgeBuffer, Math.min(tooltipY, totalHeight - tooltipHeight - edgeBuffer));
 
