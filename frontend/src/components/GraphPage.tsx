@@ -229,7 +229,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
   }, [currentFlowId, fetchGraphData, apiService]);
 
   // eslint-disable-next-line
-  const fetchDatas = async (isLatest?: boolean, timestamp?: number, showLoading = true, viewType?: string) => {
+  const fetchDatas = async (
+    isLatest?: boolean,
+    timestamp?: number,
+    showLoading = true,
+    viewType?: string
+  ) => {
     const useLatestTime = isLatest !== undefined ? isLatest : isLatestTime;
     const useTimestamp = timestamp !== undefined ? timestamp : currentTimestamp;
     const targetViewType = viewType || currentViewType;
@@ -257,7 +262,11 @@ const GraphPage: React.FC<GraphPageProps> = ({
           setError(err instanceof Error ? err.message : 'Failed to fetch physical view data');
         }
       }
-      if (targetViewType === 'flame' || targetViewType === 'gantt' || targetViewType === 'analysis') {
+      if (
+        targetViewType === 'flame' ||
+        targetViewType === 'gantt' ||
+        targetViewType === 'analysis'
+      ) {
         await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
         try {
           const data = await apiService.getPhysicalViewData(
@@ -484,21 +493,21 @@ const GraphPage: React.FC<GraphPageProps> = ({
     const toMicroseconds = (timestamp: number) => timestamp * 1000;
 
     // Get unique service names first for process IDs
-    const serviceNames = Array.from(new Set([
-      ...(data.aggregated?.map(node =>
-        node.name.includes(':') ? node.name.split(':')[0] : 'Unknown'
-      ) || []),
-      ...(data.parentStartTimes?.map(parent =>
-        parent.calleeId.includes(':') ? parent.calleeId.split(':')[0] : 'Unknown'
-      ) || [])
-    ]));
+    const serviceNames = Array.from(
+      new Set([
+        ...(data.aggregated?.map(node =>
+          node.name.includes(':') ? node.name.split(':')[0] : 'Unknown'
+        ) || []),
+        ...(data.parentStartTimes?.map(parent =>
+          parent.calleeId.includes(':') ? parent.calleeId.split(':')[0] : 'Unknown'
+        ) || []),
+      ])
+    );
 
     // Process aggregated flame data
     if (data.aggregated) {
       data.aggregated.forEach((node, nodeIndex) => {
-        const serviceName = node.name.includes(':')
-          ? node.name.split(':')[0]
-          : 'Unknown';
+        const serviceName = node.name.includes(':') ? node.name.split(':')[0] : 'Unknown';
 
         // Create process and thread IDs based on service
         const pid = serviceNames.indexOf(serviceName) + 1 || 1;
@@ -521,8 +530,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
               args: {
                 count: execution.count,
                 caller: execution.callerNodeId,
-                totalCount: node.count || 1
-              }
+                totalCount: node.count || 1,
+              },
             });
 
             eventId++;
@@ -538,8 +547,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
             tid: tid,
             args: {
               count: node.count || 1,
-              note: 'No timing data available'
-            }
+              note: 'No timing data available',
+            },
           });
         }
       });
@@ -572,14 +581,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
             args: {
               caller: startTimeData.callerId,
               status: 'running',
-              endTime: 'now'
-            }
+              endTime: 'now',
+            },
           });
         });
       });
     }
-
-
 
     // Add process name metadata
     serviceNames.forEach((serviceName, index) => {
@@ -588,8 +595,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
         ph: 'M',
         pid: index + 1,
         args: {
-          name: serviceName
-        }
+          name: serviceName,
+        },
       });
     });
 
@@ -602,8 +609,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
           pid: event.pid,
           tid: event.tid,
           args: {
-            name: `Thread-${event.tid}`
-          }
+            name: `Thread-${event.tid}`,
+          },
         });
       }
     });
@@ -629,9 +636,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
         flowInsight: {
           flowId: currentFlowId,
           exportTime: new Date().toISOString(),
-          version: '1.0'
-        }
-      }
+          version: '1.0',
+        },
+      },
     };
   };
 
@@ -1083,26 +1090,26 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   currentViewType === 'flame' ||
                   currentViewType === 'gantt' ||
                   currentViewType === 'analysis') && (
-                    <Tooltip title="Export as SVG">
-                      <IconButton
-                        onClick={handleExportSvg}
-                        size="small"
-                        sx={{
-                          backgroundColor: 'white',
-                          boxShadow: 1,
-                          padding: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          '&:hover': {
-                            backgroundColor: 'grey.100',
-                          },
-                        }}
-                      >
-                        <Download size={16} />
-                      </IconButton>
-                    </Tooltip>
-                  )}
+                  <Tooltip title="Export as SVG">
+                    <IconButton
+                      onClick={handleExportSvg}
+                      size="small"
+                      sx={{
+                        backgroundColor: 'white',
+                        boxShadow: 1,
+                        padding: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        '&:hover': {
+                          backgroundColor: 'grey.100',
+                        },
+                      }}
+                    >
+                      <Download size={16} />
+                    </IconButton>
+                  </Tooltip>
+                )}
 
                 {(currentViewType === 'flame' || currentViewType === 'gantt') && flameData && (
                   <Tooltip title="Export as Chrome Tracing JSON">

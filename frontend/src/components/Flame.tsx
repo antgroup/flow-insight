@@ -14,18 +14,18 @@ type FlameVisualizationProps = {
   graphData: GraphData;
   physicalViewData?: PhysicalViewData | null;
   colorMode?:
-  | 'warm'
-  | 'cold'
-  | 'red'
-  | 'orange'
-  | 'yellow'
-  | 'green'
-  | 'pastelgreen'
-  | 'blue'
-  | 'aqua'
-  | 'allocation'
-  | 'differential'
-  | 'nodejs';
+    | 'warm'
+    | 'cold'
+    | 'red'
+    | 'orange'
+    | 'yellow'
+    | 'green'
+    | 'pastelgreen'
+    | 'blue'
+    | 'aqua'
+    | 'allocation'
+    | 'differential'
+    | 'nodejs';
   currentTimestamp?: number;
 };
 
@@ -806,7 +806,8 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
           g.attr(
             'transform',
             d =>
-              `translate(${d.x0},${inverted ? yScale(d.depth) : (height || totalHeight) - yScale(d.depth) - cellHeight
+              `translate(${d.x0},${
+                inverted ? yScale(d.depth) : (height || totalHeight) - yScale(d.depth) - cellHeight
               })`
           );
 
@@ -819,9 +820,10 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
             .attr(
               'transform',
               d =>
-                `translate(${d.x0},${inverted
-                  ? yScale(d.depth)
-                  : (height || totalHeight) - yScale(d.depth) - cellHeight
+                `translate(${d.x0},${
+                  inverted
+                    ? yScale(d.depth)
+                    : (height || totalHeight) - yScale(d.depth) - cellHeight
                 })`
             );
 
@@ -1581,7 +1583,9 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
       }
 
       // Debug: Track original data size to ensure all points are included
-      console.log(`Processing ${data.aggregated.length} aggregated data points and ${data.parentStartTimes.length} parent start times`);
+      console.log(
+        `Processing ${data.aggregated.length} aggregated data points and ${data.parentStartTimes.length} parent start times`
+      );
 
       // Find max value for normalization
       let maxValue = 0;
@@ -1854,10 +1858,7 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
         node => !addedAsChild.has(node.name) && node.name !== '_main' && !childrens.has(node.name)
       );
 
-      mainNode.children = [
-        ...(mainNode.children || []),
-        ...orphanedNodes,
-      ];
+      mainNode.children = [...(mainNode.children || []), ...orphanedNodes];
 
       // Calculate total value of all children
       let totalChildrenValue = 0;

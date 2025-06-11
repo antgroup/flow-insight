@@ -698,7 +698,10 @@ class InsightEngine:
                         caller_node_id = caller_method.name
                     total_in_parent[caller_node_id]["duration"] += duration
                     total_in_parent[caller_node_id]["count"] += 1
-                    if "start_time" not in total_in_parent[caller_node_id] or total_in_parent[caller_node_id]["start_time"] == 0:
+                    if (
+                        "start_time" not in total_in_parent[caller_node_id]
+                        or total_in_parent[caller_node_id]["start_time"] == 0
+                    ):
                         total_in_parent[caller_node_id]["start_time"] = start_times.get(
                             (caller_service, caller_method), 0
                         )
