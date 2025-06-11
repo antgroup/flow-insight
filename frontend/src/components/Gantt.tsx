@@ -123,9 +123,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
     // Chart dimensions
     const chartHeight = 500;
-    const rowHeight = 40;
-    const serviceRowHeight = 45;
-    const methodRowHeight = 42;
+    const rowHeight = 20;
+    const serviceRowHeight = 22;
+    const methodRowHeight = 21;
     const labelWidth = 320;
     const timelineHeight = 50;
     const indentWidth = 20;
@@ -854,31 +854,82 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       const totalDuration = maxTime - minTime;
       const extendedDuration = totalDuration * 1.4; // Extend 40% beyond actual duration
 
+      // Calculate available width for timeline labels
+      const timelineWidth = chartWidth - labelWidth;
+      const minLabelWidth = 50; // Reduced minimum space for more labels
+      const maxTicks = Math.floor(timelineWidth / minLabelWidth);
+      const targetTicks = Math.max(4, Math.min(maxTicks, 15)); // Ensure at least 4 ticks, max 15
+
       let tickInterval: number;
+      const baseDivisions = Math.max(4, targetTicks - 2); // Ensure minimum 4 divisions
 
       switch (timeScale) {
         case 'milliseconds':
-          tickInterval = Math.max(1, Math.round(totalDuration / 15));
+          // For milliseconds, use nice round numbers
+          const msPerTick = totalDuration / baseDivisions;
+          const msRoundingFactors = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+          tickInterval =
+            msRoundingFactors.find(factor => factor >= msPerTick) || Math.ceil(msPerTick);
           break;
         case 'seconds':
-          tickInterval = Math.max(100, Math.round(totalDuration / 1000 / 15) * 1000);
+          // For seconds, use intervals like 0.1s, 0.2s, 0.5s, 1s, 2s, 5s, 10s, etc.
+          const secPerTick = totalDuration / 1000 / baseDivisions;
+          const secRoundingFactors = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60];
+          const secFactor =
+            secRoundingFactors.find(factor => factor >= secPerTick) || Math.ceil(secPerTick);
+          tickInterval = secFactor * 1000;
           break;
         case 'minutes':
-          tickInterval = Math.max(5000, Math.round(totalDuration / 60000 / 15) * 60000);
+          // For minutes, use intervals like 1min, 2min, 5min, 10min, 15min, 30min, 1h
+          const minPerTick = totalDuration / 60000 / baseDivisions;
+          const minRoundingFactors = [1, 2, 5, 10, 15, 30, 60];
+          const minFactor =
+            minRoundingFactors.find(factor => factor >= minPerTick) || Math.ceil(minPerTick);
+          tickInterval = minFactor * 60000;
           break;
         case 'hours':
-          tickInterval = Math.max(300000, Math.round(totalDuration / 3600000 / 15) * 3600000);
+          // For hours, use intervals like 1h, 2h, 6h, 12h, 24h
+          const hourPerTick = totalDuration / 3600000 / baseDivisions;
+          const hourRoundingFactors = [1, 2, 3, 6, 12, 24];
+          const hourFactor =
+            hourRoundingFactors.find(factor => factor >= hourPerTick) || Math.ceil(hourPerTick);
+          tickInterval = hourFactor * 3600000;
           break;
         default:
           tickInterval = 1000;
       }
 
-      // Start before minTime and extend beyond maxTime
+      // Start before minTime and extend beyond maxTime, but align ticks to nice boundaries
       const startTime = minTime - totalDuration * 0.1;
       const endTime = maxTime + totalDuration * 0.3;
 
-      for (let time = startTime; time <= endTime; time += tickInterval) {
-        ticks.push(time);
+      // Align first tick to a nice boundary
+      const firstTick = Math.floor(startTime / tickInterval) * tickInterval;
+
+      for (let time = firstTick; time <= endTime; time += tickInterval) {
+        if (time >= startTime) {
+          ticks.push(time);
+        }
+      }
+
+      // Ensure we have a reasonable number of ticks
+      if (ticks.length > maxTicks) {
+        // Take every nth tick to reduce count
+        const step = Math.ceil(ticks.length / maxTicks);
+        const filteredTicks = ticks.filter((_, index) => index % step === 0);
+        return filteredTicks;
+      }
+
+      // If we have too few ticks, try to add more by reducing interval
+      if (ticks.length < 4 && totalDuration > 0) {
+        const newInterval = tickInterval / 2;
+        const newTicks = [];
+        for (let time = firstTick; time <= endTime; time += newInterval) {
+          if (time >= startTime) {
+            newTicks.push(time);
+          }
+        }
+        return newTicks.slice(0, maxTicks);
       }
 
       return ticks;
@@ -1164,8 +1215,16 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 const x = labelWidth + timeToX(time, minTime, pixelsPerUnit, timeScale);
                 // Only show ticks that are within the visible chart area
                 if (x >= labelWidth && x <= chartWidth) {
+                  const timeLabel = formatTime(time, minTime, timeScale);
+                  const labelWidth_calc = timeLabel.length * 6 + 8; // Estimate label width
+                  const labelX = Math.max(
+                    labelWidth + labelWidth_calc / 2,
+                    Math.min(x, chartWidth - labelWidth_calc / 2)
+                  );
+
                   return (
                     <g key={index}>
+                      {/* Grid line */}
                       <line
                         x1={x}
                         y1={0}
@@ -1175,26 +1234,38 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                         strokeWidth={0.5}
                         opacity={0.6}
                       />
+                      {/* Timeline tick mark */}
+                      <line
+                        x1={x}
+                        y1={timelineHeight - 8}
+                        x2={x}
+                        y2={timelineHeight}
+                        stroke={COLORS.border}
+                        strokeWidth={2}
+                        opacity={0.8}
+                      />
+                      {/* Label background */}
                       <rect
-                        x={Math.max(labelWidth + 2, x - 25)}
-                        y={8}
-                        width={50}
-                        height={20}
+                        x={labelX - labelWidth_calc / 2}
+                        y={6}
+                        width={labelWidth_calc}
+                        height={18}
                         fill={COLORS.surface}
                         stroke={COLORS.border}
-                        strokeWidth={1}
-                        rx={4}
-                        opacity={0.9}
+                        strokeWidth={0.5}
+                        rx={3}
+                        opacity={0.95}
                       />
+                      {/* Label text */}
                       <text
-                        x={x}
-                        y={22}
+                        x={labelX}
+                        y={18}
                         textAnchor="middle"
-                        fontSize="11"
+                        fontSize="10"
                         fill={COLORS.text}
                         fontWeight="600"
                       >
-                        {formatTime(time, minTime, timeScale)}
+                        {timeLabel}
                       </text>
                     </g>
                   );
@@ -1228,8 +1299,13 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               const isCollapsible = isMethod;
 
               const currentRowHeight = isMethod ? methodRowHeight : rowHeight;
-              const barHeight = currentRowHeight - 12;
+              const barHeight = Math.floor(currentRowHeight * 0.75); // 3/4 of container row
+              const barPadding = (currentRowHeight - barHeight) / 2; // Center the bar vertically
               const indent = task.level * indentWidth;
+
+              // Calculate appropriate font sizes based on bar height
+              const labelFontSize = Math.max(8, Math.min(12, barHeight * 0.6));
+              const durationFontSize = Math.max(6, Math.min(10, barHeight * 0.5));
 
               let taskColor = task.color || COLORS.neutral;
               let gradientId = 'completedGradient';
@@ -1271,10 +1347,11 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     {isCollapsible && (
                       <text
                         x={indent + 15}
-                        y={y + currentRowHeight / 2 + 2}
+                        y={y + currentRowHeight / 2 + 4}
                         fontSize="12"
                         fill={taskColor}
                         textAnchor="middle"
+                        dominantBaseline="central"
                         style={{ cursor: 'pointer' }}
                         onClick={() => handleTaskClick(task)}
                       >
@@ -1306,26 +1383,14 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       </g>
                     )}
 
-                    {/* Method/Function icon */}
-                    {isMethod && (
-                      <text
-                        x={indent + (isCollapsible ? 35 : 15)}
-                        y={y + currentRowHeight / 2 + 2}
-                        fontSize="12"
-                        fill={taskColor}
-                        textAnchor="start"
-                      >
-                        📞
-                      </text>
-                    )}
-
                     {/* Task name */}
                     <text
-                      x={indent + (isCollapsible ? 52 : isMethod ? 32 : 15)}
-                      y={y + currentRowHeight / 2 - 2}
+                      x={indent + (isCollapsible ? 35 : 15)}
+                      y={y + currentRowHeight / 2}
                       fontSize={isMain ? '14' : isMethod ? '12' : '11'}
                       fill={isMain ? COLORS.primary : COLORS.text}
                       textAnchor="start"
+                      dominantBaseline="central"
                       fontWeight={isMain ? '700' : isMethod ? '600' : '500'}
                       style={{
                         userSelect: 'none',
@@ -1339,25 +1404,27 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     {/* Call relationship indicators */}
                     {task.callers.length > 0 && (
                       <text
-                        x={indent + (isCollapsible ? 52 : isMethod ? 32 : 15)}
-                        y={y + currentRowHeight / 2 + 12}
-                        fontSize="9"
+                        x={indent + (isCollapsible ? 35 : 15)}
+                        y={y + currentRowHeight / 2 + 8}
+                        fontSize="8"
                         fill={COLORS.textLight}
                         textAnchor="start"
+                        dominantBaseline="central"
                         fontWeight="400"
                       >
-                        📞 Called by: {task.callers.length} • Calls: {task.callees.length}
+                        Called by: {task.callers.length} • Calls: {task.callees.length}
                       </text>
                     )}
 
                     {/* Duration info */}
                     {!isMethod && (
                       <text
-                        x={indent + (isCollapsible ? 52 : isMethod ? 32 : 15)}
-                        y={y + currentRowHeight / 2 + (task.callers.length > 0 ? 22 : 12)}
-                        fontSize="9"
+                        x={indent + (isCollapsible ? 35 : 15)}
+                        y={y + currentRowHeight / 2 + (task.callers.length > 0 ? 14 : 8)}
+                        fontSize="8"
                         fill={COLORS.textLight}
                         textAnchor="start"
+                        dominantBaseline="central"
                         fontWeight="400"
                       >
                         ⏱️ {duration.toFixed(3)}s
@@ -1406,23 +1473,21 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     {/* Shadow */}
                     <rect
                       x={taskStartX + 2}
-                      y={y + 8}
+                      y={y + barPadding + 2}
                       width={taskWidth}
                       height={barHeight}
                       fill="rgba(0,0,0,0.1)"
-                      rx={6}
                     />
 
                     {/* Main bar */}
                     <rect
                       x={taskStartX}
-                      y={y + 6}
+                      y={y + barPadding}
                       width={taskWidth}
                       height={barHeight}
                       fill={`url(#${gradientId})`}
                       stroke={isHovered ? 'white' : taskColor}
                       strokeWidth={isHovered ? 3 : 1}
-                      rx={isMethod ? 6 : 4}
                       opacity={isHovered ? 0.9 : isMethod ? 0.8 : 0.85}
                       filter="url(#dropShadow)"
                       style={{ transition: 'all 0.2s ease' }}
@@ -1432,21 +1497,20 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     {task.name.includes('🔄') && (
                       <rect
                         x={taskStartX + 2}
-                        y={y + 8}
+                        y={y + barPadding + 2}
                         width={taskWidth - 4}
                         height={barHeight - 4}
                         fill="rgba(255,255,255,0.2)"
-                        rx={4}
                       />
                     )}
 
                     {/* Duration label on bar */}
-                    {taskWidth > 70 && (
+                    {taskWidth > 30 && barHeight > 10 && (
                       <text
                         x={taskStartX + taskWidth / 2}
-                        y={y + currentRowHeight / 2 + 1}
+                        y={y + barPadding + barHeight / 2 + durationFontSize / 3}
                         textAnchor="middle"
-                        fontSize="10"
+                        fontSize={durationFontSize}
                         fill="white"
                         fontWeight="700"
                         style={{
