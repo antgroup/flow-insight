@@ -783,88 +783,64 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       }
     });
 
-    // Generate timeline ticks extending beyond execution flow
+    // Generate timeline ticks for relative time display
     const generateTimelineTicks = () => {
       const ticks = [];
       const totalDuration = maxTime - minTime;
-      const extendedDuration = totalDuration * 1.4; // Extend 40% beyond actual duration
 
       // Calculate available width for timeline labels
       const timelineWidth = chartWidth - labelWidth;
-      const minLabelWidth = 50; // Reduced minimum space for more labels
+      const minLabelWidth = 50;
       const maxTicks = Math.floor(timelineWidth / minLabelWidth);
-      const targetTicks = Math.max(4, Math.min(maxTicks, 15)); // Ensure at least 4 ticks, max 15
+      const targetTicks = Math.max(4, Math.min(maxTicks, 15));
 
+      // Calculate a nice tick interval based on duration
+      const baseDivisions = Math.max(4, targetTicks - 2);
       let tickInterval: number;
-      const baseDivisions = Math.max(4, targetTicks - 2); // Ensure minimum 4 divisions
 
-      switch (timeScale) {
-        case 'milliseconds':
-          // For milliseconds, use nice round numbers
-          const msPerTick = totalDuration / baseDivisions;
-          const msRoundingFactors = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
-          tickInterval =
-            msRoundingFactors.find(factor => factor >= msPerTick) || Math.ceil(msPerTick);
-          break;
-        case 'seconds':
-          // For seconds, use intervals like 0.1s, 0.2s, 0.5s, 1s, 2s, 5s, 10s, etc.
-          const secPerTick = totalDuration / 1000 / baseDivisions;
-          const secRoundingFactors = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60];
-          const secFactor =
-            secRoundingFactors.find(factor => factor >= secPerTick) || Math.ceil(secPerTick);
-          tickInterval = secFactor * 1000;
-          break;
-        case 'minutes':
-          // For minutes, use intervals like 1min, 2min, 5min, 10min, 15min, 30min, 1h
-          const minPerTick = totalDuration / 60000 / baseDivisions;
-          const minRoundingFactors = [1, 2, 5, 10, 15, 30, 60];
-          const minFactor =
-            minRoundingFactors.find(factor => factor >= minPerTick) || Math.ceil(minPerTick);
-          tickInterval = minFactor * 60000;
-          break;
-        case 'hours':
-          // For hours, use intervals like 1h, 2h, 6h, 12h, 24h
-          const hourPerTick = totalDuration / 3600000 / baseDivisions;
-          const hourRoundingFactors = [1, 2, 3, 6, 12, 24];
-          const hourFactor =
-            hourRoundingFactors.find(factor => factor >= hourPerTick) || Math.ceil(hourPerTick);
-          tickInterval = hourFactor * 3600000;
-          break;
-        default:
-          tickInterval = 1000;
+      // Determine appropriate tick interval based on total duration
+      const durationInSeconds = totalDuration;
+
+      if (durationInSeconds <= 1) {
+        // For very short durations, use 0.1s intervals
+        const intervals = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5];
+        const targetInterval = durationInSeconds / baseDivisions;
+        tickInterval = intervals.find(interval => interval >= targetInterval) || 0.1;
+      } else if (durationInSeconds <= 10) {
+        // For short durations (1-10s), use 0.5s, 1s, 2s intervals
+        const intervals = [0.1, 0.2, 0.5, 1, 2, 5];
+        const targetInterval = durationInSeconds / baseDivisions;
+        tickInterval = intervals.find(interval => interval >= targetInterval) || 1;
+      } else if (durationInSeconds <= 60) {
+        // For medium durations (10s-1min), use 1s, 2s, 5s, 10s intervals
+        const intervals = [1, 2, 5, 10, 15, 30];
+        const targetInterval = durationInSeconds / baseDivisions;
+        tickInterval = intervals.find(interval => interval >= targetInterval) || 10;
+      } else {
+        // For long durations, use minute-based intervals
+        const intervals = [5, 10, 15, 30, 60, 120, 300]; // 5s to 5min
+        const targetInterval = durationInSeconds / baseDivisions;
+        tickInterval = intervals.find(interval => interval >= targetInterval) || 60;
       }
 
-      // Start before minTime and extend beyond maxTime, but align ticks to nice boundaries
-      const startTime = minTime - totalDuration * 0.1;
-      const endTime = maxTime + totalDuration * 0.3;
+      // Generate ticks starting from 0 (relative to minTime)
+      const numTicks = Math.ceil(totalDuration / tickInterval) + 2; // +2 for padding
 
-      // Align first tick to a nice boundary
-      const firstTick = Math.floor(startTime / tickInterval) * tickInterval;
+      for (let i = 0; i <= numTicks; i++) {
+        const relativeTime = i * tickInterval;
+        const absoluteTime = minTime + relativeTime;
 
-      for (let time = firstTick; time <= endTime; time += tickInterval) {
-        if (time >= startTime) {
-          ticks.push(time);
+        // Only add ticks within reasonable bounds
+        if (relativeTime <= totalDuration * 1.2) {
+          // 20% padding
+          ticks.push(absoluteTime);
         }
       }
 
-      // Ensure we have a reasonable number of ticks
+      // Limit to maxTicks
       if (ticks.length > maxTicks) {
-        // Take every nth tick to reduce count
         const step = Math.ceil(ticks.length / maxTicks);
-        const filteredTicks = ticks.filter((_, index) => index % step === 0);
-        return filteredTicks;
-      }
-
-      // If we have too few ticks, try to add more by reducing interval
-      if (ticks.length < 4 && totalDuration > 0) {
-        const newInterval = tickInterval / 2;
-        const newTicks = [];
-        for (let time = firstTick; time <= endTime; time += newInterval) {
-          if (time >= startTime) {
-            newTicks.push(time);
-          }
-        }
-        return newTicks.slice(0, maxTicks);
+        return ticks.filter((_, index) => index % step === 0);
       }
 
       return ticks;
@@ -1141,7 +1117,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 const x = labelWidth + timeToX(time, minTime, pixelsPerUnit, timeScale);
                 // Only show ticks that are within the visible chart area
                 if (x >= labelWidth && x <= chartWidth) {
-                  const timeLabel = time.toFixed(2) + 's'; // Time is already in seconds
+                  const relativeTime = time - minTime; // Calculate relative time from start
+                  const timeLabel = relativeTime.toFixed(2) + 's';
                   const labelWidth_calc = timeLabel.length * 6 + 8; // Estimate label width
                   const labelX = Math.max(
                     labelWidth + labelWidth_calc / 2,
