@@ -29,22 +29,55 @@ const ElementsPanel = ({
     }
   }, [searchTerm, onSearchChange]);
 
-  // Filter items based on search term
+  // Filter items based on search term (with regex support)
   const filterItems = useCallback(
     (items: any[]) => {
       if (!searchTerm) {
         return items;
       }
-      return items.filter(
-        item =>
-          item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.id.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+
+      const trimmedSearch = searchTerm.trim();
+
+      // Try to create a regex pattern
+      let searchRegex: RegExp | null = null;
+      let useRegex = false;
+
+      try {
+        // Check if the search term looks like a regex (contains regex special chars)
+        const regexChars = /[.*+?^${}()|[\]\\]/;
+        if (regexChars.test(trimmedSearch)) {
+          // Try to compile as regex with case-sensitive matching
+          searchRegex = new RegExp(trimmedSearch);
+          useRegex = true;
+          console.log('Using regex search in ElementsPanel:', trimmedSearch);
+        }
+      } catch (error) {
+        // If regex compilation fails, fall back to string search
+        console.warn(
+          'Invalid regex pattern in ElementsPanel, falling back to string search:',
+          error
+        );
+        useRegex = false;
+      }
+
+      return items.filter(item => {
+        if (useRegex && searchRegex) {
+          // Test against both name and id
+          return searchRegex.test(item.name) || searchRegex.test(item.id);
+        } else {
+          // Fallback to case-insensitive string search
+          const lowerSearch = trimmedSearch.toLowerCase();
+          return (
+            item.name.toLowerCase().includes(lowerSearch) ||
+            item.id.toLowerCase().includes(lowerSearch)
+          );
+        }
+      });
     },
     [searchTerm]
   );
 
-  // Get methods for a specific service
+  // Get methods for a specific service (with regex support)
   const getServiceMethods = useCallback(
     (instanceId: string) => {
       const methods = graphData.methods.filter(method => method.instanceId === instanceId);
@@ -52,32 +85,81 @@ const ElementsPanel = ({
         return methods;
       }
 
-      return methods.filter(
-        method =>
-          method.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          method.id.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      const trimmedSearch = searchTerm.trim();
+
+      // Try to create a regex pattern
+      let searchRegex: RegExp | null = null;
+      let useRegex = false;
+
+      try {
+        // Check if the search term looks like a regex (contains regex special chars)
+        const regexChars = /[.*+?^${}()|[\]\\]/;
+        if (regexChars.test(trimmedSearch)) {
+          // Try to compile as regex with case-sensitive matching
+          searchRegex = new RegExp(trimmedSearch);
+          useRegex = true;
+        }
+      } catch (error) {
+        // If regex compilation fails, fall back to string search
+        useRegex = false;
+      }
+
+      return methods.filter(method => {
+        if (useRegex && searchRegex) {
+          // Test against both name and id
+          return searchRegex.test(method.name) || searchRegex.test(method.id);
+        } else {
+          // Fallback to case-insensitive string search
+          const lowerSearch = trimmedSearch.toLowerCase();
+          return (
+            method.name.toLowerCase().includes(lowerSearch) ||
+            method.id.toLowerCase().includes(lowerSearch)
+          );
+        }
+      });
     },
     [graphData.methods, searchTerm]
   );
 
-  // Filter services and their methods based on search term
+  // Filter services and their methods based on search term (with regex support)
   const filterServicesAndMethods = useCallback(() => {
     if (!searchTerm) {
       return graphData.services;
     }
 
+    const trimmedSearch = searchTerm.trim();
+
+    // Try to create a regex pattern
+    let searchRegex: RegExp | null = null;
+    let useRegex = false;
+
+    try {
+      // Check if the search term looks like a regex (contains regex special chars)
+      const regexChars = /[.*+?^${}()|[\]\\]/;
+      if (regexChars.test(trimmedSearch)) {
+        // Try to compile as regex with case-sensitive matching
+        searchRegex = new RegExp(trimmedSearch);
+        useRegex = true;
+      }
+    } catch (error) {
+      // If regex compilation fails, fall back to string search
+      useRegex = false;
+    }
+
     return graphData.services.filter(service => {
-      const serviceMatches =
-        service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        service.id.toLowerCase().includes(searchTerm.toLowerCase());
+      let serviceMatches = false;
+
+      if (useRegex && searchRegex) {
+        serviceMatches = searchRegex.test(service.name) || searchRegex.test(service.id);
+      } else {
+        const lowerSearch = trimmedSearch.toLowerCase();
+        serviceMatches =
+          service.name.toLowerCase().includes(lowerSearch) ||
+          service.id.toLowerCase().includes(lowerSearch);
+      }
 
       const serviceMethods = getServiceMethods(service.id);
-      const methodMatches = serviceMethods.some(
-        method =>
-          method.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          method.id.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      const methodMatches = serviceMethods.length > 0; // getServiceMethods already handles regex filtering
 
       return serviceMatches || methodMatches;
     });

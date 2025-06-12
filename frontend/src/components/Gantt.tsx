@@ -145,7 +145,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       const parseServiceMethod = (
         id: string
       ): { serviceName: string; methodName: string; displayName: string } => {
-        if (id === 'root' || id === '_main') {
+        if (id === 'root') {
+          return { serviceName: 'System', methodName: 'root', displayName: 'Root' };
+        }
+        if (id === '_main') {
           return { serviceName: 'System', methodName: 'main', displayName: 'Main Execution Flow' };
         }
 
@@ -195,28 +198,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
       collectTimings(data.root);
 
-      // Create main task
-      if (allStartTimes.length > 0 && allEndTimes.length > 0) {
-        const mainStartTime = Math.min(...allStartTimes);
-        // Use currentTimestamp instead of Date.now() for consistency
-        const mainEndTime = Math.max(...allEndTimes);
-
-        flatTasks.push({
-          id: 'main-task',
-          name: 'Main Execution Flow',
-          fullName: 'root',
-          startTime: mainStartTime,
-          endTime: mainEndTime,
-          progress: 100,
-          type: 'main',
-          level: 0,
-          children: [],
-          callers: [],
-          callees: [],
-          color: COLORS.primary,
-          isRunning: false, // Main task is never running
-        });
-      }
+      // Don't create a separate main task - we'll use the existing _main node
 
       // Recursive function to convert tree nodes to tasks
       const convertTreeToTasks = (
@@ -229,32 +211,37 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         const functionColor = CALLER_COLORS[colorIndex % CALLER_COLORS.length];
 
         // Calculate timing from node data (convert from milliseconds to seconds)
-        let startTime = node.startTime / 1000;
+        const startTime = node.startTime / 1000;
         let endTime: number;
 
-        // Special handling for main/root nodes - duration should be sum of children
-        if (node.id === 'root' || node.id === '_main' || node.id.includes('main')) {
-          // For main task, calculate duration based on children span
-          if (node.children && node.children.length > 0) {
-            // Calculate span from child nodes directly since convertTreeToTasks returns void
-            const childStartTimes = node.children.map(child => child.startTime / 1000);
-            const childEndTimes = node.children.map(child =>
-              child.endTime <= 0 ? currentTimestamp / 1000 : child.endTime / 1000
-            );
-
-            if (childStartTimes.length > 0) {
-              const earliestStart = Math.min(...childStartTimes);
-              const latestEnd = Math.max(...childEndTimes);
-              startTime = earliestStart;
-              endTime = latestEnd;
-            } else {
-              endTime = startTime + 0.001; // Minimal duration if no children
+        // Special handling for _main node - use last end time across entire tree
+        if (node.id === '_main') {
+          // Calculate the last end time across all nodes in the tree
+          const collectAllEndTimes = (treeNode: FlameTreeNode): number[] => {
+            const endTimes: number[] = [];
+            if (treeNode.id !== '_main' && treeNode.id !== 'root') {
+              const nodeEndTime =
+                treeNode.endTime <= 0 ? currentTimestamp / 1000 : treeNode.endTime / 1000;
+              endTimes.push(nodeEndTime);
             }
+            if (treeNode.children) {
+              treeNode.children.forEach(child => {
+                endTimes.push(...collectAllEndTimes(child));
+              });
+            }
+            return endTimes;
+          };
+
+          // Get all end times from the entire tree starting from the root
+          const allTreeEndTimes = collectAllEndTimes(data.root);
+          if (allTreeEndTimes.length > 0) {
+            endTime = Math.max(...allTreeEndTimes);
           } else {
-            endTime = startTime + 0.001; // Minimal duration if no children
+            // Fallback if no other nodes exist
+            endTime = startTime + 0.001;
           }
         } else {
-          // For regular tasks, use original logic
+          // For all other nodes, use their actual timing data
           endTime = node.endTime <= 0 ? currentTimestamp / 1000 : node.endTime / 1000;
         }
 
@@ -271,7 +258,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           startTime: startTime,
           endTime: endTime,
           progress: isRunning ? 50 : 100, // Running tasks show 50% progress
-          type: 'method',
+          type: node.id === '_main' ? 'main' : 'method', // _main node is the main task
           serviceName: serviceName,
           methodName: methodName,
           parentId: parentTaskId,
@@ -279,7 +266,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           children: [],
           callers: [],
           callees: [],
-          color: functionColor,
+          color: node.id === '_main' ? COLORS.primary : functionColor,
           executionCount: 1,
           isRunning: isRunning,
         };
@@ -300,13 +287,21 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       // Convert the tree to flat tasks
       if (data.root.children && data.root.children.length > 0) {
         data.root.children.forEach((child, index) => {
-          convertTreeToTasks(child, 1, index, undefined);
+          // Special handling for _main node - it should be at level 0
+          const level = child.id === '_main' ? 0 : 1;
+          convertTreeToTasks(child, level, index, undefined);
         });
       }
 
       console.log(
         `Created gantt chart with ${flatTasks.length} total tasks from tree with ${data.root.children?.length || 0} root functions`
       );
+
+      // Debug: Log task hierarchy
+      const mainTasks = flatTasks.filter(t => t.type === 'main');
+      const methodTasks = flatTasks.filter(t => t.type === 'method');
+      console.log(`Main tasks: ${mainTasks.length}, Method tasks: ${methodTasks.length}`);
+      console.log('Task levels:', flatTasks.map(t => `${t.name}(L${t.level})`).join(', '));
 
       return flatTasks;
     };
@@ -372,10 +367,13 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               ...task,
               isCollapsed: collapsedNodes.has(task.id),
             });
+          } else {
+            console.log(`Hiding task due to collapsed ancestor: ${task.name} (L${task.level})`);
           }
         }
       });
 
+      console.log(`Visible tasks: ${visibleTasks.length}/${tasks.length}`);
       return visibleTasks;
     };
 
@@ -543,6 +541,94 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       }
     };
 
+    // Handle level expansion controls
+    const expandOneLevel = () => {
+      const newCollapsed = new Set(collapsedNodes);
+
+      // Find the deepest level that has collapsed nodes
+      const collapsedLevels = new Map<number, string[]>();
+      tasks.forEach(task => {
+        if (newCollapsed.has(task.id)) {
+          if (!collapsedLevels.has(task.level)) {
+            collapsedLevels.set(task.level, []);
+          }
+          collapsedLevels.get(task.level)!.push(task.id);
+        }
+      });
+
+      if (collapsedLevels.size > 0) {
+        // Find the shallowest level with collapsed nodes and expand them
+        const levelsArray = Array.from(collapsedLevels.keys()).sort((a, b) => a - b);
+        const targetLevel = levelsArray[0];
+        const tasksToExpand = collapsedLevels.get(targetLevel) || [];
+
+        tasksToExpand.forEach(taskId => {
+          newCollapsed.delete(taskId);
+        });
+
+        setCollapsedNodes(newCollapsed);
+
+        // If we're in search mode, also update the saved state
+        if (savedCollapsedState !== null) {
+          const updatedSavedState = new Set(savedCollapsedState);
+          tasksToExpand.forEach(taskId => {
+            updatedSavedState.delete(taskId);
+          });
+          setSavedCollapsedState(updatedSavedState);
+        }
+
+        console.log(`Expanded level ${targetLevel}, expanded ${tasksToExpand.length} nodes`);
+      }
+    };
+
+    const collapseOneLevel = () => {
+      const newCollapsed = new Set(collapsedNodes);
+
+      // Find the deepest visible level that has expandable nodes (nodes with children)
+      const expandableByLevel = new Map<number, string[]>();
+
+      // Get currently visible tasks to determine what levels are shown
+      const currentlyVisible = getVisibleTasks();
+      const maxVisibleLevel = Math.max(0, ...currentlyVisible.map(t => t.level));
+
+      // Find tasks at the deepest visible level that have children and are not collapsed
+      tasks.forEach(task => {
+        if (task.level <= maxVisibleLevel && !newCollapsed.has(task.id)) {
+          const hasChildren = tasks.some(t => t.parentId === task.id);
+          if (hasChildren) {
+            if (!expandableByLevel.has(task.level)) {
+              expandableByLevel.set(task.level, []);
+            }
+            expandableByLevel.get(task.level)!.push(task.id);
+          }
+        }
+      });
+
+      if (expandableByLevel.size > 0) {
+        // Find the deepest level with expandable nodes and collapse them
+        const levelsArray = Array.from(expandableByLevel.keys()).sort((a, b) => b - a);
+        const targetLevel = levelsArray[0];
+        const tasksToCollapse = expandableByLevel.get(targetLevel) || [];
+
+        tasksToCollapse.forEach(taskId => {
+          newCollapsed.add(taskId);
+        });
+
+        setCollapsedNodes(newCollapsed);
+
+        // If we're in search mode, also update the saved state
+        if (savedCollapsedState !== null) {
+          const updatedSavedState = new Set(savedCollapsedState);
+          tasksToCollapse.forEach(taskId => {
+            updatedSavedState.add(taskId);
+          });
+          setSavedCollapsedState(updatedSavedState);
+        }
+
+        console.log(`Collapsed level ${targetLevel}, collapsed ${tasksToCollapse.length} nodes`);
+      }
+    };
+
     // Handle flatten/unflatten group
     const handleFlattenGroup = (task: CustomTask, event: React.MouseEvent) => {
       event.stopPropagation(); // Prevent triggering the main task click
@@ -557,6 +643,19 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       }
       console.log('Current flattened groups:', Array.from(newFlattened));
       setFlattenedGroups(newFlattened);
+
+      // If we're in search mode and user manually changes flattening, update the saved state
+      // so the manual change persists when search is cleared
+      if (savedFlattenedState !== null) {
+        const updatedSavedState = new Set(savedFlattenedState);
+        if (newFlattened.has(task.id)) {
+          updatedSavedState.add(task.id);
+        } else {
+          updatedSavedState.delete(task.id);
+        }
+        setSavedFlattenedState(updatedSavedState);
+        console.log('Updated saved flattened state during search');
+      }
     };
 
     // Generate a unique key for this flame data to store collapse state
@@ -709,23 +808,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           console.log('Search triggered: expanding all levels');
         }
 
-        // Save current flattened state and flatten first-level groups
-        if (savedFlattenedState === null && tasks.length > 0) {
+        // Save current flattened state (but don't auto-flatten anything)
+        if (savedFlattenedState === null) {
           setSavedFlattenedState(new Set(flattenedGroups));
-
-          // Find all level 1 tasks that have children and flatten them
-          const firstLevelGroupsToFlatten = new Set(flattenedGroups);
-          tasks.forEach(task => {
-            if (task.level === 1) {
-              const hasChildren = tasks.some(t => t.parentId === task.id);
-              if (hasChildren) {
-                firstLevelGroupsToFlatten.add(task.id);
-              }
-            }
-          });
-
-          setFlattenedGroups(firstLevelGroupsToFlatten);
-          console.log('Search triggered: flattening first-level groups');
+          console.log('Search triggered: saved current flattened state');
         }
       } else {
         // Restore saved collapsed state when search is cleared
@@ -751,12 +837,48 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       tasks,
     ]);
 
-    // Filter tasks based on search term
+    // Filter tasks based on search term (with regex support)
     const visibleTasks = getVisibleTasks();
-    const filteredTasks =
-      searchTerm && searchTerm.trim() !== ''
-        ? visibleTasks.filter(task => task.name.toLowerCase().includes(searchTerm.toLowerCase()))
-        : visibleTasks;
+    const filteredTasks = (() => {
+      if (!searchTerm || searchTerm.trim() === '') {
+        return visibleTasks;
+      }
+
+      const trimmedSearch = searchTerm.trim();
+
+      // Try to create a regex pattern
+      let searchRegex: RegExp | null = null;
+      let useRegex = false;
+
+      try {
+        // Check if the search term looks like a regex (contains regex special chars)
+        const regexChars = /[.*+?^${}()|[\]\\]/;
+        if (regexChars.test(trimmedSearch)) {
+          // Try to compile as regex with case-sensitive matching
+          searchRegex = new RegExp(trimmedSearch);
+          useRegex = true;
+          console.log('Using regex search:', trimmedSearch);
+        }
+      } catch (error) {
+        // If regex compilation fails, fall back to string search
+        console.warn('Invalid regex pattern, falling back to string search:', error);
+        useRegex = false;
+      }
+
+      return visibleTasks.filter(task => {
+        if (useRegex && searchRegex) {
+          // Test against both task name and full name
+          return searchRegex.test(task.name) || searchRegex.test(task.fullName);
+        } else {
+          // Fallback to case-insensitive string search
+          const lowerSearch = trimmedSearch.toLowerCase();
+          return (
+            task.name.toLowerCase().includes(lowerSearch) ||
+            task.fullName.toLowerCase().includes(lowerSearch)
+          );
+        }
+      });
+    })();
 
     // Export SVG functionality
     const exportSvg = () => {
@@ -996,6 +1118,46 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               </button>
             </div>
 
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontWeight: '600', fontSize: '14px', color: COLORS.text }}>
+                Levels:
+              </span>
+              <button
+                onClick={expandOneLevel}
+                style={{
+                  padding: '8px 12px',
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: '8px',
+                  backgroundColor: COLORS.surface,
+                  color: COLORS.text,
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                }}
+                title="Expand one level deeper"
+              >
+                📂+
+              </button>
+              <button
+                onClick={collapseOneLevel}
+                style={{
+                  padding: '8px 12px',
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: '8px',
+                  backgroundColor: COLORS.surface,
+                  color: COLORS.text,
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                }}
+                title="Collapse one level"
+              >
+                📂-
+              </button>
+            </div>
+
             <div
               style={{
                 padding: '8px 12px',
@@ -1089,11 +1251,13 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               >
                 ⬆
               </div>
-              <span style={{ fontWeight: '500' }}>Flatten Bars (move child bars to left edge)</span>
+              <span style={{ fontWeight: '500' }}>
+                Manual Flatten (click ⬆ to move child bars to left edge)
+              </span>
             </div>
             <span style={{ fontStyle: 'italic', color: COLORS.textLight }}>
               💡 Click tasks to inspect • Hover for details • Zoom for precision • Use ⬆ to flatten
-              bars
+              bars • Use 📂+/📂- to expand/collapse levels
             </span>
           </div>
         </div>
@@ -1274,8 +1438,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                   ? labelWidth + timeToX(mainTask.startTime, minTime, pixelsPerUnit, timeScale)
                   : labelWidth + 10;
 
-                // Define the flattened position (leftmost position)
-                const flattenedPosition = mainTaskStartX;
+                // Define the flattened position (leftmost position, but not overlapping labels)
+                const minSafePosition = labelWidth + 10; // Ensure 10px padding from label area
+                const flattenedPosition = Math.max(minSafePosition, mainTaskStartX);
 
                 // Check if this task itself is flattened
                 if (flattenedGroups.has(task.id)) {
@@ -1298,7 +1463,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
                   // If direct parent is flattened
                   if (flattenedGroups.has(parentId)) {
-                    // Direct children align to the leftmost position (same as flattened parent)
+                    // Direct children align to the safe flattened position (same as flattened parent)
                     return { newStartX: flattenedPosition, found: true, isDirectChild: true };
                   }
 
