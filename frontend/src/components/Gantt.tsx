@@ -38,6 +38,7 @@ interface CustomTask {
   callees: string[]; // Who this calls
   color?: string;
   executionCount?: number; // Number of executions
+  isRunning?: boolean; // Whether this task is currently running
 }
 
 // Tree node structure for building hierarchy (matching FlameNode pattern)
@@ -211,6 +212,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           callers: [],
           callees: [],
           color: COLORS.primary,
+          isRunning: false, // Main task is never running
         });
       }
 
@@ -257,13 +259,16 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         // Generate unique ID
         const uniqueId = `${node.id}_${level}_${flatTasks.length}_${startTime}`;
 
+        // Determine if task is running
+        const isRunning = node.endTime <= 0;
+
         const task: CustomTask = {
           id: uniqueId,
           name: displayName,
           fullName: node.id,
           startTime: startTime,
           endTime: endTime,
-          progress: node.endTime <= 0 ? 50 : 100, // Running tasks show 50% progress
+          progress: isRunning ? 50 : 100, // Running tasks show 50% progress
           type: 'method',
           serviceName: serviceName,
           methodName: methodName,
@@ -274,6 +279,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           callees: [],
           color: functionColor,
           executionCount: 1,
+          isRunning: isRunning,
         };
 
         flatTasks.push(task);
@@ -551,23 +557,143 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       setFlattenedGroups(newFlattened);
     };
 
+    // Generate a unique key for this flame data to store collapse state
+    const getDataKey = (data: FlameGraphData): string => {
+      // Create a simple hash based on the root structure
+      const rootId = data.root.id;
+      const childrenCount = data.root.children?.length || 0;
+      const firstChildId = data.root.children?.[0]?.id || '';
+      return `gantt-collapse-${rootId}-${childrenCount}-${firstChildId}`;
+    };
+
+    // Load collapsed state from localStorage
+    const loadCollapsedState = (dataKey: string): Set<string> => {
+      try {
+        const stored = localStorage.getItem(dataKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return new Set(parsed);
+        }
+      } catch (error) {
+        console.warn('Failed to load collapsed state from localStorage:', error);
+      }
+      return new Set();
+    };
+
+    // Save collapsed state to localStorage
+    const saveCollapsedState = (dataKey: string, collapsed: Set<string>) => {
+      try {
+        localStorage.setItem(dataKey, JSON.stringify(Array.from(collapsed)));
+      } catch (error) {
+        console.warn('Failed to save collapsed state to localStorage:', error);
+      }
+    };
+
+    // Load flattened state from localStorage
+    const loadFlattenedState = (dataKey: string): Set<string> => {
+      try {
+        const stored = localStorage.getItem(`${dataKey}-flattened`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return new Set(parsed);
+        }
+      } catch (error) {
+        console.warn('Failed to load flattened state from localStorage:', error);
+      }
+      return new Set();
+    };
+
+    // Save flattened state to localStorage
+    const saveFlattenedState = (dataKey: string, flattened: Set<string>) => {
+      try {
+        localStorage.setItem(`${dataKey}-flattened`, JSON.stringify(Array.from(flattened)));
+      } catch (error) {
+        console.warn('Failed to save flattened state to localStorage:', error);
+      }
+    };
+
     // Update tasks when flameData changes
     useEffect(() => {
       if (flameData) {
         const newTasks = transformFlameDataToTreeTasks(flameData);
         setTasks(newTasks);
 
-        // Auto-collapse all nodes except first level (level 1) by default
-        const autoCollapsed = new Set<string>();
-        newTasks.forEach(task => {
-          // Collapse all tasks at level 2 and deeper (keep level 0=main and level 1=first children visible)
-          if (task.level >= 2) {
-            autoCollapsed.add(task.id);
-          }
-        });
-        setCollapsedNodes(autoCollapsed);
+        const dataKey = getDataKey(flameData);
+        const savedCollapsed = loadCollapsedState(dataKey);
+
+        // If we have saved state, use it; otherwise use default folding
+        if (savedCollapsed.size > 0) {
+          // Validate that saved IDs still exist in current tasks
+          const validCollapsed = new Set<string>();
+          const taskIds = new Set(newTasks.map(t => t.id));
+
+          savedCollapsed.forEach(id => {
+            if (taskIds.has(id)) {
+              validCollapsed.add(id);
+            }
+          });
+
+          setCollapsedNodes(validCollapsed);
+        } else {
+          // Default folding: show only main (level 0) and first level (level 1)
+          // Collapse all level 1 tasks that have children to hide level 2+
+          const autoCollapsed = new Set<string>();
+          newTasks.forEach(task => {
+            // Collapse all level 1 tasks that have children
+            // This ensures level 2, 3, 4, ... are all hidden by default
+            if (task.level === 1) {
+              const hasChildren = newTasks.some(t => t.parentId === task.id);
+              if (hasChildren) {
+                autoCollapsed.add(task.id);
+              }
+            }
+            // Also collapse any higher level tasks (level 2+) that have children
+            // This ensures deep nesting is fully collapsed
+            if (task.level >= 2) {
+              const hasChildren = newTasks.some(t => t.parentId === task.id);
+              if (hasChildren) {
+                autoCollapsed.add(task.id);
+              }
+            }
+          });
+          setCollapsedNodes(autoCollapsed);
+          // Save the default state
+          saveCollapsedState(dataKey, autoCollapsed);
+        }
+
+        // Load flattened state
+        const savedFlattened = loadFlattenedState(dataKey);
+        if (savedFlattened.size > 0) {
+          // Validate that saved IDs still exist in current tasks
+          const validFlattened = new Set<string>();
+          const taskIds = new Set(newTasks.map(t => t.id));
+
+          savedFlattened.forEach(id => {
+            if (taskIds.has(id)) {
+              validFlattened.add(id);
+            }
+          });
+
+          setFlattenedGroups(validFlattened);
+        }
       }
     }, [flameData, currentTimestamp]);
+
+    // Save collapsed state whenever it changes
+    useEffect(() => {
+      if (flameData && tasks.length > 0) {
+        const dataKey = getDataKey(flameData);
+        saveCollapsedState(dataKey, collapsedNodes);
+      }
+    }, [collapsedNodes, flameData, tasks]);
+
+    // Save flattened state whenever it changes
+    useEffect(() => {
+      if (flameData && tasks.length > 0) {
+        const dataKey = getDataKey(flameData);
+        saveFlattenedState(dataKey, flattenedGroups);
+      }
+    }, [flattenedGroups, flameData, tasks]);
 
     // Filter tasks based on search term
     const visibleTasks = getVisibleTasks();
@@ -792,34 +918,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             }}
           >
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontWeight: '600', fontSize: '14px', color: COLORS.text }}>
-                Time Scale:
-              </span>
-              {(['milliseconds', 'seconds', 'minutes', 'hours'] as TimeScale[]).map(scale => (
-                <button
-                  key={scale}
-                  onClick={() => setTimeScale(scale)}
-                  style={{
-                    padding: '8px 16px',
-                    border: timeScale === scale ? 'none' : `1px solid ${COLORS.border}`,
-                    borderRadius: '8px',
-                    backgroundColor: timeScale === scale ? COLORS.primary : COLORS.surface,
-                    color: timeScale === scale ? 'white' : COLORS.text,
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    textTransform: 'capitalize',
-                    transition: 'all 0.2s ease',
-                    boxShadow:
-                      timeScale === scale ? '0 4px 6px -1px rgba(99, 102, 241, 0.2)' : 'none',
-                  }}
-                >
-                  {scale}
-                </button>
-              ))}
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <span style={{ fontWeight: '600', fontSize: '14px', color: COLORS.text }}>Zoom:</span>
               <button
                 onClick={() => setZoomLevel(prev => Math.max(0.1, prev / 1.5))}
@@ -877,7 +975,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 fontWeight: '500',
               }}
             >
-              Duration: {formatTime(maxTime, minTime, timeScale)} • Scale: {unitLabel}
+              Duration: {(maxTime - minTime).toFixed(3)}s
             </div>
           </div>
 
@@ -1043,7 +1141,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 const x = labelWidth + timeToX(time, minTime, pixelsPerUnit, timeScale);
                 // Only show ticks that are within the visible chart area
                 if (x >= labelWidth && x <= chartWidth) {
-                  const timeLabel = formatTime(time, minTime, timeScale);
+                  const timeLabel = time.toFixed(2) + 's'; // Time is already in seconds
                   const labelWidth_calc = timeLabel.length * 6 + 8; // Estimate label width
                   const labelX = Math.max(
                     labelWidth + labelWidth_calc / 2,
@@ -1152,68 +1250,55 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                   return { startX: flattenedPosition, endX: flattenedPosition + originalDuration };
                 }
 
-                // Find if any ancestor is flattened and calculate offset
-                const findFlattenedAncestorWithOffset = (
+                // Calculate flattened position for any task
+                const calculateFlattenedPosition = (
                   taskId: string
-                ): { offset: number; found: boolean; isDirectChild: boolean } => {
+                ): { newStartX: number; found: boolean; isDirectChild: boolean } => {
                   const currentTask = tasks.find(t => t.id === taskId);
-                  if (!currentTask) return { offset: 0, found: false, isDirectChild: false };
+                  if (!currentTask) return { newStartX: 0, found: false, isDirectChild: false };
 
                   const parentId = parentMap.get(taskId);
-                  if (!parentId) return { offset: 0, found: false, isDirectChild: false };
+                  if (!parentId) return { newStartX: 0, found: false, isDirectChild: false };
 
                   const parentTask = tasks.find(t => t.id === parentId);
-                  if (!parentTask) return { offset: 0, found: false, isDirectChild: false };
+                  if (!parentTask) return { newStartX: 0, found: false, isDirectChild: false };
 
                   // If direct parent is flattened
                   if (flattenedGroups.has(parentId)) {
-                    // Direct children should align to the leftmost position (same as flattened parent)
-                    const parentOriginalStartX =
-                      labelWidth + timeToX(parentTask.startTime, minTime, pixelsPerUnit, timeScale);
-                    const parentOffset = flattenedPosition - parentOriginalStartX;
-
-                    return { offset: parentOffset, found: true, isDirectChild: true };
+                    // Direct children align to the leftmost position (same as flattened parent)
+                    return { newStartX: flattenedPosition, found: true, isDirectChild: true };
                   }
 
-                  // Recursively check ancestors
-                  const ancestorResult = findFlattenedAncestorWithOffset(parentId);
-                  if (ancestorResult.found) {
-                    // For indirect descendants, maintain their relative offset from their direct parent
+                  // Recursively check if parent has a flattened ancestor
+                  const parentResult = calculateFlattenedPosition(parentId);
+                  if (parentResult.found) {
+                    // Calculate the original relative offset between current task and its direct parent
                     const currentTaskOriginalStartX =
                       labelWidth +
                       timeToX(currentTask.startTime, minTime, pixelsPerUnit, timeScale);
                     const parentOriginalStartX =
                       labelWidth + timeToX(parentTask.startTime, minTime, pixelsPerUnit, timeScale);
-                    const relativeOffset = currentTaskOriginalStartX - parentOriginalStartX;
+                    const originalRelativeOffset = currentTaskOriginalStartX - parentOriginalStartX;
 
-                    // Parent's new position after applying ancestor's offset
-                    const parentNewStartX = parentOriginalStartX + ancestorResult.offset;
+                    // Parent's new position after flattening
+                    const parentNewStartX = parentResult.newStartX;
 
-                    // Calculate total offset for this task
-                    const totalOffset =
-                      parentNewStartX + relativeOffset - currentTaskOriginalStartX;
+                    // Maintain the same relative offset from the parent's new position
+                    const newStartX = parentNewStartX + originalRelativeOffset;
 
-                    return { offset: totalOffset, found: true, isDirectChild: false };
+                    return { newStartX, found: true, isDirectChild: false };
                   }
 
-                  return { offset: 0, found: false, isDirectChild: false };
+                  return { newStartX: 0, found: false, isDirectChild: false };
                 };
 
-                const { offset, found, isDirectChild } = findFlattenedAncestorWithOffset(task.id);
+                const { newStartX, found, isDirectChild } = calculateFlattenedPosition(task.id);
 
-                // Apply the offset if we found a flattened ancestor
+                // Apply the new position if we found a flattened ancestor
                 if (found) {
                   const originalDuration = baseTaskEndX - baseTaskStartX;
-
-                  if (isDirectChild) {
-                    // Direct children align to the leftmost position (same as their flattened parent)
-                    adjustedStartX = flattenedPosition;
-                    adjustedEndX = adjustedStartX + originalDuration;
-                  } else {
-                    // Indirect descendants use calculated offset
-                    adjustedStartX = baseTaskStartX + offset;
-                    adjustedEndX = adjustedStartX + originalDuration;
-                  }
+                  adjustedStartX = newStartX;
+                  adjustedEndX = adjustedStartX + originalDuration;
                 }
 
                 return { startX: adjustedStartX, endX: adjustedEndX };
@@ -1243,12 +1328,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               if (isMain) {
                 gradientId = 'mainGradient';
                 taskColor = COLORS.primary;
+              } else if (task.isRunning) {
+                gradientId = 'runningGradient';
+                taskColor = COLORS.warning;
               } else if (isMethod) {
                 gradientId = 'completedGradient';
                 taskColor = task.color || COLORS.info;
-              } else if (task.name.includes('🔄') || task.progress === 50) {
-                gradientId = 'runningGradient';
-                taskColor = COLORS.warning;
               }
 
               const duration = task.endTime - task.startTime; // Already in seconds
@@ -1272,34 +1357,38 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
                   {/* Task Label with Tree Structure */}
                   <g>
-                    {/* Tree expand/collapse icon */}
-                    {isCollapsible && (
-                      <text
-                        x={indent + 15}
-                        y={y + currentRowHeight / 2 + 4}
-                        fontSize="12"
-                        fill={taskColor}
-                        textAnchor="middle"
-                        dominantBaseline="central"
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => handleTaskClick(task)}
-                      >
-                        {task.isCollapsed ? '▶' : '▼'}
-                      </text>
-                    )}
+                    {/* Tree expand/collapse icon - only show if task has children */}
+                    {(() => {
+                      const hasChildren = tasks.some(t => t.parentId === task.id);
+                      return hasChildren && isCollapsible ? (
+                        <text
+                          x={indent + 15}
+                          y={y + currentRowHeight / 2 + 4}
+                          fontSize="12"
+                          fill={taskColor}
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => handleTaskClick(task)}
+                        >
+                          {task.isCollapsed ? '▶' : '▼'}
+                        </text>
+                      ) : null;
+                    })()}
 
-                    {/* Flatten group icon - show for all tasks that have children (fix #2: make all parent tasks clickable) */}
+                    {/* Flatten group icon - only show for tasks that have children (except main task) */}
                     {(() => {
                       // Check if this task has children by looking for tasks with this task as parent
                       const hasChildren = tasks.some(t => t.parentId === task.id);
 
-                      // Show flatten icon for any task that has children, including main tasks
-                      if (hasChildren || isMethod || isMain) {
+                      // Only show flatten icon for tasks that actually have children, and exclude main tasks
+                      if (hasChildren && !isMain) {
+                        const hasExpandButton = hasChildren && isCollapsible;
                         return (
                           <g>
                             {/* Background circle for flatten icon */}
                             <circle
-                              cx={indent + (isCollapsible ? 35 : 15)}
+                              cx={indent + (hasExpandButton ? 35 : 15)}
                               cy={y + currentRowHeight / 2}
                               r="8"
                               fill={
@@ -1312,7 +1401,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                             />
                             {/* Flatten icon */}
                             <text
-                              x={indent + (isCollapsible ? 35 : 15)}
+                              x={indent + (hasExpandButton ? 35 : 15)}
                               y={y + currentRowHeight / 2 + 3}
                               fontSize="8"
                               fill={flattenedGroups.has(task.id) ? 'white' : COLORS.text}
@@ -1357,12 +1446,17 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     <text
                       x={
                         indent +
-                        (isCollapsible
-                          ? 55
-                          : (() => {
-                              const hasChildren = tasks.some(t => t.parentId === task.id);
-                              return hasChildren || isMethod || isMain ? 35 : 15;
-                            })())
+                        (() => {
+                          const hasChildren = tasks.some(t => t.parentId === task.id);
+                          // Space calculation:
+                          // - 55px if task has expand button (hasChildren && isCollapsible)
+                          // - 35px if task has flatten button only (hasChildren but not collapsible, or main/method without children)
+                          // - 15px if task has no buttons (no children and not main/method)
+                          if (hasChildren && isCollapsible) return 55; // Has both expand and flatten buttons
+                          if (hasChildren && !isMain) return 35; // Has flatten button only
+                          if (isMain || isMethod) return 35; // Main/method tasks get consistent spacing
+                          return 15; // No buttons, minimal spacing
+                        })()
                       }
                       y={y + currentRowHeight / 2}
                       fontSize={isMain ? '14' : isMethod ? '12' : '11'}
@@ -1372,9 +1466,15 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       fontWeight={isMain ? '700' : isMethod ? '600' : '500'}
                       style={{
                         userSelect: 'none',
-                        cursor: isCollapsible ? 'pointer' : 'default',
+                        cursor: (() => {
+                          const hasChildren = tasks.some(t => t.parentId === task.id);
+                          return hasChildren && isCollapsible ? 'pointer' : 'default';
+                        })(),
                       }}
-                      onClick={() => isCollapsible && handleTaskClick(task)}
+                      onClick={() => {
+                        const hasChildren = tasks.some(t => t.parentId === task.id);
+                        if (hasChildren && isCollapsible) handleTaskClick(task);
+                      }}
                     >
                       {task.name}
                       {flattenedGroups.has(task.id) && (
@@ -1388,7 +1488,16 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     {/* Call relationship indicators */}
                     {task.callers.length > 0 && (
                       <text
-                        x={indent + (isCollapsible ? 55 : isMethod ? 35 : 15)}
+                        x={
+                          indent +
+                          (() => {
+                            const hasChildren = tasks.some(t => t.parentId === task.id);
+                            if (hasChildren && isCollapsible) return 55;
+                            if (hasChildren && !isMain) return 35;
+                            if (isMain || isMethod) return 35;
+                            return 15;
+                          })()
+                        }
                         y={y + currentRowHeight / 2 + 8}
                         fontSize="8"
                         fill={COLORS.textLight}
@@ -1403,7 +1512,16 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     {/* Duration info */}
                     {!isMethod && (
                       <text
-                        x={indent + (isCollapsible ? 55 : isMethod ? 35 : 15)}
+                        x={
+                          indent +
+                          (() => {
+                            const hasChildren = tasks.some(t => t.parentId === task.id);
+                            if (hasChildren && isCollapsible) return 55;
+                            if (hasChildren && !isMain) return 35;
+                            if (isMain || isMethod) return 35;
+                            return 15;
+                          })()
+                        }
                         y={y + currentRowHeight / 2 + (task.callers.length > 0 ? 14 : 8)}
                         fontSize="8"
                         fill={COLORS.textLight}
@@ -1411,7 +1529,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                         dominantBaseline="central"
                         fontWeight="400"
                       >
-                        ⏱️ {duration.toFixed(3)}s {task.progress === 50 ? '🔄' : ''}
+                        ⏱️ {duration.toFixed(3)}s {task.isRunning ? '🔄' : ''}
                       </text>
                     )}
                   </g>
@@ -1478,7 +1596,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     />
 
                     {/* Running task indicator */}
-                    {(task.name.includes('🔄') || task.progress === 50) && (
+                    {task.isRunning && (
                       <rect
                         x={taskStartX + 2}
                         y={y + barPadding + 2}

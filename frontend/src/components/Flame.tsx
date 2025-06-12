@@ -234,13 +234,15 @@ const createLayout = (data: FlameNode, width: number, cellHeight: number): Layou
       const visibleChildren = node.children.filter(child => !child.hide);
 
       if (visibleChildren.length > 0) {
-        const totalChildValue = visibleChildren.reduce((sum, child) => sum + child.value, 0);
+        // Use parent's value for proportional calculation, not sum of children
+        const parentValue = node.value;
         let currentX = x;
 
         visibleChildren.forEach((child, index) => {
+          // Calculate child width as proportion of parent's width based on child's value relative to parent
           const childWidth =
-            totalChildValue > 0
-              ? (child.value / totalChildValue) * availableWidth
+            parentValue > 0
+              ? (child.value / parentValue) * availableWidth
               : availableWidth / visibleChildren.length;
 
           const childLayoutNode = layoutNode(
