@@ -176,8 +176,11 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
       // Collect all timing information from the tree
       const collectTimings = (node: FlameTreeNode): void => {
-        allStartTimes.push(node.startTime);
-        allEndTimes.push(node.endTime);
+        // Convert from milliseconds to seconds
+        allStartTimes.push(node.startTime / 1000);
+        // Handle running tasks (endTime <= 0)
+        const endTime = node.endTime <= 0 ? Date.now() / 1000 : node.endTime / 1000;
+        allEndTimes.push(endTime);
 
         if (node.children) {
           node.children.forEach(child => collectTimings(child));
@@ -217,9 +220,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         const { serviceName, methodName, displayName } = parseServiceMethod(node.id);
         const functionColor = CALLER_COLORS[colorIndex % CALLER_COLORS.length];
 
-        // Calculate timing from node data
-        const startTime = node.startTime;
-        const endTime = node.endTime;
+        // Calculate timing from node data (convert from milliseconds to seconds)
+        const startTime = node.startTime / 1000;
+        const endTime = node.endTime <= 0 ? Date.now() / 1000 : node.endTime / 1000;
 
         // Generate unique ID
         const uniqueId = `${node.id}_${level}_${flatTasks.length}_${startTime}`;
@@ -230,7 +233,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           fullName: node.id,
           startTime: startTime,
           endTime: endTime,
-          progress: 100,
+          progress: node.endTime <= 0 ? 50 : 100, // Running tasks show 50% progress
           type: 'method',
           serviceName: serviceName,
           methodName: methodName,
@@ -1076,66 +1079,51 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                   }
                 });
 
-                // Recursive function to calculate flattened position relative to ancestors
-                const calculateFlattenedPosition = (
+                // Find the flattened ancestor and calculate offset
+                const findFlattenedAncestor = (
                   taskId: string
-                ): { baseStartX: number; foundFlattened: boolean } => {
+                ): { parentTask: CustomTask | null; flattenedStartX: number } => {
                   const parentId = parentMap.get(taskId);
 
-                  // If no parent, use original position
+                  // If no parent, not flattened
                   if (!parentId) {
-                    return { baseStartX: baseTaskStartX, foundFlattened: false };
+                    return { parentTask: null, flattenedStartX: 0 };
                   }
 
-                  // If parent is flattened, start from its left edge
+                  // If direct parent is flattened
                   if (flattenedGroups.has(parentId)) {
                     const parentTask = tasks.find(t => t.id === parentId);
                     if (parentTask) {
-                      const parentBaseStartX =
-                        labelWidth +
-                        timeToX(parentTask.startTime, minTime, pixelsPerUnit, timeScale);
-                      const flattenedStartX = labelWidth + 10; // Flattened position
-                      return { baseStartX: flattenedStartX, foundFlattened: true };
+                      const flattenedStartX = labelWidth + 10; // Fixed flattened position
+                      return { parentTask, flattenedStartX };
                     }
                   }
 
-                  // Recursively check parent's position
-                  const parentResult = calculateFlattenedPosition(parentId);
-
-                  if (parentResult.foundFlattened) {
-                    // Parent chain has a flattened ancestor, calculate relative offset
-                    const parentTask = tasks.find(t => t.id === parentId);
-                    if (parentTask) {
-                      // Position relative to parent's flattened position
-                      const siblingOffset = 20; // Offset between siblings
-                      const currentTaskIndex = tasks.findIndex(t => t.id === taskId);
-                      const parentIndex = tasks.findIndex(t => t.id === parentId);
-
-                      // Calculate how many siblings come before this task
-                      let siblingsBefore = 0;
-                      for (let i = parentIndex + 1; i < currentTaskIndex; i++) {
-                        const siblingTask = tasks[i];
-                        if (siblingTask.parentId === parentId) {
-                          siblingsBefore++;
-                        }
-                      }
-
-                      return {
-                        baseStartX: parentResult.baseStartX + siblingsBefore * siblingOffset,
-                        foundFlattened: true,
-                      };
-                    }
-                  }
-
-                  return parentResult;
+                  // Recursively check ancestors
+                  return findFlattenedAncestor(parentId);
                 };
 
-                const flattenResult = calculateFlattenedPosition(task.id);
+                const { parentTask, flattenedStartX } = findFlattenedAncestor(task.id);
 
-                if (flattenResult.foundFlattened) {
-                  const barDuration = baseTaskEndX - baseTaskStartX;
-                  adjustedStartX = flattenResult.baseStartX;
-                  adjustedEndX = adjustedStartX + barDuration;
+                if (parentTask) {
+                  // Calculate the relative offset of this task from its flattened parent
+                  const parentStartTime = parentTask.startTime;
+                  const taskRelativeOffset = task.startTime - parentStartTime;
+
+                  // Convert relative offset to pixels
+                  const relativeOffsetX = timeToX(
+                    parentStartTime + taskRelativeOffset,
+                    parentStartTime,
+                    pixelsPerUnit,
+                    timeScale
+                  );
+
+                  // Position relative to flattened parent with original relative timing
+                  adjustedStartX = flattenedStartX + relativeOffsetX;
+
+                  // Keep original duration (size unchanged)
+                  const originalDuration = baseTaskEndX - baseTaskStartX;
+                  adjustedEndX = adjustedStartX + originalDuration;
                 }
 
                 return { startX: adjustedStartX, endX: adjustedEndX };
@@ -1168,7 +1156,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               } else if (isMethod) {
                 gradientId = 'completedGradient';
                 taskColor = task.color || COLORS.info;
-              } else if (task.name.includes('🔄')) {
+              } else if (task.name.includes('🔄') || task.progress === 50) {
                 gradientId = 'runningGradient';
                 taskColor = COLORS.warning;
               }
@@ -1314,7 +1302,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                         dominantBaseline="central"
                         fontWeight="400"
                       >
-                        ⏱️ {duration.toFixed(3)}s
+                        ⏱️ {duration.toFixed(3)}s {task.progress === 50 ? '🔄' : ''}
                       </text>
                     )}
                   </g>
@@ -1381,7 +1369,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     />
 
                     {/* Running task indicator */}
-                    {task.name.includes('🔄') && (
+                    {(task.name.includes('🔄') || task.progress === 50) && (
                       <rect
                         x={taskStartX + 2}
                         y={y + barPadding + 2}

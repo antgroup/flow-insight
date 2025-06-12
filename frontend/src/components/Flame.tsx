@@ -269,12 +269,16 @@ const colorMapper = (d: PartitionHierarchyNode, colorMode = 'warm') => {
 
 // Convert FlameTreeNode to FlameNode format for d3 hierarchy
 const convertFlameTreeToFlameNode = (treeNode: FlameTreeNode): FlameNode => {
-  const duration = (treeNode.endTime - treeNode.startTime) / 1000; // Convert to seconds
+  // Convert times from milliseconds to seconds
+  const startTimeSeconds = treeNode.startTime / 1000;
+  const endTimeSeconds = treeNode.endTime <= 0 ? Date.now() / 1000 : treeNode.endTime / 1000; // Handle running tasks
+  const duration = endTimeSeconds - startTimeSeconds;
+  const isRunning = treeNode.endTime <= 0;
 
   return {
     name: treeNode.id,
     customValue: Math.max(duration, 0.001),
-    startTime: treeNode.startTime,
+    startTime: startTimeSeconds,
     originalValue: duration,
     count: 1,
     children: treeNode.children?.map(convertFlameTreeToFlameNode),
@@ -282,6 +286,7 @@ const convertFlameTreeToFlameNode = (treeNode: FlameTreeNode): FlameNode => {
     fade: false,
     highlight: false,
     dimmed: false,
+    isRunning: isRunning,
   };
 };
 

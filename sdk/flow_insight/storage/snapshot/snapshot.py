@@ -139,7 +139,7 @@ class SnapshotStorage:
             self._storage["flame_tree"][flow_id] = {
                 "span_id": parent_span_id,
                 "id": source_id,
-                "start_time": 0,
+                "start_time": start_time,
                 "children": [],
             }
         find_and_set_node(self._storage["flame_tree"][flow_id])
