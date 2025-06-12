@@ -122,6 +122,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
     const [hoveredTask, setHoveredTask] = useState<{ id: string; index: number } | null>(null);
     const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
     const [flattenedGroups, setFlattenedGroups] = useState<Set<string>>(new Set());
+    const [savedCollapsedState, setSavedCollapsedState] = useState<Set<string> | null>(null);
+    const [savedFlattenedState, setSavedFlattenedState] = useState<Set<string> | null>(null);
 
     // Chart dimensions
     const chartHeight = 500;
@@ -694,6 +696,60 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         saveFlattenedState(dataKey, flattenedGroups);
       }
     }, [flattenedGroups, flameData, tasks]);
+
+    // Handle search-triggered unfolding of all levels and flattening first levels
+    useEffect(() => {
+      const hasSearchTerm = searchTerm && searchTerm.trim() !== '';
+
+      if (hasSearchTerm) {
+        // Save current collapsed state before clearing it
+        if (savedCollapsedState === null) {
+          setSavedCollapsedState(new Set(collapsedNodes));
+          setCollapsedNodes(new Set()); // Clear all collapsed nodes to show all levels
+          console.log('Search triggered: expanding all levels');
+        }
+
+        // Save current flattened state and flatten first-level groups
+        if (savedFlattenedState === null && tasks.length > 0) {
+          setSavedFlattenedState(new Set(flattenedGroups));
+
+          // Find all level 1 tasks that have children and flatten them
+          const firstLevelGroupsToFlatten = new Set(flattenedGroups);
+          tasks.forEach(task => {
+            if (task.level === 1) {
+              const hasChildren = tasks.some(t => t.parentId === task.id);
+              if (hasChildren) {
+                firstLevelGroupsToFlatten.add(task.id);
+              }
+            }
+          });
+
+          setFlattenedGroups(firstLevelGroupsToFlatten);
+          console.log('Search triggered: flattening first-level groups');
+        }
+      } else {
+        // Restore saved collapsed state when search is cleared
+        if (savedCollapsedState !== null) {
+          setCollapsedNodes(new Set(savedCollapsedState));
+          setSavedCollapsedState(null);
+          console.log('Search cleared: restoring previous collapsed state');
+        }
+
+        // Restore saved flattened state when search is cleared
+        if (savedFlattenedState !== null) {
+          setFlattenedGroups(new Set(savedFlattenedState));
+          setSavedFlattenedState(null);
+          console.log('Search cleared: restoring previous flattened state');
+        }
+      }
+    }, [
+      searchTerm,
+      savedCollapsedState,
+      savedFlattenedState,
+      collapsedNodes,
+      flattenedGroups,
+      tasks,
+    ]);
 
     // Filter tasks based on search term
     const visibleTasks = getVisibleTasks();
