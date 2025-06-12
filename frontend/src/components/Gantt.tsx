@@ -123,6 +123,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
     const svgRef = useRef<SVGSVGElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [tasks, setTasks] = useState<CustomTask[]>([]);
+    const [filteredTasks, setFilteredTasks] = useState<CustomTask[]>([]); // Add filtered tasks state
     const [timeScale, setTimeScale] = useState<TimeScale>('seconds');
     const [zoomLevel, setZoomLevel] = useState(1);
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
@@ -141,6 +142,30 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
     const labelWidth = 320;
     const timelineHeight = 50;
     const indentWidth = 20;
+
+    // Validate all dimension constants
+    const dimensionConstants = {
+      chartHeight,
+      rowHeight,
+      serviceRowHeight,
+      methodRowHeight,
+      labelWidth,
+      timelineHeight,
+      indentWidth,
+    };
+    console.log('Dimension constants:', dimensionConstants);
+
+    // Check for any invalid constants
+    for (const [key, value] of Object.entries(dimensionConstants)) {
+      if (!isFinite(value) || value <= 0) {
+        console.error(`Invalid dimension constant: ${key} = ${value}`);
+        return (
+          <div style={{ padding: '20px', color: 'red' }}>
+            Error: Invalid dimension constant {key}: {value}
+          </div>
+        );
+      }
+    }
 
     // Transform flameData to hierarchical tree tasks using the tree structure directly
     const transformFlameDataToTreeTasks = (data: FlameGraphData): CustomTask[] => {
@@ -314,15 +339,222 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       return flatTasks;
     };
 
-    // Get visible tasks based on collapsed nodes in call tree hierarchy
-    const getVisibleTasks = (): CustomTask[] => {
-      const visibleTasks: CustomTask[] = [];
+    // Apply search filter to tasks - this becomes the base filtered data for all operations
+    const applySearchFilter = (allTasks: CustomTask[], searchTerm?: string): CustomTask[] => {
+      if (!searchTerm || searchTerm.trim() === '') {
+        return allTasks;
+      }
 
-      // Build a map of parent-child relationships from the task list
+      const trimmedSearch = searchTerm.trim();
+
+      // Try to create a regex pattern
+      let searchRegex: RegExp | null = null;
+      let useRegex = false;
+
+      try {
+        // Check if the search term looks like a regex (contains regex special chars)
+        const regexChars = /[.*+?^${}()|[\]\\]/;
+        if (regexChars.test(trimmedSearch)) {
+          // Try to compile as regex with case-sensitive matching
+          searchRegex = new RegExp(trimmedSearch);
+          useRegex = true;
+          console.log('Using regex search:', trimmedSearch);
+        }
+      } catch (error) {
+        // If regex compilation fails, fall back to string search
+        console.warn('Invalid regex pattern, falling back to string search:', error);
+        useRegex = false;
+      }
+
+      // Filter tasks based on search criteria
+      const matchingTasks = allTasks.filter(task => {
+        if (useRegex && searchRegex) {
+          // Test against both task name and full name
+          return searchRegex.test(task.name) || searchRegex.test(task.fullName);
+        } else {
+          // Fallback to case-insensitive string search
+          const lowerSearch = trimmedSearch.toLowerCase();
+          return (
+            task.name.toLowerCase().includes(lowerSearch) ||
+            task.fullName.toLowerCase().includes(lowerSearch)
+          );
+        }
+      });
+
+      if (matchingTasks.length === 0) {
+        return [];
+      }
+
+      // Build complete parent-child hierarchy maps for easier navigation
+      const taskMap = new Map<string, CustomTask>();
       const childrenMap = new Map<string, CustomTask[]>();
       const parentMap = new Map<string, string | undefined>();
 
-      tasks.forEach(task => {
+      // Build task maps from all tasks
+      allTasks.forEach(task => {
+        taskMap.set(task.id, task);
+        parentMap.set(task.id, task.parentId);
+
+        if (task.parentId) {
+          if (!childrenMap.has(task.parentId)) {
+            childrenMap.set(task.parentId, []);
+          }
+          childrenMap.get(task.parentId)!.push(task);
+        }
+      });
+
+      // Result set to maintain inclusion
+      const resultTasks = new Set<CustomTask>();
+
+      // Add task and all its ancestors (parents up to root)
+      const addTaskWithAncestors = (task: CustomTask) => {
+        if (resultTasks.has(task)) return;
+
+        resultTasks.add(task);
+
+        // Add all parents up to root
+        if (task.parentId) {
+          const parent = taskMap.get(task.parentId);
+          if (parent) {
+            addTaskWithAncestors(parent);
+          }
+        }
+      };
+
+      // Add task and all its descendants (children down to leaves)
+      const addTaskWithDescendants = (task: CustomTask) => {
+        if (resultTasks.has(task)) return;
+
+        resultTasks.add(task);
+
+        // Add all children and their descendants
+        const children = childrenMap.get(task.id) || [];
+        children.forEach(child => {
+          addTaskWithDescendants(child);
+        });
+      };
+
+      // For each matching task, include complete lineage
+      matchingTasks.forEach(task => {
+        // Add the matching task and all its ancestors
+        addTaskWithAncestors(task);
+
+        // Add all descendants of the matching task to maintain complete sub-trees
+        addTaskWithDescendants(task);
+      });
+
+      // Convert to array and sort by proper hierarchical order
+      const filteredArray = Array.from(resultTasks);
+
+      // Sort to maintain proper hierarchical order for tree display
+      const sortedTasks: CustomTask[] = [];
+      const visited = new Set<string>();
+
+      // Helper function to add task and its children in hierarchical order
+      const addTaskHierarchically = (task: CustomTask) => {
+        if (visited.has(task.id)) return;
+        visited.add(task.id);
+
+        // Add the task itself
+        sortedTasks.push(task);
+
+        // Find and add all direct children, sorted by start time
+        const directChildren = filteredArray
+          .filter(t => t.parentId === task.id)
+          .sort((a, b) => a.startTime - b.startTime);
+
+        // Recursively add each child and its descendants
+        directChildren.forEach(child => {
+          addTaskHierarchically(child);
+        });
+      };
+
+      // Start with root tasks (no parent), sorted by start time
+      const rootTasks = filteredArray
+        .filter(t => !t.parentId)
+        .sort((a, b) => a.startTime - b.startTime);
+
+      // Build the hierarchical structure
+      rootTasks.forEach(rootTask => {
+        addTaskHierarchically(rootTask);
+      });
+
+      // Add any orphaned tasks that might have been missed
+      filteredArray.forEach(task => {
+        if (!visited.has(task.id)) {
+          sortedTasks.push(task);
+        }
+      });
+
+      const finalSortedArray = sortedTasks;
+
+      // Validate parent relationships within filtered set
+      const filteredTaskIds = new Set(finalSortedArray.map(t => t.id));
+
+      // Ensure all parent references exist within the filtered set
+      const validatedTasks = finalSortedArray.map(task => {
+        if (task.parentId && !filteredTaskIds.has(task.parentId)) {
+          // This should not happen with our new logic, but log if it does
+          console.warn(`Parent ${task.parentId} not found for task ${task.name} in filtered set`);
+        }
+
+        return {
+          ...task,
+          // Keep original parent relationship intact
+          parentId: task.parentId,
+        };
+      });
+
+      console.log(
+        `Filtered tasks: ${validatedTasks.length}/${allTasks.length} (including complete sub-trees)`
+      );
+
+      // Debug parent relationships
+      const orphanedTasks = validatedTasks.filter(
+        t => t.parentId && !filteredTaskIds.has(t.parentId)
+      );
+      if (orphanedTasks.length > 0) {
+        console.warn(
+          'Found orphaned tasks after filtering:',
+          orphanedTasks.map(t => t.name)
+        );
+      }
+
+      // Debug matching vs total
+      const directMatches = validatedTasks.filter(task => {
+        if (useRegex && searchRegex) {
+          return searchRegex.test(task.name) || searchRegex.test(task.fullName);
+        } else {
+          const lowerSearch = trimmedSearch.toLowerCase();
+          return (
+            task.name.toLowerCase().includes(lowerSearch) ||
+            task.fullName.toLowerCase().includes(lowerSearch)
+          );
+        }
+      });
+      console.log(
+        `Direct matches: ${directMatches.length}, Total with sub-trees: ${validatedTasks.length}`
+      );
+
+      return validatedTasks;
+    };
+
+    // Update filtered tasks whenever tasks or search term changes
+    useEffect(() => {
+      const newFilteredTasks = applySearchFilter(tasks, searchTerm);
+      setFilteredTasks(newFilteredTasks);
+      console.log(`Filtered tasks: ${newFilteredTasks.length}/${tasks.length}`);
+    }, [tasks, searchTerm]);
+
+    // Get visible tasks based on collapsed nodes in call tree hierarchy - now works with filtered tasks
+    const getVisibleTasks = (): CustomTask[] => {
+      const visibleTasks: CustomTask[] = [];
+
+      // Build a map of parent-child relationships from the filtered task list
+      const childrenMap = new Map<string, CustomTask[]>();
+      const parentMap = new Map<string, string | undefined>();
+
+      filteredTasks.forEach(task => {
         if (task.parentId) {
           parentMap.set(task.id, task.parentId);
           if (!childrenMap.has(task.parentId)) {
@@ -358,7 +590,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       };
 
       // Add tasks that should be visible
-      tasks.forEach(task => {
+      filteredTasks.forEach(task => {
         // Always show root-level tasks (level 0 and tasks without parents)
         if (task.level === 0 || !task.parentId) {
           visibleTasks.push({
@@ -390,10 +622,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         }
       });
 
-      // Safety check: If no tasks are visible but we have tasks, show at least the first-level tasks
-      if (visibleTasks.length === 0 && tasks.length > 0) {
+      // Safety check: If no tasks are visible but we have filtered tasks, show at least the first-level tasks
+      if (visibleTasks.length === 0 && filteredTasks.length > 0) {
         console.warn('No visible tasks detected, falling back to showing level 0 and 1 tasks');
-        tasks.forEach(task => {
+        filteredTasks.forEach(task => {
           if (task.level <= 1) {
             visibleTasks.push({
               ...task,
@@ -403,7 +635,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         });
       }
 
-      console.log(`Visible tasks: ${visibleTasks.length}/${tasks.length}`);
+      console.log(`Visible tasks: ${visibleTasks.length}/${filteredTasks.length}`);
       return visibleTasks;
     };
 
@@ -413,33 +645,64 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         return { minTime: 0, maxTime: 1000, pixelsPerUnit: 1, unitLabel: 'ms' };
       }
 
-      const minTime = Math.min(...tasks.map(t => t.startTime));
-      const maxTime = Math.max(...tasks.map(t => t.endTime));
+      // Filter out tasks with invalid timing data to prevent infinity issues
+      const validTasks = tasks.filter(
+        t =>
+          isFinite(t.startTime) &&
+          isFinite(t.endTime) &&
+          t.startTime >= 0 &&
+          t.endTime >= 0 &&
+          t.endTime >= t.startTime
+      );
+
+      if (validTasks.length === 0) {
+        console.warn('No valid tasks with proper timing data found');
+        return { minTime: 0, maxTime: 1000, pixelsPerUnit: 1, unitLabel: 'ms' };
+      }
+
+      const minTime = Math.min(...validTasks.map(t => t.startTime));
+      const maxTime = Math.max(...validTasks.map(t => t.endTime));
+
+      // Additional safety checks
+      if (!isFinite(minTime) || !isFinite(maxTime) || minTime < 0 || maxTime < 0) {
+        console.warn('Invalid time range calculated:', { minTime, maxTime });
+        return { minTime: 0, maxTime: 1000, pixelsPerUnit: 1, unitLabel: 'ms' };
+      }
+
       const totalDuration = maxTime - minTime;
+
+      // Ensure minimum duration to prevent division by zero
+      const safeDuration = Math.max(totalDuration, 0.001); // Minimum 1ms duration
 
       let pixelsPerUnit: number;
       let unitLabel: string;
 
       switch (scale) {
         case 'milliseconds':
-          pixelsPerUnit = Math.max(0.5, 1200 / totalDuration) * zoomLevel;
+          pixelsPerUnit = Math.max(0.5, 1200 / safeDuration) * zoomLevel;
           unitLabel = 'ms';
           break;
         case 'seconds':
-          pixelsPerUnit = Math.max(80, 1200 / (totalDuration / 1000)) * zoomLevel;
+          pixelsPerUnit = Math.max(80, 1200 / (safeDuration / 1000)) * zoomLevel;
           unitLabel = 's';
           break;
         case 'minutes':
-          pixelsPerUnit = Math.max(50, 1200 / (totalDuration / 60000)) * zoomLevel;
+          pixelsPerUnit = Math.max(50, 1200 / (safeDuration / 60000)) * zoomLevel;
           unitLabel = 'min';
           break;
         case 'hours':
-          pixelsPerUnit = Math.max(30, 1200 / (totalDuration / 3600000)) * zoomLevel;
+          pixelsPerUnit = Math.max(30, 1200 / (safeDuration / 3600000)) * zoomLevel;
           unitLabel = 'h';
           break;
         default:
           pixelsPerUnit = 1;
           unitLabel = 'ms';
+      }
+
+      // Final safety check on pixelsPerUnit
+      if (!isFinite(pixelsPerUnit) || pixelsPerUnit <= 0) {
+        console.warn('Invalid pixelsPerUnit calculated:', pixelsPerUnit);
+        pixelsPerUnit = 1;
       }
 
       return { minTime, maxTime, pixelsPerUnit, unitLabel };
@@ -486,7 +749,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       }
     };
 
-    // Handle task click
+    // Handle task click - now works with filtered tasks
     const handleTaskClick = (task: CustomTask) => {
       // Handle collapse/expand for method nodes (functions)
       if (task.type === 'method') {
@@ -571,13 +834,13 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       }
     };
 
-    // Handle level expansion controls
+    // Handle level expansion controls - now works with filtered tasks
     const expandOneLevel = () => {
       const newCollapsed = new Set(collapsedNodes);
 
-      // Find the deepest level that has collapsed nodes
+      // Find the deepest level that has collapsed nodes in filtered tasks
       const collapsedLevels = new Map<number, string[]>();
-      tasks.forEach(task => {
+      filteredTasks.forEach(task => {
         if (newCollapsed.has(task.id)) {
           if (!collapsedLevels.has(task.level)) {
             collapsedLevels.set(task.level, []);
@@ -614,22 +877,21 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
     const collapseOneLevel = () => {
       const newCollapsed = new Set(collapsedNodes);
 
-      // Find the deepest visible level that has expandable nodes (nodes with children)
+      // Find the deepest visible level that has expandable nodes (nodes with children) in filtered tasks
       const expandableByLevel = new Map<number, string[]>();
 
       // Get currently visible tasks to determine what levels are shown
-      // Use filtered tasks instead of visibleTasks to respect search state
-      const currentlyVisible = filteredTasks.length > 0 ? filteredTasks : getVisibleTasks();
+      const currentlyVisible = getVisibleTasks();
       const maxVisibleLevel = Math.max(0, ...currentlyVisible.map(t => t.level));
 
       // When searching, find the minimum level of search results to prevent over-collapsing
       const hasSearchTerm = searchTerm && searchTerm.trim() !== '';
       const minSearchLevel = hasSearchTerm ? Math.min(...currentlyVisible.map(t => t.level)) : 0;
 
-      // Find tasks at the deepest visible level that have children and are not collapsed
-      tasks.forEach(task => {
+      // Find tasks at the deepest visible level that have children and are not collapsed in filtered tasks
+      filteredTasks.forEach(task => {
         if (task.level <= maxVisibleLevel && !newCollapsed.has(task.id)) {
-          const hasChildren = tasks.some(t => t.parentId === task.id);
+          const hasChildren = filteredTasks.some(t => t.parentId === task.id);
           if (hasChildren) {
             // During search, don't collapse tasks at or below the minimum search result level
             if (hasSearchTerm && task.level <= minSearchLevel) {
@@ -655,7 +917,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
         // Check if collapsing these tasks would leave no visible tasks
         const testCollapsed = new Set([...newCollapsed, ...tasksToCollapse]);
-        const testVisible = tasks.filter(task => {
+        const testVisible = filteredTasks.filter(task => {
           // Root level tasks should always be visible
           if (task.level === 0 || !task.parentId || task.type === 'main') {
             return true;
@@ -668,7 +930,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               return false;
             }
             const parentId: string | undefined = currentTask.parentId;
-            currentTask = tasks.find(t => t.id === parentId);
+            currentTask = filteredTasks.find(t => t.id === parentId);
             if (!currentTask) break;
           }
           return true;
@@ -712,7 +974,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       }
     };
 
-    // Handle flatten/unflatten group
+    // Handle flatten/unflatten group - now works with filtered tasks
     const handleFlattenGroup = (task: CustomTask, event: React.MouseEvent) => {
       event.stopPropagation(); // Prevent triggering the main task click
 
@@ -773,7 +1035,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       }
     };
 
-    // Load flattened state from localStorage
+    // Load flattened state from localStorage - now works with filtered tasks
     const loadFlattenedState = (dataKey: string): Set<string> => {
       try {
         const stored = localStorage.getItem(`${dataKey}-flattened`);
@@ -789,13 +1051,13 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               // New format - match by fullName if ID doesn't exist
               const flattenedIds = new Set<string>();
               parsed.forEach(({ id, fullName }) => {
-                // First try to find by ID
-                const taskById = tasks.find(t => t.id === id);
+                // First try to find by ID in filtered tasks
+                const taskById = filteredTasks.find(t => t.id === id);
                 if (taskById) {
                   flattenedIds.add(id);
                 } else {
-                  // If ID doesn't exist, try to find by fullName
-                  const taskByName = tasks.find(t => t.fullName === fullName);
+                  // If ID doesn't exist, try to find by fullName in filtered tasks
+                  const taskByName = filteredTasks.find(t => t.fullName === fullName);
                   if (taskByName) {
                     flattenedIds.add(taskByName.id);
                   }
@@ -811,12 +1073,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       return new Set();
     };
 
-    // Save flattened state to localStorage
+    // Save flattened state to localStorage - now works with filtered tasks
     const saveFlattenedState = (dataKey: string, flattened: Set<string>) => {
       try {
         // Save both IDs and fullNames for better persistence across refreshes
         const flattenedData = Array.from(flattened).map(taskId => {
-          const task = tasks.find(t => t.id === taskId);
+          const task = filteredTasks.find(t => t.id === taskId);
           return {
             id: taskId,
             fullName: task?.fullName || taskId,
@@ -911,13 +1173,13 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       }
     }, [collapsedNodes, flameData, tasks]);
 
-    // Save flattened state whenever it changes
+    // Save flattened state whenever it changes - now works with filtered tasks
     useEffect(() => {
-      if (flameData && tasks.length > 0) {
+      if (flameData && filteredTasks.length > 0) {
         const dataKey = getDataKey(flameData);
         saveFlattenedState(dataKey, flattenedGroups);
       }
-    }, [flattenedGroups, flameData, tasks]);
+    }, [flattenedGroups, flameData, filteredTasks]);
 
     // Handle search-triggered unfolding of all levels and flattening first levels
     useEffect(() => {
@@ -953,55 +1215,43 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       }
     }, [searchTerm, savedCollapsedState, savedFlattenedState, collapsedNodes, flattenedGroups]);
 
-    // Filter tasks based on search term (with regex support)
+    // Filter tasks based on search term (with regex support) - now use getVisibleTasks result
     const visibleTasks = getVisibleTasks();
-    const filteredTasks = useMemo(() => {
-      if (!searchTerm || searchTerm.trim() === '') {
-        return visibleTasks;
-      }
+    const displayTasks = useMemo(() => {
+      // visibleTasks already contains the filtered and collapsed/expanded tasks
+      return visibleTasks;
+    }, [visibleTasks]);
 
-      const trimmedSearch = searchTerm.trim();
+    // Validate displayTasks before proceeding
+    console.log('Display tasks validation:', {
+      count: displayTasks.length,
+      types: displayTasks.map(t => t.type),
+      levels: displayTasks.map(t => t.level),
+    });
 
-      // Try to create a regex pattern
-      let searchRegex: RegExp | null = null;
-      let useRegex = false;
+    // Check each task for invalid data
+    const invalidTasks = displayTasks.filter(task => {
+      return (
+        !isFinite(task.startTime) ||
+        !isFinite(task.endTime) ||
+        !isFinite(task.level) ||
+        task.startTime < 0 ||
+        task.endTime < 0 ||
+        task.level < 0 ||
+        !task.type ||
+        !task.name
+      );
+    });
 
-      try {
-        // Check if the search term looks like a regex (contains regex special chars)
-        const regexChars = /[.*+?^${}()|[\]\\]/;
-        if (regexChars.test(trimmedSearch)) {
-          // Try to compile as regex with case-sensitive matching
-          searchRegex = new RegExp(trimmedSearch);
-          useRegex = true;
-          console.log('Using regex search:', trimmedSearch);
-        }
-      } catch (error) {
-        // If regex compilation fails, fall back to string search
-        console.warn('Invalid regex pattern, falling back to string search:', error);
-        useRegex = false;
-      }
-
-      // For search, filter from all tasks but mark them as visible
-      const searchMatchingTasks = tasks.filter(task => {
-        if (useRegex && searchRegex) {
-          // Test against both task name and full name
-          return searchRegex.test(task.name) || searchRegex.test(task.fullName);
-        } else {
-          // Fallback to case-insensitive string search
-          const lowerSearch = trimmedSearch.toLowerCase();
-          return (
-            task.name.toLowerCase().includes(lowerSearch) ||
-            task.fullName.toLowerCase().includes(lowerSearch)
-          );
-        }
-      });
-
-      // Return matching tasks with preserved original properties (including flatten state)
-      return searchMatchingTasks.map(task => ({
-        ...task,
-        isCollapsed: collapsedNodes.has(task.id),
-      }));
-    }, [visibleTasks, searchTerm, tasks, collapsedNodes]);
+    if (invalidTasks.length > 0) {
+      console.error('Invalid tasks detected:', invalidTasks);
+      return (
+        <div style={{ padding: '20px', color: 'red' }}>
+          Error: Invalid task data detected. {invalidTasks.length} tasks have invalid properties.
+          <pre>{JSON.stringify(invalidTasks, null, 2)}</pre>
+        </div>
+      );
+    }
 
     // Export SVG functionality
     const exportSvg = () => {
@@ -1038,8 +1288,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
     // Prevent rendering empty chart during data refresh by checking for valid data
     const hasValidData = flameData && flameData.root && tasks.length > 0;
-    const hasVisibleTasks = filteredTasks.length > 0;
-    const allTasksCollapsed = tasks.length > 0 && filteredTasks.length === 0 && !searchTerm;
+    const hasVisibleTasks = displayTasks.length > 0;
+    const allTasksCollapsed = filteredTasks.length > 0 && displayTasks.length === 0 && !searchTerm;
     const shouldShowEmptyState =
       !flameData || (!hasValidData && !hasVisibleTasks && !isDataLoading);
 
@@ -1064,7 +1314,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             <p style={{ margin: 0 }}>
               {!flameData
                 ? 'No flame data provided for Gantt visualization'
-                : filteredTasks.length === 0 && tasks.length > 0
+                : displayTasks.length === 0 && filteredTasks.length > 0
                   ? 'No tasks match the current search criteria'
                   : 'Loading Gantt data...'}
             </p>
@@ -1127,7 +1377,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
     }
 
     // Special case: when search results in no matches but we have valid data
-    if (filteredTasks.length === 0 && tasks.length > 0 && searchTerm) {
+    if (displayTasks.length === 0 && tasks.length > 0 && searchTerm) {
       return (
         <div
           style={{
@@ -1155,24 +1405,79 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
     }
 
     const { minTime, maxTime, pixelsPerUnit, unitLabel } = getTimeScaleInfo(
-      filteredTasks,
+      displayTasks,
       timeScale
     );
 
+    // Comprehensive validation of time scale info
+    console.log('Time scale info:', { minTime, maxTime, pixelsPerUnit, unitLabel });
+    if (!isFinite(minTime) || !isFinite(maxTime) || !isFinite(pixelsPerUnit)) {
+      console.error('Invalid time scale values detected:', { minTime, maxTime, pixelsPerUnit });
+      return (
+        <div style={{ padding: '20px', color: 'red' }}>
+          Error: Invalid time scale calculated. minTime: {minTime}, maxTime: {maxTime},
+          pixelsPerUnit: {pixelsPerUnit}
+        </div>
+      );
+    }
+
     // Extend timeline beyond execution flow for better visualization
     const executionWidth = timeToX(maxTime, minTime, pixelsPerUnit, timeScale);
-    const timelinePadding = executionWidth * 0.2; // 20% padding on each side
-    const chartWidth = Math.max(1200, labelWidth + executionWidth + timelinePadding + 200);
+    console.log('Execution width calculated:', executionWidth);
+
+    const timelinePadding = isFinite(executionWidth) ? executionWidth * 0.2 : 240; // 20% padding on each side, fallback to 240px
+    const chartWidth = Math.max(
+      1200,
+      labelWidth + (isFinite(executionWidth) ? executionWidth : 800) + timelinePadding + 200
+    );
+
+    // Safety check for chart width
+    if (!isFinite(chartWidth) || chartWidth <= 0) {
+      console.error('Invalid chart width calculated:', chartWidth, {
+        executionWidth,
+        timelinePadding,
+        labelWidth,
+      });
+      return (
+        <div style={{ padding: '20px', color: 'red' }}>
+          Error: Invalid chart dimensions calculated. Chart width: {chartWidth}
+        </div>
+      );
+    }
 
     // Calculate total height with proper spacing for each task type
     let totalHeight = timelineHeight + 60;
-    filteredTasks.forEach(task => {
-      if (task.type === 'method') {
-        totalHeight += methodRowHeight;
-      } else {
-        totalHeight += rowHeight;
-      }
+    console.log('Starting height calculation with base:', totalHeight);
+
+    displayTasks.forEach((task, index) => {
+      const heightToAdd = task.type === 'method' ? methodRowHeight : rowHeight;
+      console.log(`Task ${index} (${task.name}): adding ${heightToAdd}px (type: ${task.type})`);
+      totalHeight += heightToAdd;
     });
+
+    console.log('Final calculated height:', totalHeight);
+
+    // Safety check for total height
+    if (!isFinite(totalHeight) || totalHeight <= 0) {
+      console.error('Invalid total height calculated:', totalHeight, {
+        timelineHeight,
+        displayTasksLength: displayTasks.length,
+        methodRowHeight,
+        rowHeight,
+      });
+      totalHeight = Math.max(300, timelineHeight + 60); // Minimum safe height
+      console.log('Using fallback height:', totalHeight);
+    }
+
+    // Additional safety check before rendering
+    if (!isFinite(totalHeight) || totalHeight <= 0 || !isFinite(chartWidth) || chartWidth <= 0) {
+      console.error('Final safety check failed:', { totalHeight, chartWidth });
+      return (
+        <div style={{ padding: '20px', color: 'red' }}>
+          Error: Invalid SVG dimensions. Height: {totalHeight}, Width: {chartWidth}
+        </div>
+      );
+    }
 
     // Generate timeline ticks for relative time display
     const generateTimelineTicks = () => {
@@ -1268,8 +1573,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           >
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <span style={{ fontSize: '14px', color: COLORS.textLight, fontWeight: '500' }}>
-                {filteredTasks.length} visible • {tasks.filter(t => t.type === 'method').length}{' '}
-                functions
+                {displayTasks.length} visible •{' '}
+                {filteredTasks.filter(t => t.type === 'method').length} functions
               </span>
             </div>
           </div>
@@ -1611,11 +1916,11 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             </g>
 
             {/* Enhanced Task Rows with Tree Structure */}
-            {filteredTasks.map((task, index) => {
+            {displayTasks.map((task, index) => {
               // Calculate y position with proper spacing for different row heights
               let y = timelineHeight + 20;
               for (let i = 0; i < index; i++) {
-                const prevTask = filteredTasks[i];
+                const prevTask = displayTasks[i];
                 if (prevTask.type === 'method') {
                   y += methodRowHeight;
                 } else {
@@ -1628,16 +1933,16 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               const baseTaskEndX =
                 labelWidth + timeToX(task.endTime, minTime, pixelsPerUnit, timeScale);
 
-              // Apply flattening to bar positions
+              // Apply flattening to bar positions - now works with filtered tasks
               const getAdjustedBarPosition = (
                 task: CustomTask
               ): { startX: number; endX: number } => {
                 let adjustedStartX = baseTaskStartX;
                 let adjustedEndX = baseTaskEndX;
 
-                // Build parent map for easier lookup
+                // Build parent map for easier lookup using filtered tasks
                 const parentMap = new Map<string, string | undefined>();
-                tasks.forEach(t => {
+                filteredTasks.forEach(t => {
                   if (t.parentId) {
                     parentMap.set(t.id, t.parentId);
                   } else {
@@ -1645,8 +1950,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                   }
                 });
 
-                // Find the main task to get the leftmost position
-                const mainTask = tasks.find(t => t.type === 'main');
+                // Find the main task to get the leftmost position from filtered tasks
+                const mainTask = filteredTasks.find(t => t.type === 'main');
                 const mainTaskStartX = mainTask
                   ? labelWidth + timeToX(mainTask.startTime, minTime, pixelsPerUnit, timeScale)
                   : labelWidth + 10;
@@ -1655,11 +1960,20 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 const minSafePosition = labelWidth + 10; // Ensure 10px padding from label area
                 const flattenedPosition = Math.max(minSafePosition, mainTaskStartX);
 
-                // During search, align level 1 tasks to the left (but don't mark as flattened)
+                // During search, align top level of search results to the left (but don't mark as flattened)
                 const hasSearchTerm = searchTerm && searchTerm.trim() !== '';
-                if (hasSearchTerm && task.level === 1) {
-                  const originalDuration = baseTaskEndX - baseTaskStartX;
-                  return { startX: flattenedPosition, endX: flattenedPosition + originalDuration };
+                if (hasSearchTerm) {
+                  // Find the minimum level among filtered search results
+                  const minSearchLevel =
+                    displayTasks.length > 0 ? Math.min(...displayTasks.map(t => t.level)) : 0;
+
+                  if (task.level === minSearchLevel) {
+                    const originalDuration = baseTaskEndX - baseTaskStartX;
+                    return {
+                      startX: flattenedPosition,
+                      endX: flattenedPosition + originalDuration,
+                    };
+                  }
                 }
 
                 // Check if this task itself is flattened
@@ -1668,17 +1982,17 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                   return { startX: flattenedPosition, endX: flattenedPosition + originalDuration };
                 }
 
-                // Calculate flattened position for any task
+                // Calculate flattened position for any task using filtered tasks
                 const calculateFlattenedPosition = (
                   taskId: string
                 ): { newStartX: number; found: boolean; isDirectChild: boolean } => {
-                  const currentTask = tasks.find(t => t.id === taskId);
+                  const currentTask = filteredTasks.find(t => t.id === taskId);
                   if (!currentTask) return { newStartX: 0, found: false, isDirectChild: false };
 
                   const parentId = parentMap.get(taskId);
                   if (!parentId) return { newStartX: 0, found: false, isDirectChild: false };
 
-                  const parentTask = tasks.find(t => t.id === parentId);
+                  const parentTask = filteredTasks.find(t => t.id === parentId);
                   if (!parentTask) return { newStartX: 0, found: false, isDirectChild: false };
 
                   // If direct parent is flattened
@@ -1775,9 +2089,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
                   {/* Task Label with Tree Structure */}
                   <g>
-                    {/* Tree expand/collapse icon - only show if task has children */}
+                    {/* Tree expand/collapse icon - only show if task has children in filtered tasks */}
                     {(() => {
-                      const hasChildren = tasks.some(t => t.parentId === task.id);
+                      const hasChildren = filteredTasks.some(t => t.parentId === task.id);
                       return hasChildren && isCollapsible ? (
                         <text
                           x={indent + 15}
@@ -1794,10 +2108,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       ) : null;
                     })()}
 
-                    {/* Flatten group icon - only show for tasks that have children (except main task) */}
+                    {/* Flatten group icon - only show for tasks that have children in filtered tasks (except main task) */}
                     {(() => {
-                      // Check if this task has children by looking for tasks with this task as parent
-                      const hasChildren = tasks.some(t => t.parentId === task.id);
+                      // Check if this task has children by looking for tasks with this task as parent in filtered tasks
+                      const hasChildren = filteredTasks.some(t => t.parentId === task.id);
 
                       // Only show flatten icon for tasks that actually have children, and exclude main tasks
                       if (hasChildren && !isMain) {
@@ -1865,7 +2179,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       x={
                         indent +
                         (() => {
-                          const hasChildren = tasks.some(t => t.parentId === task.id);
+                          const hasChildren = filteredTasks.some(t => t.parentId === task.id);
                           // Space calculation:
                           // - 55px if task has expand button (hasChildren && isCollapsible)
                           // - 35px if task has flatten button only (hasChildren but not collapsible, or main/method without children)
@@ -1885,12 +2199,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       style={{
                         userSelect: 'none',
                         cursor: (() => {
-                          const hasChildren = tasks.some(t => t.parentId === task.id);
+                          const hasChildren = filteredTasks.some(t => t.parentId === task.id);
                           return hasChildren && isCollapsible ? 'pointer' : 'default';
                         })(),
                       }}
                       onClick={() => {
-                        const hasChildren = tasks.some(t => t.parentId === task.id);
+                        const hasChildren = filteredTasks.some(t => t.parentId === task.id);
                         if (hasChildren && isCollapsible) handleTaskClick(task);
                       }}
                     >
@@ -1909,7 +2223,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                         x={
                           indent +
                           (() => {
-                            const hasChildren = tasks.some(t => t.parentId === task.id);
+                            const hasChildren = filteredTasks.some(t => t.parentId === task.id);
                             if (hasChildren && isCollapsible) return 55;
                             if (hasChildren && !isMain) return 35;
                             if (isMain || isMethod) return 35;
@@ -1933,7 +2247,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                         x={
                           indent +
                           (() => {
-                            const hasChildren = tasks.some(t => t.parentId === task.id);
+                            const hasChildren = filteredTasks.some(t => t.parentId === task.id);
                             if (hasChildren && isCollapsible) return 55;
                             if (hasChildren && !isMain) return 35;
                             if (isMain || isMethod) return 35;
@@ -2052,7 +2366,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         {hoveredTask &&
           tooltipPosition &&
           (() => {
-            const task = filteredTasks.find(t => t.id === hoveredTask.id);
+            const task = displayTasks.find(t => t.id === hoveredTask.id);
             if (!task) return null;
 
             const duration = task.endTime - task.startTime; // Already in seconds
