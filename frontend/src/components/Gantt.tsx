@@ -143,30 +143,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
     const timelineHeight = 50;
     const indentWidth = 20;
 
-    // Validate all dimension constants
-    const dimensionConstants = {
-      chartHeight,
-      rowHeight,
-      serviceRowHeight,
-      methodRowHeight,
-      labelWidth,
-      timelineHeight,
-      indentWidth,
-    };
-    console.log('Dimension constants:', dimensionConstants);
-
-    // Check for any invalid constants
-    for (const [key, value] of Object.entries(dimensionConstants)) {
-      if (!isFinite(value) || value <= 0) {
-        console.error(`Invalid dimension constant: ${key} = ${value}`);
-        return (
-          <div style={{ padding: '20px', color: 'red' }}>
-            Error: Invalid dimension constant {key}: {value}
-          </div>
-        );
-      }
-    }
-
     // Transform flameData to hierarchical tree tasks using the tree structure directly
     const transformFlameDataToTreeTasks = (data: FlameGraphData): CustomTask[] => {
       if (!data || !data.root) {
@@ -1222,37 +1198,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       return visibleTasks;
     }, [visibleTasks]);
 
-    // Validate displayTasks before proceeding
-    console.log('Display tasks validation:', {
-      count: displayTasks.length,
-      types: displayTasks.map(t => t.type),
-      levels: displayTasks.map(t => t.level),
-    });
-
-    // Check each task for invalid data
-    const invalidTasks = displayTasks.filter(task => {
-      return (
-        !isFinite(task.startTime) ||
-        !isFinite(task.endTime) ||
-        !isFinite(task.level) ||
-        task.startTime < 0 ||
-        task.endTime < 0 ||
-        task.level < 0 ||
-        !task.type ||
-        !task.name
-      );
-    });
-
-    if (invalidTasks.length > 0) {
-      console.error('Invalid tasks detected:', invalidTasks);
-      return (
-        <div style={{ padding: '20px', color: 'red' }}>
-          Error: Invalid task data detected. {invalidTasks.length} tasks have invalid properties.
-          <pre>{JSON.stringify(invalidTasks, null, 2)}</pre>
-        </div>
-      );
-    }
-
     // Export SVG functionality
     const exportSvg = () => {
       if (!svgRef.current) {
@@ -1409,22 +1354,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       timeScale
     );
 
-    // Comprehensive validation of time scale info
-    console.log('Time scale info:', { minTime, maxTime, pixelsPerUnit, unitLabel });
-    if (!isFinite(minTime) || !isFinite(maxTime) || !isFinite(pixelsPerUnit)) {
-      console.error('Invalid time scale values detected:', { minTime, maxTime, pixelsPerUnit });
-      return (
-        <div style={{ padding: '20px', color: 'red' }}>
-          Error: Invalid time scale calculated. minTime: {minTime}, maxTime: {maxTime},
-          pixelsPerUnit: {pixelsPerUnit}
-        </div>
-      );
-    }
-
     // Extend timeline beyond execution flow for better visualization
     const executionWidth = timeToX(maxTime, minTime, pixelsPerUnit, timeScale);
-    console.log('Execution width calculated:', executionWidth);
-
     const timelinePadding = isFinite(executionWidth) ? executionWidth * 0.2 : 240; // 20% padding on each side, fallback to 240px
     const chartWidth = Math.max(
       1200,
@@ -1433,11 +1364,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
     // Safety check for chart width
     if (!isFinite(chartWidth) || chartWidth <= 0) {
-      console.error('Invalid chart width calculated:', chartWidth, {
-        executionWidth,
-        timelinePadding,
-        labelWidth,
-      });
+      console.warn('Invalid chart width calculated:', chartWidth);
+      const safeChartWidth = Math.max(1200, labelWidth + 800 + 240 + 200);
       return (
         <div style={{ padding: '20px', color: 'red' }}>
           Error: Invalid chart dimensions calculated. Chart width: {chartWidth}
@@ -1447,36 +1375,18 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
     // Calculate total height with proper spacing for each task type
     let totalHeight = timelineHeight + 60;
-    console.log('Starting height calculation with base:', totalHeight);
-
-    displayTasks.forEach((task, index) => {
-      const heightToAdd = task.type === 'method' ? methodRowHeight : rowHeight;
-      console.log(`Task ${index} (${task.name}): adding ${heightToAdd}px (type: ${task.type})`);
-      totalHeight += heightToAdd;
+    displayTasks.forEach(task => {
+      if (task.type === 'method') {
+        totalHeight += methodRowHeight;
+      } else {
+        totalHeight += rowHeight;
+      }
     });
-
-    console.log('Final calculated height:', totalHeight);
 
     // Safety check for total height
     if (!isFinite(totalHeight) || totalHeight <= 0) {
-      console.error('Invalid total height calculated:', totalHeight, {
-        timelineHeight,
-        displayTasksLength: displayTasks.length,
-        methodRowHeight,
-        rowHeight,
-      });
+      console.warn('Invalid total height calculated:', totalHeight);
       totalHeight = Math.max(300, timelineHeight + 60); // Minimum safe height
-      console.log('Using fallback height:', totalHeight);
-    }
-
-    // Additional safety check before rendering
-    if (!isFinite(totalHeight) || totalHeight <= 0 || !isFinite(chartWidth) || chartWidth <= 0) {
-      console.error('Final safety check failed:', { totalHeight, chartWidth });
-      return (
-        <div style={{ padding: '20px', color: 'red' }}>
-          Error: Invalid SVG dimensions. Height: {totalHeight}, Width: {chartWidth}
-        </div>
-      );
     }
 
     // Generate timeline ticks for relative time display

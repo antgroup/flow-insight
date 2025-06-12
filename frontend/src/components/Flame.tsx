@@ -521,7 +521,42 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
       };
 
       const allNodes = getAllVisibleNodes(layout);
+
+      // Safety check: if no visible nodes, set minimum height
+      if (allNodes.length === 0) {
+        console.warn('No visible nodes found in flame graph, using minimum height');
+        const totalHeight = cellHeight * 2; // Minimum height
+
+        // Create minimal SVG
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', width.toString());
+        svg.setAttribute('height', totalHeight.toString());
+        svg.setAttribute('class', 'partition d3-flame-graph');
+        svg.style.margin = '0';
+        svg.style.display = 'block';
+        svgRef.current = svg;
+        containerRef.current.appendChild(svg);
+        return;
+      }
+
       const maxDepth = Math.max(...allNodes.map(node => node.depth));
+
+      // Additional safety check for invalid depth values
+      if (!isFinite(maxDepth) || maxDepth < 0) {
+        console.warn('Invalid maxDepth calculated:', maxDepth, 'using default');
+        const totalHeight = cellHeight * 2;
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', width.toString());
+        svg.setAttribute('height', totalHeight.toString());
+        svg.setAttribute('class', 'partition d3-flame-graph');
+        svg.style.margin = '0';
+        svg.style.display = 'block';
+        svgRef.current = svg;
+        containerRef.current.appendChild(svg);
+        return;
+      }
+
       const totalHeight = (maxDepth + 1) * cellHeight;
 
       // Create SVG
