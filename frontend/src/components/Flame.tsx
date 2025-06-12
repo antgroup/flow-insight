@@ -14,26 +14,25 @@ type FlameVisualizationProps = {
   graphData: GraphData;
   physicalViewData?: PhysicalViewData | null;
   colorMode?:
-    | 'warm'
-    | 'cold'
-    | 'red'
-    | 'orange'
-    | 'yellow'
-    | 'green'
-    | 'pastelgreen'
-    | 'blue'
-    | 'aqua'
-    | 'allocation'
-    | 'differential'
-    | 'nodejs';
+  | 'warm'
+  | 'cold'
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'pastelgreen'
+  | 'blue'
+  | 'aqua'
+  | 'allocation'
+  | 'differential'
+  | 'nodejs';
   currentTimestamp?: number;
 };
 
 type FlameNode = {
   name: string;
   customValue: number;
-  startTime?: number;
-  originalValue?: number; // Store original value for display
+  originalValue?: number; // Store original value for display (duration in seconds)
   count?: number;
   children?: FlameNode[];
   hide?: boolean;
@@ -269,19 +268,31 @@ const colorMapper = (d: PartitionHierarchyNode, colorMode = 'warm') => {
 
 // Convert FlameTreeNode to FlameNode format for d3 hierarchy
 const convertFlameTreeToFlameNode = (treeNode: FlameTreeNode): FlameNode => {
-  // Convert times from milliseconds to seconds
-  const startTimeSeconds = treeNode.startTime / 1000;
-  const endTimeSeconds = treeNode.endTime <= 0 ? Date.now() / 1000 : treeNode.endTime / 1000; // Handle running tasks
-  const duration = endTimeSeconds - startTimeSeconds;
-  const isRunning = treeNode.endTime <= 0;
+  // Convert children first
+  const children = treeNode.children?.map(convertFlameTreeToFlameNode);
+
+  let duration: number;
+  let isRunning: boolean;
+
+  // Special handling for main/root node - duration should be sum of children
+  if (treeNode.id === 'root' || treeNode.id === '_main' || treeNode.endTime === -1) {
+    // For main task, duration is the sum of all children durations
+    duration = children ? children.reduce((sum, child) => sum + (child.customValue || 0), 0) : 0.001;
+    isRunning = false; // Main is not considered "running"
+  } else {
+    // For regular tasks, calculate duration from start/end times
+    const startTimeSeconds = treeNode.startTime / 1000;
+    const endTimeSeconds = treeNode.endTime <= 0 ? Date.now() / 1000 : treeNode.endTime / 1000; // Handle running tasks
+    duration = endTimeSeconds - startTimeSeconds;
+    isRunning = treeNode.endTime <= 0;
+  }
 
   return {
     name: treeNode.id,
     customValue: Math.max(duration, 0.001),
-    startTime: startTimeSeconds,
     originalValue: duration,
     count: 1,
-    children: treeNode.children?.map(convertFlameTreeToFlameNode),
+    children: children,
     hide: false,
     fade: false,
     highlight: false,
@@ -831,8 +842,7 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
           g.attr(
             'transform',
             d =>
-              `translate(${d.x0},${
-                inverted ? yScale(d.depth) : (height || totalHeight) - yScale(d.depth) - cellHeight
+              `translate(${d.x0},${inverted ? yScale(d.depth) : (height || totalHeight) - yScale(d.depth) - cellHeight
               })`
           );
 
@@ -845,10 +855,9 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
             .attr(
               'transform',
               d =>
-                `translate(${d.x0},${
-                  inverted
-                    ? yScale(d.depth)
-                    : (height || totalHeight) - yScale(d.depth) - cellHeight
+                `translate(${d.x0},${inverted
+                  ? yScale(d.depth)
+                  : (height || totalHeight) - yScale(d.depth) - cellHeight
                 })`
             );
 
