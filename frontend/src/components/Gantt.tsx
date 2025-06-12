@@ -174,13 +174,16 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             const allStartTimes: number[] = [];
             const allEndTimes: number[] = [];
 
-            // Collect all timing information from the tree
+            // Collect all timing information from the tree, excluding _main node
             const collectTimings = (node: FlameTreeNode): void => {
-                // Convert from milliseconds to seconds
-                allStartTimes.push(node.startTime / 1000);
-                // Handle running tasks (endTime <= 0)
-                const endTime = node.endTime <= 0 ? Date.now() / 1000 : node.endTime / 1000;
-                allEndTimes.push(endTime);
+                // Skip _main node as it's always running and would skew the timing
+                if (node.id !== '_main' && node.id !== 'root') {
+                    // Convert from milliseconds to seconds
+                    allStartTimes.push(node.startTime / 1000);
+                    // Handle running tasks (endTime <= 0)
+                    const endTime = node.endTime <= 0 ? currentTimestamp / 1000 : node.endTime / 1000;
+                    allEndTimes.push(endTime);
+                }
 
                 if (node.children) {
                     node.children.forEach(child => collectTimings(child));
@@ -192,6 +195,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             // Create main task
             if (allStartTimes.length > 0 && allEndTimes.length > 0) {
                 const mainStartTime = Math.min(...allStartTimes);
+                // Use currentTimestamp instead of Date.now() for consistency
                 const mainEndTime = Math.max(...allEndTimes);
 
                 flatTasks.push({
@@ -221,8 +225,34 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 const functionColor = CALLER_COLORS[colorIndex % CALLER_COLORS.length];
 
                 // Calculate timing from node data (convert from milliseconds to seconds)
-                const startTime = node.startTime / 1000;
-                const endTime = node.endTime <= 0 ? Date.now() / 1000 : node.endTime / 1000;
+                let startTime = node.startTime / 1000;
+                let endTime: number;
+
+                // Special handling for main/root nodes - duration should be sum of children
+                if (node.id === 'root' || node.id === '_main' || node.id.includes('main')) {
+                    // For main task, calculate duration based on children span
+                    if (node.children && node.children.length > 0) {
+                        // Calculate span from child nodes directly since convertTreeToTasks returns void
+                        const childStartTimes = node.children.map(child => child.startTime / 1000);
+                        const childEndTimes = node.children.map(child =>
+                            child.endTime <= 0 ? currentTimestamp / 1000 : child.endTime / 1000
+                        );
+
+                        if (childStartTimes.length > 0) {
+                            const earliestStart = Math.min(...childStartTimes);
+                            const latestEnd = Math.max(...childEndTimes);
+                            startTime = earliestStart;
+                            endTime = latestEnd;
+                        } else {
+                            endTime = startTime + 0.001; // Minimal duration if no children
+                        }
+                    } else {
+                        endTime = startTime + 0.001; // Minimal duration if no children  
+                    }
+                } else {
+                    // For regular tasks, use original logic
+                    endTime = node.endTime <= 0 ? currentTimestamp / 1000 : node.endTime / 1000;
+                }
 
                 // Generate unique ID
                 const uniqueId = `${node.id}_${level}_${flatTasks.length}_${startTime}`;
@@ -483,8 +513,26 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 return;
             }
 
-            // Don't handle clicks on main task
-            if (task.type === 'main') return;
+            // Handle main task clicks for inspection (but not collapse since main doesn't collapse)
+            if (task.type === 'main') {
+                const taskName = task.name;
+                const durationSeconds = task.endTime - task.startTime;
+
+                const elementData: any = {
+                    id: task.id,
+                    type: 'function',
+                    name: taskName,
+                    data: {
+                        startTime: new Date(task.startTime),
+                        endTime: new Date(task.endTime),
+                        duration: durationSeconds,
+                        progress: task.progress,
+                    },
+                };
+
+                onElementClick(elementData, true);
+                return;
+            }
         };
 
         // Handle flatten/unflatten group
@@ -1079,50 +1127,59 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                     }
                                 });
 
-                                // Find the flattened ancestor and calculate offset
-                                const findFlattenedAncestor = (
-                                    taskId: string
-                                ): { parentTask: CustomTask | null; flattenedStartX: number } => {
-                                    const parentId = parentMap.get(taskId);
+                                // Find the main task to get the leftmost position
+                                const mainTask = tasks.find(t => t.type === 'main');
+                                const mainTaskStartX = mainTask ?
+                                    labelWidth + timeToX(mainTask.startTime, minTime, pixelsPerUnit, timeScale) :
+                                    labelWidth + 10;
 
-                                    // If no parent, not flattened
-                                    if (!parentId) {
-                                        return { parentTask: null, flattenedStartX: 0 };
-                                    }
+                                // Define the flattened position (leftmost position)
+                                const flattenedPosition = mainTaskStartX;
+
+                                // Check if this task itself is flattened
+                                if (flattenedGroups.has(task.id)) {
+                                    const originalDuration = baseTaskEndX - baseTaskStartX;
+                                    return { startX: flattenedPosition, endX: flattenedPosition + originalDuration };
+                                }
+
+                                // Find if any ancestor is flattened and calculate offset
+                                const findFlattenedAncestorWithOffset = (taskId: string): { offset: number; found: boolean } => {
+                                    const currentTask = tasks.find(t => t.id === taskId);
+                                    if (!currentTask) return { offset: 0, found: false };
+
+                                    const parentId = parentMap.get(taskId);
+                                    if (!parentId) return { offset: 0, found: false };
+
+                                    const parentTask = tasks.find(t => t.id === parentId);
+                                    if (!parentTask) return { offset: 0, found: false };
 
                                     // If direct parent is flattened
                                     if (flattenedGroups.has(parentId)) {
-                                        const parentTask = tasks.find(t => t.id === parentId);
-                                        if (parentTask) {
-                                            const flattenedStartX = labelWidth + 10; // Fixed flattened position
-                                            return { parentTask, flattenedStartX };
-                                        }
+                                        // Calculate parent's original position
+                                        const parentOriginalStartX = labelWidth + timeToX(parentTask.startTime, minTime, pixelsPerUnit, timeScale);
+
+                                        // Calculate parent's offset (how much it moved when flattened)
+                                        const parentOffset = flattenedPosition - parentOriginalStartX;
+
+                                        return { offset: parentOffset, found: true };
                                     }
 
                                     // Recursively check ancestors
-                                    return findFlattenedAncestor(parentId);
+                                    const ancestorResult = findFlattenedAncestorWithOffset(parentId);
+                                    if (ancestorResult.found) {
+                                        // Parent also has an offset from its flattened ancestor
+                                        return { offset: ancestorResult.offset, found: true };
+                                    }
+
+                                    return { offset: 0, found: false };
                                 };
 
-                                const { parentTask, flattenedStartX } = findFlattenedAncestor(task.id);
+                                const { offset, found } = findFlattenedAncestorWithOffset(task.id);
 
-                                if (parentTask) {
-                                    // Calculate the relative offset of this task from its flattened parent
-                                    const parentStartTime = parentTask.startTime;
-                                    const taskRelativeOffset = task.startTime - parentStartTime;
-
-                                    // Convert relative offset to pixels
-                                    const relativeOffsetX = timeToX(
-                                        parentStartTime + taskRelativeOffset,
-                                        parentStartTime,
-                                        pixelsPerUnit,
-                                        timeScale
-                                    );
-
-                                    // Position relative to flattened parent with original relative timing
-                                    adjustedStartX = flattenedStartX + relativeOffsetX;
-
-                                    // Keep original duration (size unchanged)
+                                // Apply the offset if we found a flattened ancestor
+                                if (found) {
                                     const originalDuration = baseTaskEndX - baseTaskStartX;
+                                    adjustedStartX = baseTaskStartX + offset;
                                     adjustedEndX = adjustedStartX + originalDuration;
                                 }
 
@@ -1198,35 +1255,44 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                             </text>
                                         )}
 
-                                        {/* Flatten group icon - only show for method tasks that have children */}
-                                        {isMethod && (
-                                            <g>
-                                                {/* Background circle for flatten icon */}
-                                                <circle
-                                                    cx={indent + (isCollapsible ? 35 : 15)}
-                                                    cy={y + currentRowHeight / 2}
-                                                    r="8"
-                                                    fill={flattenedGroups.has(task.id) ? COLORS.accent : COLORS.background}
-                                                    stroke={COLORS.border}
-                                                    strokeWidth="1"
-                                                    style={{ cursor: 'pointer' }}
-                                                    onClick={e => handleFlattenGroup(task, e)}
-                                                />
-                                                {/* Flatten icon */}
-                                                <text
-                                                    x={indent + (isCollapsible ? 35 : 15)}
-                                                    y={y + currentRowHeight / 2 + 3}
-                                                    fontSize="8"
-                                                    fill={flattenedGroups.has(task.id) ? 'white' : COLORS.text}
-                                                    textAnchor="middle"
-                                                    dominantBaseline="central"
-                                                    style={{ cursor: 'pointer', pointerEvents: 'none' }}
-                                                    fontWeight="bold"
-                                                >
-                                                    {flattenedGroups.has(task.id) ? '⬅' : '⬆'}
-                                                </text>
-                                            </g>
-                                        )}
+                                        {/* Flatten group icon - show for all tasks that have children (fix #2: make all parent tasks clickable) */}
+                                        {(() => {
+                                            // Check if this task has children by looking for tasks with this task as parent
+                                            const hasChildren = tasks.some(t => t.parentId === task.id);
+
+                                            // Show flatten icon for any task that has children, including main tasks
+                                            if (hasChildren || isMethod || isMain) {
+                                                return (
+                                                    <g>
+                                                        {/* Background circle for flatten icon */}
+                                                        <circle
+                                                            cx={indent + (isCollapsible ? 35 : 15)}
+                                                            cy={y + currentRowHeight / 2}
+                                                            r="8"
+                                                            fill={flattenedGroups.has(task.id) ? COLORS.accent : COLORS.background}
+                                                            stroke={COLORS.border}
+                                                            strokeWidth="1"
+                                                            style={{ cursor: 'pointer' }}
+                                                            onClick={e => handleFlattenGroup(task, e)}
+                                                        />
+                                                        {/* Flatten icon */}
+                                                        <text
+                                                            x={indent + (isCollapsible ? 35 : 15)}
+                                                            y={y + currentRowHeight / 2 + 3}
+                                                            fontSize="8"
+                                                            fill={flattenedGroups.has(task.id) ? 'white' : COLORS.text}
+                                                            textAnchor="middle"
+                                                            dominantBaseline="central"
+                                                            style={{ cursor: 'pointer', pointerEvents: 'none' }}
+                                                            fontWeight="bold"
+                                                        >
+                                                            {flattenedGroups.has(task.id) ? '⬅' : '⬆'}
+                                                        </text>
+                                                    </g>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
 
                                         {/* Tree indentation lines */}
                                         {task.level > 0 && (
@@ -1254,7 +1320,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
                                         {/* Task name */}
                                         <text
-                                            x={indent + (isCollapsible ? 55 : isMethod ? 35 : 15)}
+                                            x={indent + (isCollapsible ? 55 : (() => {
+                                                const hasChildren = tasks.some(t => t.parentId === task.id);
+                                                return (hasChildren || isMethod || isMain) ? 35 : 15;
+                                            })())}
                                             y={y + currentRowHeight / 2}
                                             fontSize={isMain ? '14' : isMethod ? '12' : '11'}
                                             fill={isMain ? COLORS.primary : COLORS.text}
@@ -1271,7 +1340,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                                             {flattenedGroups.has(task.id) && (
                                                 <tspan fill={COLORS.accent} fontWeight="bold">
                                                     {' '}
-                                                    [BARS FLATTENED]
+                                                    [FLATTENED]
                                                 </tspan>
                                             )}
                                         </text>
