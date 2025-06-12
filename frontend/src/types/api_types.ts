@@ -49,35 +49,18 @@ export type ATGraphData = {
   dataFlows: ATDataFlow[];
 };
 
-// FlameGraph node type
-export type ATFlameGraphNode = {
-  name: string;
-  serviceName: string;
-  value: number;
-  count: number;
-  totalInParent: {
-    callerNodeId: string;
-    parentSpanId: string;
-    duration: number;
-    count: number;
-    startTime: number;
-  }[];
+// FlameTreeNode type matching backend structure (will be converted to camelCase)
+export type ATFlameTreeNode = {
+  spanId: string;
+  id: string;
+  startTime: number;
+  endTime: number;
+  children: ATFlameTreeNode[];
 };
 
-// Parent start times type
-export type ParentStartTime = {
-  calleeId: string;
-  startTimes: {
-    callerId: string;
-    startTime: number;
-    parentSpanId: string;
-  }[];
-};
-
-// Flame Graph Data type
+// Flame Graph Data type - using tree structure
 export type ATFlameGraphData = {
-  aggregated: ATFlameGraphNode[];
-  parentStartTimes: ParentStartTime[];
+  root: ATFlameTreeNode;
 };
 
 // Service stats type

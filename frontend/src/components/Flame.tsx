@@ -1,7 +1,7 @@
 import * as d3 from 'd3';
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
-import { GraphData, PhysicalViewData, FlameGraphData } from '../types';
+import { GraphData, PhysicalViewData, FlameGraphData, FlameTreeNode } from '../types';
 
 type FlameVisualizationProps = {
   flameData: FlameGraphData;
@@ -14,31 +14,24 @@ type FlameVisualizationProps = {
   graphData: GraphData;
   physicalViewData?: PhysicalViewData | null;
   colorMode?:
-  | 'warm'
-  | 'cold'
-  | 'red'
-  | 'orange'
-  | 'yellow'
-  | 'green'
-  | 'pastelgreen'
-  | 'blue'
-  | 'aqua'
-  | 'allocation'
-  | 'differential'
-  | 'nodejs';
+    | 'warm'
+    | 'cold'
+    | 'red'
+    | 'orange'
+    | 'yellow'
+    | 'green'
+    | 'pastelgreen'
+    | 'blue'
+    | 'aqua'
+    | 'allocation'
+    | 'differential'
+    | 'nodejs';
   currentTimestamp?: number;
 };
 
 type FlameNode = {
   name: string;
   customValue: number;
-  totalInParent?: Array<{
-    callerNodeId: string;
-    duration: number;
-    count: number;
-    startTime: number;
-    parentSpanId: string;
-  }>;
   startTime?: number;
   originalValue?: number; // Store original value for display
   count?: number;
@@ -68,36 +61,6 @@ type PartitionHierarchyNode = d3.HierarchyNode<FlameNode> & {
   originalValue?: number;
   id?: string | number;
   customValue?: number; // Make sure this is defined as a mutable property
-};
-
-// Enhanced type for hierarchy building - export this type for use in other components
-export type HierarchyNode = {
-  name: string;
-  customValue: number;
-  totalInParent?: Array<{
-    callerNodeId: string;
-    duration: number;
-    count: number;
-    startTime: number;
-    parentSpanId: string;
-  }>;
-  startTime?: number;
-  originalValue?: number;
-  count?: number;
-  children?: HierarchyNode[];
-  hide?: boolean;
-  fade?: boolean;
-  highlight?: boolean;
-  dimmed?: boolean;
-  serviceName?: string;
-  value?: number;
-  delta?: number;
-  isRunning?: boolean;
-  extras?: {
-    v8_jit?: boolean;
-    javascript?: boolean;
-    optimized?: number;
-  };
 };
 
 // Generate a hash value between 0 and 1 based on function name
@@ -304,692 +267,22 @@ const colorMapper = (d: PartitionHierarchyNode, colorMode = 'warm') => {
   }
 };
 
-// Export the hierarchy building function for reuse in other components
-export const buildCompleteHierarchy = (
-  data: FlameGraphData,
-  currentTimestamp: number = Date.now()
-): HierarchyNode => {
-  if (!data || !data.aggregated || !Array.isArray(data.aggregated)) {
-    console.warn('Invalid flame graph data format:', data);
-    return { name: '_main', customValue: 0, children: [] };
-  }
+// Convert FlameTreeNode to FlameNode format for d3 hierarchy
+const convertFlameTreeToFlameNode = (treeNode: FlameTreeNode): FlameNode => {
+  const duration = (treeNode.endTime - treeNode.startTime) / 1000; // Convert to seconds
 
-  // Step 1: Calculate original values with proper logic for running processes
-  let maxValue = 0;
-  let minValue = Infinity;
-  const calculatedValues = new Map<string, number>();
-
-  // First pass: calculate all original values including running processes
-  data.aggregated.forEach(node => {
-    let originalValue = node.value || 0;
-
-    // For nodes with original value of 0, try to calculate from startTime if available
-    if (originalValue === 0 && node.totalInParent && node.totalInParent.length > 0) {
-      // Find the earliest startTime across all parents
-      const earliestStartTime = Math.min(
-        ...node.totalInParent.filter(entry => entry.startTime > 0).map(entry => entry.startTime)
-      );
-
-      if (earliestStartTime > 0 && isFinite(earliestStartTime)) {
-        // Ensure both timestamps are in the same units by detecting the ratio
-        let currentTime = currentTimestamp;
-        let startTime = earliestStartTime;
-
-        // If the ratio is around 1000, they're in different units
-        if (Math.abs(currentTime / startTime) > 500 && Math.abs(currentTime / startTime) < 2000) {
-          // Convert the larger one to match the smaller one's unit
-          if (currentTime > startTime) {
-            currentTime = currentTime / 1000; // Convert milliseconds to seconds
-          } else {
-            startTime = startTime / 1000; // Convert milliseconds to seconds
-          }
-        }
-
-        originalValue = Math.max(currentTime - startTime, 0.001);
-      }
-    }
-
-    // Ensure all data points have at least a minimum value for visibility
-    if (originalValue <= 0) {
-      originalValue = 0.001; // Minimum visible value
-    }
-
-    calculatedValues.set(node.name, originalValue);
-
-    if (originalValue > maxValue) {
-      maxValue = originalValue;
-    }
-    if (originalValue < minValue) {
-      minValue = originalValue;
-    }
-  });
-
-  // If no positive values found, set reasonable defaults
-  if (minValue === Infinity || maxValue === 0) {
-    minValue = 0.001;
-    maxValue = 1;
-  }
-
-  // Step 2: Create nodes with calculated values and normalization
-  const nodeMap = new Map<string, HierarchyNode>();
-  const parentRelations = new Map<string, string[]>(); // child -> [parent1@spanId, parent2@spanId, ...]
-  const spanNodes = new Set<string>(); // Track all span-aware parent nodes
-
-  // Initialize all nodes from aggregated data with calculated values
-  data.aggregated.forEach(nodeData => {
-    const originalValue = calculatedValues.get(nodeData.name) || 0.001;
-
-    // Calculate normalized value for sizing
-    let normalizedValue = originalValue;
-    if (maxValue > minValue && maxValue > 0) {
-      if (maxValue / minValue > 100) {
-        const scalingFactor = Math.sqrt(originalValue / maxValue);
-        normalizedValue = scalingFactor * maxValue;
-        if (normalizedValue < maxValue * 0.01) {
-          normalizedValue = maxValue * 0.01;
-        }
-      } else {
-        normalizedValue = originalValue;
-      }
-    }
-    if (normalizedValue <= 0) {
-      normalizedValue = Math.max(maxValue * 0.001, 0.001);
-    }
-
-    const node: HierarchyNode = {
-      name: nodeData.name,
-      customValue: normalizedValue,
-      originalValue: originalValue,
-      count: nodeData.count || 1,
-      startTime: (nodeData as any).startTime,
-      children: [],
-      hide: false,
-      fade: false,
-      highlight: false,
-      dimmed: false,
-      serviceName: nodeData.serviceName,
-      value: nodeData.value,
-      delta: (nodeData as any).delta,
-      totalInParent: nodeData.totalInParent || [],
-      isRunning: false, // This is now a completed task
-      extras: (nodeData as any).extras,
-    };
-
-    nodeMap.set(nodeData.name, node);
-
-    // Build parent relationships from totalInParent with span awareness
-    if (nodeData.totalInParent && nodeData.totalInParent.length > 0) {
-      const parents: string[] = [];
-      nodeData.totalInParent.forEach(({ callerNodeId, parentSpanId }) => {
-        if (callerNodeId) {
-          // Create unique parent key with span ID
-          const parentKey = parentSpanId && parentSpanId !== 'undefined'
-            ? `${callerNodeId}@${parentSpanId}`
-            : callerNodeId;
-
-          // Track this as a span-aware parent node that needs to be created
-          spanNodes.add(parentKey);
-
-          if (!parents.includes(parentKey)) {
-            parents.push(parentKey);
-          }
-        }
-      });
-      if (parents.length > 0) {
-        parentRelations.set(nodeData.name, parents);
-      }
-    }
-  });
-
-  // Create span-aware parent nodes that don't exist in aggregated data
-  spanNodes.forEach(spanKey => {
-    if (!nodeMap.has(spanKey)) {
-      // Extract base name to get original node data
-      const baseName = spanKey.includes('@')
-        ? spanKey.substring(0, spanKey.lastIndexOf('@'))
-        : spanKey;
-
-      const baseNode = nodeMap.get(baseName);
-      if (baseNode) {
-        // Create a span-specific instance of the node with proper value calculation
-        const baseOriginalValue = baseNode.originalValue || 0.001;
-
-        // Calculate normalized value for sizing (same logic as other nodes)
-        let normalizedValue = baseOriginalValue;
-        if (maxValue > minValue && maxValue > 0) {
-          if (maxValue / minValue > 100) {
-            const scalingFactor = Math.sqrt(baseOriginalValue / maxValue);
-            normalizedValue = scalingFactor * maxValue;
-            if (normalizedValue < maxValue * 0.01) {
-              normalizedValue = maxValue * 0.01;
-            }
-          } else {
-            normalizedValue = baseOriginalValue;
-          }
-        }
-        if (normalizedValue <= 0) {
-          normalizedValue = Math.max(maxValue * 0.001, 0.001);
-        }
-
-        const spanNode: HierarchyNode = {
-          ...baseNode,
-          name: spanKey, // Use span-aware name
-          children: [], // Will be populated later
-          customValue: normalizedValue,
-          originalValue: baseOriginalValue,
-        };
-        nodeMap.set(spanKey, spanNode);
-      } else if (baseName === '_main') {
-        // Create main node with span ID
-        const mainSpanNode: HierarchyNode = {
-          name: spanKey,
-          customValue: 0.001,
-          originalValue: 0.001,
-          count: 1,
-          children: [],
-          hide: false,
-          fade: false,
-          highlight: false,
-          dimmed: false,
-          serviceName: '_main',
-        };
-        nodeMap.set(spanKey, mainSpanNode);
-      }
-    }
-  });
-
-  // Add running processes from parentStartTimes
-  data.parentStartTimes.forEach(({ calleeId, startTimes }) => {
-    startTimes.forEach(({ callerId, startTime, parentSpanId }) => {
-      // Check if this task has completed (exists in aggregated data)
-      const completedTask = data.aggregated.find(node => node.name === calleeId);
-
-      if (completedTask) {
-        // Task has completed - use its aggregated data, don't create a running node
-        console.log(`Task ${calleeId} has completed - using aggregated data instead of running`);
-        return;
-      }
-
-      // Create running node only if it doesn't exist and hasn't completed
-      if (!nodeMap.has(calleeId)) {
-        // Calculate running duration with proper timestamp handling
-        let originalValue = 0.001;
-        if (startTime > 0) {
-          // Ensure both timestamps are in the same units by detecting the ratio
-          let currentTime = currentTimestamp;
-          let runningStartTime = startTime;
-
-          // If the ratio is around 1000, they're in different units
-          if (Math.abs(currentTime / runningStartTime) > 500 && Math.abs(currentTime / runningStartTime) < 2000) {
-            // Convert the larger one to match the smaller one's unit
-            if (currentTime > runningStartTime) {
-              currentTime = currentTime / 1000; // Convert milliseconds to seconds
-            } else {
-              runningStartTime = runningStartTime / 1000; // Convert milliseconds to seconds
-            }
-          }
-
-          originalValue = Math.max((currentTime - runningStartTime) / 1000, 0.001); // Convert to seconds
-        }
-
-        // Calculate normalized value for sizing (same logic as aggregated nodes)
-        let normalizedValue = originalValue;
-        if (maxValue > minValue && maxValue > 0) {
-          if (maxValue / minValue > 100) {
-            const scalingFactor = Math.sqrt(originalValue / maxValue);
-            normalizedValue = scalingFactor * maxValue;
-            if (normalizedValue < maxValue * 0.01) {
-              normalizedValue = maxValue * 0.01;
-            }
-          } else {
-            normalizedValue = originalValue;
-          }
-        }
-        if (normalizedValue <= 0) {
-          normalizedValue = Math.max(maxValue * 0.001, 0.001);
-        }
-
-        const runningNode: HierarchyNode = {
-          name: calleeId,
-          customValue: normalizedValue,
-          originalValue: originalValue,
-          count: 1,
-          startTime: startTime, // Use the actual start time from parentStartTimes
-          children: [],
-          hide: false,
-          fade: false,
-          highlight: false,
-          dimmed: false,
-          isRunning: true,
-        };
-
-        console.log(`Created running node ${calleeId}:`, {
-          originalValue: originalValue,
-          startTime: startTime,
-          duration: originalValue
-        });
-        nodeMap.set(calleeId, runningNode);
-      }
-
-      // Create span-aware parent key
-      const parentKey = parentSpanId && parentSpanId !== 'undefined'
-        ? `${callerId}@${parentSpanId}`
-        : callerId;
-
-      // Create span-aware parent node if it doesn't exist
-      if (!nodeMap.has(parentKey)) {
-        const baseName = parentKey.includes('@')
-          ? parentKey.substring(0, parentKey.lastIndexOf('@'))
-          : parentKey;
-
-        const baseNode = nodeMap.get(baseName);
-        if (baseNode) {
-          // Create a span-specific instance with proper value calculation
-          const baseOriginalValue = baseNode.originalValue || 0.001;
-
-          // Calculate normalized value for sizing (same logic as other nodes)
-          let normalizedValue = baseOriginalValue;
-          if (maxValue > minValue && maxValue > 0) {
-            if (maxValue / minValue > 100) {
-              const scalingFactor = Math.sqrt(baseOriginalValue / maxValue);
-              normalizedValue = scalingFactor * maxValue;
-              if (normalizedValue < maxValue * 0.01) {
-                normalizedValue = maxValue * 0.01;
-              }
-            } else {
-              normalizedValue = baseOriginalValue;
-            }
-          }
-          if (normalizedValue <= 0) {
-            normalizedValue = Math.max(maxValue * 0.001, 0.001);
-          }
-
-          const spanNode: HierarchyNode = {
-            ...baseNode,
-            name: parentKey,
-            children: [],
-            customValue: normalizedValue,
-            originalValue: baseOriginalValue,
-          };
-          nodeMap.set(parentKey, spanNode);
-        } else if (baseName === '_main') {
-          // Create main node with span ID
-          const mainSpanNode: HierarchyNode = {
-            name: parentKey,
-            customValue: 0.001,
-            originalValue: 0.001,
-            count: 1,
-            children: [],
-            hide: false,
-            fade: false,
-            highlight: false,
-            dimmed: false,
-            serviceName: '_main',
-          };
-          nodeMap.set(parentKey, mainSpanNode);
-        }
-      }
-
-      // Add parent relationship with span awareness
-      const existingParents = parentRelations.get(calleeId) || [];
-      if (!existingParents.includes(parentKey)) {
-        parentRelations.set(calleeId, [...existingParents, parentKey]);
-      }
-    });
-  });
-
-  // Ensure _main node exists
-  if (!nodeMap.has('_main')) {
-    nodeMap.set('_main', {
-      name: '_main',
-      customValue: 0.001,
-      originalValue: 0.001,
-      count: 1,
-      children: [],
-      hide: false,
-      fade: false,
-      highlight: false,
-      dimmed: false,
-      serviceName: '_main',
-    });
-  }
-
-  // Step 2: Build the tree structure (span-aware with timing data)
-  const findChildren = (nodeName: string): HierarchyNode[] => {
-    const children: HierarchyNode[] = [];
-
-    // Find all nodes that have this exact node as a parent (span-aware)
-    for (const [childName, parents] of parentRelations) {
-      if (parents.includes(nodeName)) {
-        const childNode = nodeMap.get(childName);
-        if (childNode) {
-          // Extract timing data specific to this parent-child relationship
-          let specificTiming = null;
-          const childData = data.aggregated.find(node => node.name === childName);
-          if (childData && childData.totalInParent) {
-            // Find timing data for this specific parent relationship
-            const parentBaseName = nodeName.includes('@')
-              ? nodeName.substring(0, nodeName.lastIndexOf('@'))
-              : nodeName;
-
-            // Get parent span ID if available
-            const parentSpanId = nodeName.includes('@')
-              ? nodeName.substring(nodeName.lastIndexOf('@') + 1)
-              : 'undefined';
-
-            // Get parent start time for timing validation
-            const parentNode = nodeMap.get(nodeName);
-            const parentStartTime = parentNode?.startTime || 0;
-
-            // Find all matching entries for this parent
-            const matchingEntries = childData.totalInParent.filter(entry =>
-              entry.callerNodeId === parentBaseName
-            );
-
-            if (matchingEntries.length > 0) {
-              // If we have a specific span ID, try to find exact match first
-              if (parentSpanId !== 'undefined') {
-                specificTiming = matchingEntries.find(entry =>
-                  entry.parentSpanId === parentSpanId
-                );
-              }
-
-              // If no exact span match, choose the best timing entry
-              if (!specificTiming) {
-                // Filter entries where child start time >= parent start time (logical constraint)
-                const validTimingEntries = matchingEntries.filter(entry =>
-                  !parentStartTime || entry.startTime >= parentStartTime
-                );
-
-                if (validTimingEntries.length > 0) {
-                  // Choose the entry with the earliest valid start time
-                  specificTiming = validTimingEntries.reduce((best, current) =>
-                    current.startTime < best.startTime ? current : best
-                  );
-                } else {
-                  // Fallback to any entry if timing validation fails
-                  specificTiming = matchingEntries[0];
-                }
-              }
-            }
-          }
-
-          // Create a DEEP copy to avoid shared references
-          const childCopy: HierarchyNode = {
-            name: childNode.name,
-            customValue: childNode.customValue,
-            originalValue: specificTiming ? Math.max(specificTiming.duration, 0.001) : childNode.originalValue,
-            count: specificTiming?.count || childNode.count,
-            startTime: specificTiming?.startTime || childNode.startTime,
-            children: [], // Will be populated by recursion
-            hide: childNode.hide,
-            fade: childNode.fade,
-            highlight: childNode.highlight,
-            dimmed: childNode.dimmed,
-            serviceName: childNode.serviceName,
-            value: childNode.value,
-            delta: childNode.delta,
-            isRunning: childNode.isRunning,
-            totalInParent: childNode.totalInParent ? [...childNode.totalInParent] : undefined,
-            extras: childNode.extras ? { ...childNode.extras } : undefined,
-          };
-
-          // Debug timing selection
-          if (specificTiming) {
-            const parentNode = nodeMap.get(nodeName);
-            console.log(`Selected timing for ${childName} -> ${nodeName}:`, {
-              duration: specificTiming.duration,
-              startTime: specificTiming.startTime,
-              parentSpanId: specificTiming.parentSpanId,
-              parentStartTime: parentNode?.startTime
-            });
-          }
-
-          // Update customValue if we have specific timing
-          if (specificTiming) {
-            const specificOriginalValue = Math.max(specificTiming.duration, 0.001);
-
-            // Calculate normalized value for this specific timing
-            let normalizedValue = specificOriginalValue;
-            if (maxValue > minValue && maxValue > 0) {
-              if (maxValue / minValue > 100) {
-                const scalingFactor = Math.sqrt(specificOriginalValue / maxValue);
-                normalizedValue = scalingFactor * maxValue;
-                if (normalizedValue < maxValue * 0.01) {
-                  normalizedValue = maxValue * 0.01;
-                }
-              } else {
-                normalizedValue = specificOriginalValue;
-              }
-            }
-            if (normalizedValue <= 0) {
-              normalizedValue = Math.max(maxValue * 0.001, 0.001);
-            }
-            childCopy.customValue = normalizedValue;
-          }
-
-          // Recursively build the child's subtree using all possible span-aware keys
-          // Look for both the base child name and any span-aware versions
-          const possibleChildKeys = [childName];
-
-          // Add span-aware versions of this child
-          for (const key of nodeMap.keys()) {
-            if (key.startsWith(childName + '@')) {
-              possibleChildKeys.push(key);
-            }
-          }
-
-          // Collect children from all possible keys
-          const allGrandChildren: HierarchyNode[] = [];
-          for (const childKey of possibleChildKeys) {
-            const grandChildren = findChildren(childKey);
-
-            // Add children that don't already exist (avoid duplicates)
-            const existingNames = new Set(allGrandChildren.map(c => c.name));
-            for (const grandChild of grandChildren) {
-              if (!existingNames.has(grandChild.name)) {
-                allGrandChildren.push(grandChild);
-                existingNames.add(grandChild.name);
-              }
-            }
-          }
-
-          childCopy.children = allGrandChildren;
-          children.push(childCopy);
-        }
-      }
-    }
-
-    return children;
+  return {
+    name: treeNode.id,
+    customValue: Math.max(duration, 0.001),
+    startTime: treeNode.startTime,
+    originalValue: duration,
+    count: 1,
+    children: treeNode.children?.map(convertFlameTreeToFlameNode),
+    hide: false,
+    fade: false,
+    highlight: false,
+    dimmed: false,
   };
-
-  // Step 3: Build the complete tree starting from _main
-  let mainNode = nodeMap.get('_main');
-
-  if (!mainNode) {
-    // Create _main if it doesn't exist
-    mainNode = {
-      name: '_main',
-      customValue: 0.001,
-      originalValue: 0.001,
-      count: 1,
-      children: [],
-      hide: false,
-      fade: false,
-      highlight: false,
-      dimmed: false,
-      serviceName: '_main',
-    };
-    nodeMap.set('_main', mainNode);
-  }
-
-  // Build children for main node
-  mainNode.children = findChildren('_main');
-
-  // Also check for span-aware main nodes and merge their children
-  const spanMainNodes = Array.from(nodeMap.keys()).filter(key =>
-    key.startsWith('_main@') && key !== '_main'
-  );
-
-  const existingChildNames = new Set(mainNode.children?.map(c => c.name) || []);
-
-  spanMainNodes.forEach(spanKey => {
-    const spanChildren = findChildren(spanKey);
-    mainNode!.children = mainNode!.children || [];
-
-    // Only add children that don't already exist
-    spanChildren.forEach(child => {
-      if (!existingChildNames.has(child.name)) {
-        mainNode!.children!.push(child);
-        existingChildNames.add(child.name);
-      }
-    });
-  });
-
-  // Step 4: Calculate total values bottom-up
-  const calculateTotalValue = (node: HierarchyNode): number => {
-    if (!node.children || node.children.length === 0) {
-      return node.customValue || 0.001;
-    }
-
-    // Calculate total from children
-    let totalChildrenValue = 0;
-    node.children.forEach(child => {
-      totalChildrenValue += calculateTotalValue(child);
-    });
-
-    // For _main node (or main spans), use total of children; for others, use max of self or children sum
-    if (node.name === '_main' || node.name.startsWith('_main@')) {
-      node.customValue = Math.max(totalChildrenValue, 0.001);
-      node.originalValue = node.customValue;
-    } else {
-      // Use the larger of self value or children sum
-      const selfValue = node.originalValue || 0.001;
-      node.customValue = Math.max(selfValue, totalChildrenValue);
-    }
-
-    return node.customValue;
-  };
-
-  calculateTotalValue(mainNode);
-
-  // Step 5: Handle orphaned nodes (nodes without parents) by adding them to _main
-  const allNodesWithRelations = new Set<string>();
-
-  // Add all parent nodes (span-aware keys)
-  for (const [_, parents] of parentRelations) {
-    parents.forEach(parentKey => {
-      allNodesWithRelations.add(parentKey);
-    });
-  }
-
-  // Add all child nodes
-  for (const childName of parentRelations.keys()) {
-    allNodesWithRelations.add(childName);
-  }
-
-  // Add orphaned nodes directly to main
-  mainNode.children = mainNode.children || [];
-  for (const [nodeName, node] of nodeMap) {
-    if (!nodeName.startsWith('_main') && !allNodesWithRelations.has(nodeName)) {
-      // This is an orphaned node, add it to main
-      const orphanedNode = { ...node };
-      orphanedNode.children = findChildren(nodeName);
-      mainNode.children!.push(orphanedNode);
-    }
-  }
-
-  // Recalculate totals after adding orphaned nodes
-  calculateTotalValue(mainNode);
-
-  console.log('=== DEBUG: Hierarchy built ===');
-  console.log('Total nodes in map:', nodeMap.size);
-  console.log('Main node children:', mainNode.children?.length || 0);
-  console.log('Parent relations:', parentRelations.size);
-
-  // Debug tree depth
-  const getTreeDepth = (node: HierarchyNode, depth = 0): number => {
-    if (!node.children || node.children.length === 0) {
-      return depth;
-    }
-    return Math.max(...node.children.map(child => getTreeDepth(child, depth + 1)));
-  };
-
-  const getNodeCount = (node: HierarchyNode): number => {
-    if (!node.children || node.children.length === 0) {
-      return 1;
-    }
-    return 1 + node.children.reduce((sum, child) => sum + getNodeCount(child), 0);
-  };
-
-  const treeDepth = getTreeDepth(mainNode);
-  const totalTreeNodes = getNodeCount(mainNode);
-
-  console.log('Tree depth:', treeDepth);
-  console.log('Total nodes in tree:', totalTreeNodes);
-  console.log('Main node details:', {
-    name: mainNode.name,
-    customValue: mainNode.customValue,
-    childrenCount: mainNode.children?.length || 0,
-    childrenNames: mainNode.children?.map(c => c.name) || []
-  });
-
-  // Show a sample of deeper level children with timing data
-  if (mainNode.children && mainNode.children.length > 0) {
-    const firstChild = mainNode.children[0];
-    console.log('First child details:', {
-      name: firstChild.name,
-      originalValue: firstChild.originalValue,
-      startTime: firstChild.startTime,
-      childrenCount: firstChild.children?.length || 0,
-      childrenNames: firstChild.children?.map(c => c.name) || []
-    });
-
-    // Show timing data for a few children
-    if (firstChild.children && firstChild.children.length > 0) {
-      console.log('Sample grandchildren timing:', firstChild.children.slice(0, 3).map(gc => ({
-        name: gc.name,
-        originalValue: gc.originalValue,
-        startTime: gc.startTime,
-        customValue: gc.customValue,
-        isRunning: gc.isRunning
-      })));
-
-      // Check for timing issues
-      const parentStartTime = firstChild.startTime || 0;
-      const timingIssues = firstChild.children.filter(gc =>
-        gc.startTime && parentStartTime && gc.startTime < parentStartTime
-      );
-      if (timingIssues.length > 0) {
-        console.warn('Found children with start time < parent start time:', timingIssues.map(gc => ({
-          name: gc.name,
-          childStart: gc.startTime,
-          parentStart: parentStartTime
-        })));
-      }
-    }
-  }
-
-  // Debug: Check for any negative durations and timestamp issues
-  const negativeNodes: string[] = [];
-  const suspiciousNodes: string[] = [];
-  for (const [nodeName, node] of nodeMap) {
-    if (node.originalValue && node.originalValue < 0) {
-      negativeNodes.push(`${nodeName}: ${node.originalValue}`);
-    }
-    // Flag extremely large or small durations that might indicate timestamp unit issues
-    if (node.originalValue && (node.originalValue > 1e6 || (node.originalValue < 1e-6 && node.originalValue > 0))) {
-      suspiciousNodes.push(`${nodeName}: ${node.originalValue}`);
-    }
-  }
-  if (negativeNodes.length > 0) {
-    console.warn('Found nodes with negative durations:', negativeNodes);
-  }
-  if (suspiciousNodes.length > 0) {
-    console.warn('Found nodes with suspicious durations (possible timestamp unit issues):', suspiciousNodes);
-  }
-
-  return mainNode;
 };
 
 // Define handle type for ExportSvg
@@ -1533,7 +826,8 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
           g.attr(
             'transform',
             d =>
-              `translate(${d.x0},${inverted ? yScale(d.depth) : (height || totalHeight) - yScale(d.depth) - cellHeight
+              `translate(${d.x0},${
+                inverted ? yScale(d.depth) : (height || totalHeight) - yScale(d.depth) - cellHeight
               })`
           );
 
@@ -1546,9 +840,10 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
             .attr(
               'transform',
               d =>
-                `translate(${d.x0},${inverted
-                  ? yScale(d.depth)
-                  : (height || totalHeight) - yScale(d.depth) - cellHeight
+                `translate(${d.x0},${
+                  inverted
+                    ? yScale(d.depth)
+                    : (height || totalHeight) - yScale(d.depth) - cellHeight
                 })`
             );
 
@@ -2309,32 +1604,21 @@ const FlameVisualization = forwardRef<FlameVisualizationHandle, FlameVisualizati
     }, [searchTerm, flameData]);
 
     const transformFlameData = (data: FlameGraphData): FlameNode => {
-      // Use the exported hierarchy building function
-      const hierarchyNode = buildCompleteHierarchy(data, currentTimestamp);
-
-      // Convert HierarchyNode to FlameNode format
-      const convertToFlameNode = (node: HierarchyNode): FlameNode => {
+      // Use the tree structure directly from the backend
+      if (!data || !data.root) {
+        console.warn('Invalid flame graph data format:', data);
         return {
-          name: node.name,
-          customValue: node.customValue,
-          totalInParent: node.totalInParent,
-          startTime: node.startTime,
-          originalValue: node.originalValue,
-          count: node.count,
-          children: node.children?.map(convertToFlameNode),
-          hide: node.hide,
-          fade: node.fade,
-          highlight: node.highlight,
-          dimmed: node.dimmed,
-          serviceName: node.serviceName,
-          value: node.value,
-          delta: node.delta,
-          isRunning: node.isRunning,
-          extras: node.extras,
+          name: 'root',
+          customValue: 0.001,
+          children: [],
+          hide: false,
+          fade: false,
+          highlight: false,
+          dimmed: false,
         };
-      };
+      }
 
-      return convertToFlameNode(hierarchyNode);
+      return convertFlameTreeToFlameNode(data.root);
     };
 
     // Function to export the SVG visualization

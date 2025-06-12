@@ -33,6 +33,7 @@ import {
   FunctionNode,
   PhysicalViewData,
   FlameGraphData,
+  FlameTreeNode,
 } from '../types';
 
 type ElementData = Service | Method | FunctionNode;
@@ -492,104 +493,69 @@ const GraphPage: React.FC<GraphPageProps> = ({
     // Helper function to convert timestamp to microseconds
     const toMicroseconds = (timestamp: number) => timestamp * 1000;
 
-    // Get unique service names first for process IDs
-    const serviceNames = Array.from(
-      new Set([
-        ...(data.aggregated?.map(node =>
-          node.name.includes(':') ? node.name.split(':')[0] : 'Unknown'
-        ) || []),
-        ...(data.parentStartTimes?.map(parent =>
-          parent.calleeId.includes(':') ? parent.calleeId.split(':')[0] : 'Unknown'
-        ) || []),
-      ])
-    );
-
-    // Process aggregated flame data
-    if (data.aggregated) {
-      data.aggregated.forEach((node, nodeIndex) => {
-        const serviceName = node.name.includes(':') ? node.name.split(':')[0] : 'Unknown';
-
-        // Create process and thread IDs based on service
-        const pid = serviceNames.indexOf(serviceName) + 1 || 1;
-        const tid = nodeIndex + 1;
-
-        if (node.totalInParent) {
-          node.totalInParent.forEach((execution, execIndex) => {
-            const startTimeUs = toMicroseconds(execution.startTime);
-            const durationUs = toMicroseconds(execution.duration);
-
-            // Create a complete event (X phase) for each execution
-            events.push({
-              name: node.name,
-              cat: 'function',
-              ph: 'X', // Complete event
-              ts: startTimeUs,
-              dur: durationUs,
-              pid: pid,
-              tid: tid,
-              args: {
-                count: execution.count,
-                caller: execution.callerNodeId,
-                totalCount: node.count || 1,
-              },
-            });
-
-            eventId++;
-          });
-        } else {
-          // Fallback for nodes without timing data
-          events.push({
-            name: node.name,
-            cat: 'function',
-            ph: 'I', // Instant event
-            ts: toMicroseconds(currentTimestamp),
-            pid: pid,
-            tid: tid,
-            args: {
-              count: node.count || 1,
-              note: 'No timing data available',
-            },
-          });
-        }
-      });
+    if (!data || !data.root) {
+      return {
+        traceEvents: [],
+        displayTimeUnit: 'ms',
+        systemTraceEvents: [],
+        otherData: {},
+      };
     }
 
-    // Process running tasks from parentStartTimes
-    if (data.parentStartTimes) {
-      data.parentStartTimes.forEach((parentData, parentIndex) => {
-        const serviceName = parentData.calleeId.includes(':')
-          ? parentData.calleeId.split(':')[0]
-          : 'Unknown';
+    // Get unique service names from the tree
+    const serviceNames = new Set<string>();
+    const collectServiceNames = (node: FlameTreeNode) => {
+      const serviceName = node.id.includes(':') ? node.id.split(':')[0] : 'Unknown';
+      serviceNames.add(serviceName);
+      if (node.children) {
+        node.children.forEach(collectServiceNames);
+      }
+    };
+    collectServiceNames(data.root);
+    const serviceNamesArray = Array.from(serviceNames);
 
-        const pid = serviceNames.indexOf(serviceName) + 1 || 1;
-        const tid = parentIndex + 100; // Offset to avoid conflicts
+    // Process flame tree data
+    const processTreeNode = (node: FlameTreeNode, threadId: number) => {
+      const serviceName = node.id.includes(':') ? node.id.split(':')[0] : 'Unknown';
+      const pid = serviceNamesArray.indexOf(serviceName) + 1 || 1;
 
-        parentData.startTimes.forEach((startTimeData, startIndex) => {
-          const startTimeUs = toMicroseconds(startTimeData.startTime);
-          const endTimeUs = toMicroseconds(currentTimestamp);
-          const durationUs = endTimeUs - startTimeUs;
+      const startTimeUs = toMicroseconds(node.startTime);
+      const durationUs = toMicroseconds(node.endTime - node.startTime);
 
-          // Create running event
-          events.push({
-            name: parentData.calleeId,
-            cat: 'running',
-            ph: 'X',
-            ts: startTimeUs,
-            dur: durationUs,
-            pid: pid,
-            tid: tid + startIndex,
-            args: {
-              caller: startTimeData.callerId,
-              status: 'running',
-              endTime: 'now',
-            },
-          });
+      // Create a complete event (X phase)
+      events.push({
+        name: node.id,
+        cat: 'function',
+        ph: 'X', // Complete event
+        ts: startTimeUs,
+        dur: durationUs,
+        pid: pid,
+        tid: threadId,
+        args: {
+          spanId: node.spanId,
+          duration: (node.endTime - node.startTime) / 1000,
+        },
+      });
+
+      // Process children
+      if (node.children) {
+        node.children.forEach((child, index) => {
+          processTreeNode(child, threadId * 1000 + index + 1);
         });
+      }
+
+      eventId++;
+    };
+
+    // Process the tree starting from root
+    if (data.root.children) {
+      data.root.children.forEach((child, index) => {
+        processTreeNode(child, index + 1);
       });
     }
 
     // Add process name metadata
-    serviceNames.forEach((serviceName, index) => {
+    serviceNamesArray.forEach((serviceName, index) => {
       events.push({
         name: 'process_name',
         ph: 'M',

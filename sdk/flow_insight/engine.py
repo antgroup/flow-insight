@@ -24,7 +24,6 @@ from flow_insight.storage.persist.model import (
 from flow_insight.storage.persist.persist import PersistStorage
 from flow_insight.storage.snapshot.base import StorageType
 from flow_insight.storage.snapshot.model import (
-    AggregatedFlameGraphData,
     Breakpoint,
     CallerInfo,
     CallFlow,
@@ -34,17 +33,15 @@ from flow_insight.storage.snapshot.model import (
     DebugCommand,
     DebuggerInfo,
     DebugSession,
-    FlameDataAggregated,
-    FlameGraphData,
+    FlameTree,
+    FlameTreeNode,
     Method,
     MethodInfo,
     ObjectEvent,
     ObjectInfo,
-    ParentStartTimes,
     PhysicalViewData,
     ResourceUsage,
     Service,
-    TotalInParent,
 )
 from flow_insight.storage.snapshot.snapshot import SnapshotStorage
 
@@ -428,7 +425,6 @@ class InsightEngine:
             self._snapshots[label] = snapshot
 
         print(f"Recovered {len(latest_snapshot.restore_snapshots())} snapshots")
-        asyncio.create_task(self.periodic_snapshot())
 
     async def replay(self, flow_id: str, end_time: Optional[str] = None):
         if end_time is None and self._persist_storage_type == PersistStorageType.INFLUXDB:
@@ -472,7 +468,7 @@ class InsightEngine:
 
             await self._do_replay(events, latest_snapshot)
 
-            if end_time - latest_timestamp > 30 * 1000:
+            if end_time - latest_timestamp > 300 * 1000:
                 latest_snapshot.store_snapshot(end_time)
                 self._snapshots[f"{flow_id}:{end_time}"] = latest_snapshot
                 print(f"Snapshot taken for flow {flow_id} at {end_time}")
@@ -530,15 +526,6 @@ class InsightEngine:
         target_method = Method(name=call_submit.target_method)
         start_time = call_submit.timestamp
 
-        await snapshot.set_start_time(
-            flow_id,
-            source_service,
-            source_method,
-            target_service,
-            target_method,
-            start_time,
-            call_submit.parent_span_id,
-        )
         await snapshot.update_flow_record(
             flow_id,
             source_service,
@@ -680,113 +667,31 @@ class InsightEngine:
     async def get_flame_graph_data(self, flow_id, snapshot: Optional[SnapshotStorage] = None):
         if snapshot is None:
             snapshot = self._snapshots["latest"]
-        flame_data = FlameGraphData(aggregated=[], parent_start_times=[])
-        flame_graph_aggregated = await snapshot.get_flame_graph_data(flow_id)
-
-        visited = {}
-        for func_id, func_datas in flame_graph_aggregated.items():
-            if func_id in visited:
-                total_in_parent = visited[func_id]
-            else:
-                total_in_parent = defaultdict(list)
-            start_times = await snapshot.get_start_time(flow_id, func_id[0], func_id[1])
-            for i, func_data in enumerate(func_datas):
-                parent_span_id, caller_info = await snapshot.get_caller_info(
-                    flow_id, func_data.span_id
-                )
-                func_start_time = 0
-                found = False
-                for caller_info_pair, v in start_times.items():
-                    if caller_info_pair == (caller_info.service, caller_info.method):
-                        for pspan, start_time in v:
-                            if pspan == parent_span_id:
-                                func_start_time = start_time
-                                found = True
-                                break
-                    if found:
-                        break
-                caller_service = caller_info.service
-                caller_method = caller_info.method
-                if caller_service is not None:
-                    caller_node_id = (
-                        f"{caller_service.service_name}"
-                        f":{caller_service.instance_id}.{caller_method.name}"
-                    )
-                else:
-                    caller_node_id = caller_method.name
-                total_in_parent[caller_node_id].append(
-                    {
-                        "parent_span_id": parent_span_id,
-                        "duration": func_data.duration,
-                        "count": 1,
-                        "start_time": func_start_time,
-                    }
-                )
-            visited[func_id] = total_in_parent
-            service, method = func_id
-
-            total_in_parent_struct = []
-            for k, v in total_in_parent.items():
-                for i in v:
-                    total_in_parent_struct.append(
-                        TotalInParent(
-                            parent_span_id=i["parent_span_id"],
-                            caller_node_id=k,
-                            duration=i["duration"],
-                            count=i["count"],
-                            start_time=i["start_time"],
-                        )
-                    )
-
-            flame_data.aggregated.append(
-                AggregatedFlameGraphData(
-                    name=method.name
-                    if service is None
-                    else f"{service.service_name}:{service.instance_id}.{method.name}",
-                    service_name="" if service is None else service.service_name,
-                    value=sum(i.duration for i in total_in_parent_struct),
-                    count=len(total_in_parent_struct),
-                    total_in_parent=total_in_parent_struct,
+        flame_tree = await snapshot.get_flame_tree(flow_id)
+        if flame_tree is None:
+            return FlameTree(
+                root=FlameTreeNode(
+                    span_id="_main", id="_main", start_time=0, end_time=-1, children=[]
                 )
             )
+        root_node = flame_tree
 
-        parent_start_times = []
-        start_times = await snapshot.get_start_times(flow_id)
-        for callee_id, start_timesC in start_times.items():
-            if callee_id not in visited:
-                start_time_array = []
-                for (service, method), v in start_timesC.items():
-                    for (parent_span_id, i) in v:
-                        start_time_array.append(
-                            {
-                                "caller_id": (
-                                    f"{service.service_name}:{service.instance_id}.{method.name}"
-                                    if service is not None
-                                    else method.name
-                                ),
-                                "start_time": i,
-                                "parent_span_id": parent_span_id,
-                            }
-                        )
-                (callee_service, callee_method) = callee_id
-                str_id = (
-                    (
-                        f"{callee_service.service_name}"
-                        f":{callee_service.instance_id}.{callee_method.name}"
-                    )
-                    if callee_service is not None
-                    else callee_method.name
-                )
-                parent_start_times.append(
-                    ParentStartTimes(
-                        callee_id=str_id,
-                        start_times=start_time_array,
-                    )
-                )
+        def convert_to_flame_tree_node(node):
+            children = []
+            for child in node["children"]:
+                child_node = convert_to_flame_tree_node(child)
+                children.append(child_node)
+            service, method = node["id"]
+            nid = f"{service.service_name}.{method.name}" if service else method.name
+            return FlameTreeNode(
+                span_id=node["span_id"],
+                id=nid,
+                start_time=node["start_time"],
+                end_time=node.get("end_time", -1),
+                children=children,
+            )
 
-        flame_data.parent_start_times = parent_start_times
-
-        return flame_data
+        return convert_to_flame_tree_node(root_node)
 
     async def emit_call_end(
         self, call_end: CallEndEvent, snapshot: Optional[SnapshotStorage] = None
@@ -803,7 +708,7 @@ class InsightEngine:
         span_id = call_end.span_id
         await snapshot.del_debugger_info(flow_id, target_service, target_method, span_id)
 
-        _, caller_info = await snapshot.get_caller_info(flow_id, span_id)
+        caller_info = await snapshot.get_caller_info(flow_id, span_id)
         await snapshot.update_flow_record(
             flow_id,
             caller_info.service,
@@ -813,18 +718,12 @@ class InsightEngine:
             lambda record: record - 1,
         )
 
-        duration = call_end.duration
-
-        await snapshot.update_flame_graph_data(
+        await snapshot.update_flame_tree_node(
             flow_id,
             target_service,
             target_method,
-            FlameDataAggregated(
-                duration=duration,
-                call_count=1,
-                span_id=span_id,
-                service_name=target_service.service_name if target_service is not None else "",
-            ),
+            span_id,
+            call_end.timestamp,
         )
 
     async def emit_debugger_info(
@@ -870,8 +769,25 @@ class InsightEngine:
             else None
         )
         method = Method(name=call_begin.source_method)
-        await snapshot.add_caller_info(
-            flow_id, span_id, CallerInfo(service=service, method=method), call_begin.parent_span_id
+        await snapshot.add_caller_info(flow_id, span_id, CallerInfo(service=service, method=method))
+        target_service = (
+            Service(
+                service_name=call_begin.target_service, instance_id=call_begin.target_instance_id
+            )
+            if call_begin.target_service
+            else None
+        )
+        target_method = Method(name=call_begin.target_method)
+        start_time = call_begin.timestamp
+        await snapshot.set_flame_tree_node(
+            flow_id,
+            service,
+            method,
+            target_service,
+            target_method,
+            start_time,
+            call_begin.parent_span_id,
+            call_begin.span_id,
         )
 
     async def emit_service_physical_stats(

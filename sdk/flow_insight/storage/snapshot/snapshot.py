@@ -14,7 +14,6 @@ from flow_insight.storage.snapshot.model import (
     CallerInfo,
     Context,
     DebuggerInfo,
-    FlameDataAggregated,
     Method,
     ObjectEvent,
     ObjectInfo,
@@ -41,9 +40,7 @@ class SnapshotStorage:
         self._storage["method_counter"] = defaultdict(int)
         self._storage["function_counter"] = defaultdict(int)
         self._storage["flow_record"] = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
-        self._storage["start_time_record"] = defaultdict(
-            lambda: defaultdict(lambda: defaultdict(list))
-        )
+        self._storage["flame_tree"] = dict()
         self._storage["debugger_info"] = defaultdict(lambda: defaultdict(dict))
         self._storage["breakpoints"] = defaultdict(lambda: defaultdict(list))
         self._storage["data_flows"] = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
@@ -56,8 +53,6 @@ class SnapshotStorage:
         self._storage["context_info"] = defaultdict(list)
         self._storage["resource_usage"] = defaultdict(list)
         self._storage["prompt"] = ""
-
-        self._storage["flame_graph_aggregated"] = defaultdict(lambda: defaultdict(list))
 
     def restore_snapshots(self):
         snapshots = {}
@@ -112,7 +107,7 @@ class SnapshotStorage:
     def get_node_id(self, service: Optional[Service], method: Method):
         return (service, method)
 
-    async def set_start_time(
+    async def set_flame_tree_node(
         self,
         flow_id: str,
         source_service: Optional[Service],
@@ -121,19 +116,57 @@ class SnapshotStorage:
         target_method: Method,
         start_time: int,
         parent_span_id: str,
+        span_id: str,
     ):
         source_id = self.get_node_id(source_service, source_method)
         target_id = self.get_node_id(target_service, target_method)
-        self._storage["start_time_record"][flow_id][target_id][source_id].append(
-            (parent_span_id, start_time)
-        )
 
-    async def get_start_time(self, flow_id: str, service: Optional[Service], method: Method):
-        node_id = self.get_node_id(service, method)
-        return self._storage["start_time_record"][flow_id][node_id]
+        def find_and_set_node(root):
+            if root["span_id"] == parent_span_id and root["id"] == source_id:
+                root["children"].append(
+                    {
+                        "span_id": span_id,
+                        "id": target_id,
+                        "start_time": start_time,
+                        "children": [],
+                    }
+                )
+                return
+            for child in root["children"]:
+                find_and_set_node(child)
 
-    async def get_start_times(self, flow_id: str):
-        return self._storage["start_time_record"][flow_id]
+        if flow_id not in self._storage["flame_tree"]:
+            self._storage["flame_tree"][flow_id] = {
+                "span_id": parent_span_id,
+                "id": source_id,
+                "start_time": 0,
+                "children": [],
+            }
+        find_and_set_node(self._storage["flame_tree"][flow_id])
+
+    async def update_flame_tree_node(
+        self,
+        flow_id: str,
+        target_service: Optional[Service],
+        target_method: Method,
+        span_id: str,
+        end_time: int,
+    ):
+        target_id = self.get_node_id(target_service, target_method)
+
+        def find_and_update_node(root):
+            if root["span_id"] == span_id and root["id"] == target_id:
+                root["end_time"] = end_time
+                return
+            for child in root["children"]:
+                find_and_update_node(child)
+
+        if flow_id not in self._storage["flame_tree"]:
+            return
+        find_and_update_node(self._storage["flame_tree"][flow_id])
+
+    async def get_flame_tree(self, flow_id: str):
+        return self._storage["flame_tree"].get(flow_id, None)
 
     async def update_flow_record(
         self,
@@ -259,23 +292,8 @@ class SnapshotStorage:
     async def get_resource_usage(self, flow_id: str):
         return self._storage["resource_usage"][flow_id]
 
-    async def get_flame_graph_data(self, flow_id: str):
-        return self._storage["flame_graph_aggregated"][flow_id]
-
-    async def update_flame_graph_data(
-        self,
-        flow_id: str,
-        service: Optional[Service],
-        method: Optional[Method],
-        data: FlameDataAggregated,
-    ):
-        node_id = self.get_node_id(service, method)
-        self._storage["flame_graph_aggregated"][flow_id][node_id].append(data)
-
-    async def add_caller_info(
-        self, flow_id: str, span_id: str, caller_info: CallerInfo, parent_span_id: str
-    ):
-        self._storage["caller_info"][flow_id][span_id] = (parent_span_id, caller_info)
+    async def add_caller_info(self, flow_id: str, span_id: str, caller_info: CallerInfo):
+        self._storage["caller_info"][flow_id][span_id] = caller_info
 
     async def get_caller_info(self, flow_id: str, span_id: str):
         return self._storage["caller_info"][flow_id][span_id]

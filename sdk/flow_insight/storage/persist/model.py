@@ -121,6 +121,9 @@ class CallBeginEvent(pydantic.BaseModel):
     source_service: Optional[str] = None
     source_instance_id: Optional[str] = None
     source_method: str
+    target_service: Optional[str] = None
+    target_instance_id: Optional[str] = None
+    target_method: str
     parent_span_id: str
     span_id: str
     timestamp: int

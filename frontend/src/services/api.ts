@@ -14,6 +14,7 @@ import {
   ATGraphData,
   ATPhysicalViewData,
   ATFlameGraphData,
+  ATFlameTreeNode,
   ATService,
   ATMethod,
   ATFunction,
@@ -502,15 +503,11 @@ export class ApiService {
 
   public async getFlameGraphData(flowId: string, end_time?: number): Promise<FlameGraphData> {
     const apiFlameGraphData = await this.getApiFlameGraphData(flowId, end_time);
+
+    // The API response is already converted to camelCase by convertKeysToCamelCase
+    // The apiFlameGraphData IS the root node, not wrapped in a root property
     const flameData: FlameGraphData = {
-      aggregated: apiFlameGraphData.aggregated,
-      parentStartTimes: apiFlameGraphData.parentStartTimes.map((parentStartTime: any) => ({
-        calleeId: parentStartTime.calleeId,
-        startTimes: parentStartTime.startTimes.map((startTime: any) => ({
-          callerId: startTime.callerId,
-          startTime: startTime.startTime,
-        })),
-      })),
+      root: apiFlameGraphData as any,
     };
 
     return flameData;

@@ -55,13 +55,6 @@ class CallerInfo(pydantic.BaseModel):
     method: Optional[Method] = None
 
 
-class FlameDataAggregated(pydantic.BaseModel):
-    duration: float
-    call_count: int
-    span_id: str
-    service_name: str
-
-
 class DebugSession(pydantic.BaseModel):
     service: Optional[Service] = None
     method: Method
@@ -110,30 +103,16 @@ class CallGraphData(pydantic.BaseModel):
     dataFlows: List[DataFlow]
 
 
-class TotalInParent(pydantic.BaseModel):
-    caller_node_id: str
-    parent_span_id: str
-    duration: float
-    count: int
+class FlameTreeNode(pydantic.BaseModel):
+    span_id: str
+    id: str
     start_time: int
+    end_time: int
+    children: List["FlameTreeNode"]
 
 
-class AggregatedFlameGraphData(pydantic.BaseModel):
-    name: str
-    service_name: str
-    value: float
-    count: int
-    total_in_parent: List[TotalInParent]
-
-
-class ParentStartTimes(pydantic.BaseModel):
-    callee_id: str
-    start_times: List[Dict[str, Any]]
-
-
-class FlameGraphData(pydantic.BaseModel):
-    aggregated: List[AggregatedFlameGraphData]
-    parent_start_times: List[ParentStartTimes]
+class FlameTree(pydantic.BaseModel):
+    root: FlameTreeNode
 
 
 class PhysicalViewData(pydantic.BaseModel):

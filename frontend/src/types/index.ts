@@ -123,30 +123,17 @@ export type PhysicalViewData = {
   physicalView: Record<string, NodeData>;
 };
 
-export type FlameGraphNode = {
-  name: string;
-  value: number;
-  count?: number;
-  totalInParent?: Array<{
-    callerNodeId: string;
-    parentSpanId: string;
-    duration: number;
-    count: number;
-    startTime: number;
-  }>;
-  serviceName?: string;
+// New FlameTreeNode type matching the backend structure
+export type FlameTreeNode = {
+  spanId: string;
+  id: string;
+  startTime: number;
+  endTime: number;
+  children: FlameTreeNode[];
 };
 
 export type FlameGraphData = {
-  aggregated: FlameGraphNode[];
-  parentStartTimes: Array<{
-    calleeId: string;
-    startTimes: Array<{
-      callerId: string;
-      startTime: number;
-      parentSpanId: string;
-    }>;
-  }>;
+  root: FlameTreeNode;
 };
 
 export type GanttTask = {
