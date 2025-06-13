@@ -191,7 +191,7 @@ class DebuggerInfoEvent(pydantic.BaseModel):
 
 class BatchServicePhysicalStatsEvent(pydantic.BaseModel):
     flow_id: str
-    stats: list[ServicePhysicalStatsRecord]
+    stats: List[ServicePhysicalStatsRecord]
     timestamp: int
 
 

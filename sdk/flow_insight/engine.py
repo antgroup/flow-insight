@@ -378,7 +378,7 @@ class InsightEngine:
         else:
             raise ValueError(f"Unknown event type: {type(event)}")
 
-        asyncio.create_task(self._persist_storage.record_event(event))
+        await self._persist_storage.record_event(event)
 
     async def periodic_snapshot(self):
         while True:
@@ -563,7 +563,10 @@ class InsightEngine:
         flow_id = object_get.flow_id
         object_id = object_get.object_id
         timestamp = object_get.timestamp
-        object_event: ObjectEvent = await snapshot.get_object_events(flow_id, object_id)
+        try:
+            object_event: ObjectEvent = await snapshot.get_object_events(flow_id, object_id)
+        except:
+            return
         caller_service = object_event.sender_service
         caller_method = object_event.sender_method
         callee_service = (
