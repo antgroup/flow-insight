@@ -10,8 +10,8 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from flow_insight.api.base import APIInterface
 from flow_insight.engine import Breakpoint, DebugCommand, InsightEngine
-from flow_insight.storage.persist.base import StorageType as PersistStorageType
-from flow_insight.storage.persist.model import (
+from flow_insight.storage.snapshot.base import StorageType
+from flow_insight.storage.snapshot.model import (
     BatchNodePhysicalStatsEvent,
     BatchServicePhysicalStatsEvent,
     CallBeginEvent,
@@ -54,12 +54,14 @@ class FastAPIInsightServer(APIInterface):
     def __init__(
         self,
         snapshot_storage_type: StorageType = StorageType.MEMORY,
-        persist_storage_type: PersistStorageType = PersistStorageType.DISK,
-        **persist_storage_config,
+        snapshot_duration_s: int = 60,
+        storage_dir: str = "/tmp/flow_insight_snapshots",
     ):
         super().__init__()
         self.engine = InsightEngine(
-            snapshot_storage_type, persist_storage_type, **persist_storage_config
+            snapshot_storage_type=snapshot_storage_type,
+            snapshot_duration_s=snapshot_duration_s,
+            storage_dir=storage_dir,
         )
         self.app = FastAPI(title="Flow Insight API")
         self._setup_routes()
@@ -82,6 +84,10 @@ class FastAPIInsightServer(APIInterface):
         self.app.get("/get_context")(self.get_context)
         self.app.get("/get_resource_usage")(self.get_resource_usage)
 
+        # Snapshot routes
+        self.app.get("/list_snapshots")(self.list_snapshots)
+        self.app.post("/create_snapshot")(self.create_snapshot)
+
         # Prompt routes
         self.app.get("/get_prompt")(self.get_prompt)
         self.app.get("/get_flow_creation_time")(self.get_flow_creation_time)
@@ -94,7 +100,8 @@ class FastAPIInsightServer(APIInterface):
         config = uvicorn.Config(self.app, host=host, port=port, access_log=False)
         server = uvicorn.Server(config)
         logger.info(f"Insight FastAPI server running at http://{host}:{port}")
-        asyncio.create_task(self.engine.recover())
+        # Start periodic snapshot task
+        asyncio.create_task(self.engine.periodic_snapshot())
         await server.serve()
 
     async def _parse_request(self, request: Request) -> Dict[str, Any]:
@@ -149,7 +156,7 @@ class FastAPIInsightServer(APIInterface):
         filter_active = data.get("filter_active", "false") == "true"
 
         try:
-            snapshot = await self.engine.replay(flow_id, None)
+            snapshot = await self.engine.get_snapshot_by_label("latest")
             sessions = await self.engine.get_debug_sessions(
                 flow_id, service_name, instance_id, method_name, filter_active, snapshot
             )
@@ -173,7 +180,7 @@ class FastAPIInsightServer(APIInterface):
         span_id = data.get("span_id", "")
 
         try:
-            snapshot = await self.engine.replay(flow_id, None)
+            snapshot = await self.engine.get_snapshot_by_label("latest")
             breakpoints = await self.engine.get_breakpoints(flow_id, span_id, snapshot)
             return JSONResponse(
                 rest_response(
@@ -196,7 +203,7 @@ class FastAPIInsightServer(APIInterface):
         breakpoints_data = data.get("breakpoints", [])
 
         try:
-            snapshot = await self.engine.replay(flow_id, None)
+            snapshot = await self.engine.get_snapshot_by_label("latest")
             breakpoints = [
                 Breakpoint(line=bp["line"], source=bp["sourceFile"]) for bp in breakpoints_data
             ]
@@ -220,7 +227,7 @@ class FastAPIInsightServer(APIInterface):
         span_id = data.get("span_id", "")
 
         try:
-            snapshot = await self.engine.replay(flow_id, None)
+            snapshot = await self.engine.get_snapshot_by_label("latest")
             result = await self.engine.activate_debug_session(
                 flow_id, service_name, instance_id, method_name, span_id, snapshot
             )
@@ -298,7 +305,24 @@ class FastAPIInsightServer(APIInterface):
         end_time = data.get("end_time", None)
 
         try:
-            snapshot = await self.engine.replay(flow_id, end_time)
+            if end_time:
+                # Try to find a snapshot close to the requested time
+                snapshots = await self.engine.list_snapshots(flow_id)
+                best_snapshot = None
+                end_time_int = int(end_time)
+                
+                for snapshot_info in snapshots:
+                    if snapshot_info["timestamp"] <= end_time_int:
+                        best_snapshot = snapshot_info["label"]
+                        break
+                
+                if best_snapshot:
+                    snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
+                else:
+                    snapshot = await self.engine.get_snapshot_by_label("latest")
+            else:
+                snapshot = await self.engine.get_snapshot_by_label("latest")
+            
             graph_data = await self.engine.get_call_graph_data(flow_id, stack_mode, snapshot)
             return JSONResponse(
                 rest_response(
@@ -319,7 +343,24 @@ class FastAPIInsightServer(APIInterface):
         flow_id = data.get("flow_id", "")
         end_time = data.get("end_time", None)
 
-        snapshot = await self.engine.replay(flow_id, end_time)
+        if end_time:
+            # Try to find a snapshot close to the requested time
+            snapshots = await self.engine.list_snapshots(flow_id)
+            best_snapshot = None
+            end_time_int = int(end_time)
+            
+            for snapshot_info in snapshots:
+                if snapshot_info["timestamp"] <= end_time_int:
+                    best_snapshot = snapshot_info["label"]
+                    break
+            
+            if best_snapshot:
+                snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
+            else:
+                snapshot = await self.engine.get_snapshot_by_label("latest")
+        else:
+            snapshot = await self.engine.get_snapshot_by_label("latest")
+        
         flame_data = await self.engine.get_flame_graph_data(flow_id, snapshot)
         return JSONResponse(
             rest_response(
@@ -335,7 +376,24 @@ class FastAPIInsightServer(APIInterface):
         flow_id = data.get("flow_id", "")
         end_time = data.get("end_time", None)
 
-        snapshot = await self.engine.replay(flow_id, end_time)
+        if end_time:
+            # Try to find a snapshot close to the requested time
+            snapshots = await self.engine.list_snapshots(flow_id)
+            best_snapshot = None
+            end_time_int = int(end_time)
+            
+            for snapshot_info in snapshots:
+                if snapshot_info["timestamp"] <= end_time_int:
+                    best_snapshot = snapshot_info["label"]
+                    break
+            
+            if best_snapshot:
+                snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
+            else:
+                snapshot = await self.engine.get_snapshot_by_label("latest")
+        else:
+            snapshot = await self.engine.get_snapshot_by_label("latest")
+        
         physical_view_data = await self.engine.get_physical_view_data(flow_id, snapshot)
         return JSONResponse(
             rest_response(
@@ -352,7 +410,24 @@ class FastAPIInsightServer(APIInterface):
         end_time = data.get("end_time", None)
 
         try:
-            snapshot = await self.engine.replay(flow_id, end_time)
+            if end_time:
+                # Try to find a snapshot close to the requested time
+                snapshots = await self.engine.list_snapshots(flow_id)
+                best_snapshot = None
+                end_time_int = int(end_time)
+                
+                for snapshot_info in snapshots:
+                    if snapshot_info["timestamp"] <= end_time_int:
+                        best_snapshot = snapshot_info["label"]
+                        break
+                
+                if best_snapshot:
+                    snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
+                else:
+                    snapshot = await self.engine.get_snapshot_by_label("latest")
+            else:
+                snapshot = await self.engine.get_snapshot_by_label("latest")
+            
             context = await self.engine.get_context(flow_id, snapshot)
             return JSONResponse(
                 rest_response(
@@ -374,7 +449,24 @@ class FastAPIInsightServer(APIInterface):
         end_time = data.get("end_time", None)
 
         try:
-            snapshot = await self.engine.replay(flow_id, end_time)
+            if end_time:
+                # Try to find a snapshot close to the requested time
+                snapshots = await self.engine.list_snapshots(flow_id)
+                best_snapshot = None
+                end_time_int = int(end_time)
+                
+                for snapshot_info in snapshots:
+                    if snapshot_info["timestamp"] <= end_time_int:
+                        best_snapshot = snapshot_info["label"]
+                        break
+                
+                if best_snapshot:
+                    snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
+                else:
+                    snapshot = await self.engine.get_snapshot_by_label("latest")
+            else:
+                snapshot = await self.engine.get_snapshot_by_label("latest")
+            
             resource_usage = await self.engine.get_resource_usage(flow_id, snapshot)
             return JSONResponse(
                 rest_response(
@@ -394,7 +486,7 @@ class FastAPIInsightServer(APIInterface):
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", "")
         try:
-            snapshot = await self.engine.replay(flow_id, None)
+            snapshot = await self.engine.get_snapshot_by_label("latest")
             prompt = await self.engine.get_prompt(snapshot)
             return JSONResponse(
                 rest_response(result=True, msg="Prompt retrieved successfully.", data=prompt)
@@ -420,3 +512,46 @@ class FastAPIInsightServer(APIInterface):
     async def ping(self, request: Request) -> JSONResponse:
         """Ping the server."""
         return JSONResponse(rest_response(result=True, msg="Pong"))
+
+    async def list_snapshots(self, request: Request) -> JSONResponse:
+        """List all snapshots for a flow."""
+        data = await self._parse_request(request)
+        flow_id = data.get("flow_id", None)
+        
+        try:
+            snapshots = await self.engine.list_snapshots(flow_id)
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Snapshots retrieved successfully.",
+                    data=snapshots,
+                )
+            )
+        except Exception as e:
+            logger.error(f"Error retrieving snapshots: {str(e)}")
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error retrieving snapshots: {str(e)}")
+            )
+
+    async def create_snapshot(self, request: Request) -> JSONResponse:
+        """Create a new snapshot for a flow."""
+        data = await self._parse_request(request)
+        flow_id = data.get("flow_id", "")
+        label = data.get("label", None)
+        
+        try:
+            snapshot_label = await self.engine.create_snapshot(flow_id, label)
+            return JSONResponse(
+                rest_response(
+                    result=True,
+                    msg="Snapshot created successfully.",
+                    data={"label": snapshot_label},
+                )
+            )
+        except Exception as e:
+            logger.error(f"Error creating snapshot: {str(e)}")
+            return JSONResponse(
+                rest_response(result=False, msg=f"Error creating snapshot: {str(e)}")
+            )
+
+

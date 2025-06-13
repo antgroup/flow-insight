@@ -1,38 +1,37 @@
 from collections import defaultdict
 from typing import Callable, List, Optional
 
-from flow_insight.storage.persist.model import (
-    BatchNodePhysicalStats,
-    NodePhysicalStats,
-    ServicePhysicalStats,
-    ServicePhysicalStatsRecord,
-)
 from flow_insight.storage.snapshot.base import StorageType
 from flow_insight.storage.snapshot.memory_backend import MemoryStorageBackend
 from flow_insight.storage.snapshot.model import (
+    BatchNodePhysicalStats,
     Breakpoint,
     CallerInfo,
     Context,
     DebuggerInfo,
     Method,
+    NodePhysicalStats,
     ObjectEvent,
     ObjectInfo,
     ResourceUsage,
     Service,
+    ServicePhysicalStats,
+    ServicePhysicalStatsRecord,
 )
 
 
 class SnapshotStorage:
-    def __init__(self, storage_backend: StorageType):
+    def __init__(self, storage_backend: StorageType, storage_dir: str = None):
         super().__init__()
         if storage_backend == StorageType.MEMORY:
-            self._storage = MemoryStorageBackend()
+            self._storage = MemoryStorageBackend(storage_dir)
         else:
             raise ValueError(f"Unsupported storage backend: {storage_backend}")
         self._storage["call_graph"] = defaultdict(
             lambda: defaultdict(lambda: {"count": 0, "start_time": 0})
         )
         self._storage_backend = storage_backend
+        self._storage_dir = storage_dir
         self._storage["services"] = defaultdict(set)
         self._storage["methods"] = defaultdict(lambda: defaultdict(list))
         self._storage["functions"] = defaultdict(set)
@@ -57,16 +56,16 @@ class SnapshotStorage:
     def restore_snapshots(self):
         snapshots = {}
         for label, snapshot in self._storage.restore_snapshots().items():
-            snapshot_storage = SnapshotStorage(self._storage_backend)
+            snapshot_storage = SnapshotStorage(self._storage_backend, self._storage_dir)
             snapshot_storage._storage = snapshot
             snapshots[label] = snapshot_storage
         return snapshots
 
-    def store_snapshot(self, label: str):
-        self._storage.store_snapshot(label)
+    def store_snapshot(self, label: str, flow_id: str = None):
+        self._storage.store_snapshot(label, flow_id)
 
     def take_snapshot(self):
-        snapshot = SnapshotStorage(self._storage_backend)
+        snapshot = SnapshotStorage(self._storage_backend, self._storage_dir)
         snapshot._storage = self._storage.take_snapshot()
         return snapshot
 

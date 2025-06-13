@@ -75,18 +75,9 @@ function App() {
 ```python
 from flow_insight import InsightClient
 from flow_insight import CallBeginEvent, CallEndEvent
-from flow_insight import PersistStorageType
 
-# Initialize the client with server URL and storage type
-client = InsightClient(server_url="http://your-insight-server", 
-                       storage_type=PersistStorageType.DISK)
-
-# or start with influxdb backend
-client = InsightClient(server_url="http://influxdb_url", 
-                       storage_type=PersistStorageType.INFLUXDB,
-                       username="",
-                       password="",
-                       session_id="")
+# Initialize the client with server URL
+client = InsightClient(server_url="http://your-insight-server")
 
 # Emit a call begin event
 call_begin_event = CallBeginEvent(
@@ -236,9 +227,10 @@ The `InsightClient` provides both synchronous and asynchronous methods:
 
 ### Storage Options
 
-The SDK supports multiple storage backends:
-- [x] Disk storage for development
-- [x] InfluxDB based Persistent storage for production
+The system uses snapshot-based storage:
+- [x] In-memory snapshots with disk persistence
+- [x] Automatic snapshot creation at configurable intervals
+- [x] Time-travel debugging through snapshot selection
 
 ## 🔗 Integrations
 

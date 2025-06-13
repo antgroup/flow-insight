@@ -5,43 +5,39 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from flow_insight.dap.client import DAPClient
-from flow_insight.storage.persist.base import StorageType as PersistStorageType
-from flow_insight.storage.persist.model import (
-    BatchNodePhysicalStatsEvent,
-    BatchServicePhysicalStatsEvent,
-    CallBeginEvent,
-    CallEndEvent,
-    CallSubmitEvent,
-    ContextEvent,
-    DebuggerInfoEvent,
-    MetaInfoRegisterEvent,
-    ObjectGetEvent,
-    ObjectPutEvent,
-    ResourceUsageEvent,
-    ServicePhysicalStatsRecord,
-    internal_flow_id,
-)
-from flow_insight.storage.persist.persist import PersistStorage
 from flow_insight.storage.snapshot.base import StorageType
 from flow_insight.storage.snapshot.model import (
+    BatchNodePhysicalStatsEvent,
+    BatchServicePhysicalStatsEvent,
     Breakpoint,
     CallerInfo,
+    CallBeginEvent,
+    CallEndEvent,
     CallFlow,
     CallGraphData,
+    CallSubmitEvent,
     Context,
+    ContextEvent,
     DataFlow,
     DebugCommand,
     DebuggerInfo,
+    DebuggerInfoEvent,
     DebugSession,
     FlameTree,
     FlameTreeNode,
+    internal_flow_id,
+    MetaInfoRegisterEvent,
     Method,
     MethodInfo,
     ObjectEvent,
+    ObjectGetEvent,
     ObjectInfo,
+    ObjectPutEvent,
     PhysicalViewData,
     ResourceUsage,
+    ResourceUsageEvent,
     Service,
+    ServicePhysicalStatsRecord,
 )
 from flow_insight.storage.snapshot.snapshot import SnapshotStorage
 
@@ -49,19 +45,17 @@ from flow_insight.storage.snapshot.snapshot import SnapshotStorage
 class InsightEngine:
     def __init__(
         self,
-        snapshot_storage_type: StorageType,
-        persist_storage_type: PersistStorageType,
-        snapshot_duration_s: int = 300,
-        **persist_storage_config,
+        snapshot_storage_type: StorageType = StorageType.MEMORY,
+        snapshot_duration_s: int = 600,
+        storage_dir: str = "/tmp/flow_insight_snapshots",
     ):
-        self._persist_storage = PersistStorage(persist_storage_type, **persist_storage_config)
-        self._persist_storage_type = persist_storage_type
         self._snapshot_storage_type = snapshot_storage_type
+        self._storage_dir = storage_dir
         self._debug_sessions = defaultdict(dict)
-        self._snapshots = {"latest": SnapshotStorage(snapshot_storage_type)}
-        self._recover_lock = asyncio.Lock()
+        self._snapshots = {"latest": SnapshotStorage(snapshot_storage_type, storage_dir)}
         self._snapshot_duration_s = snapshot_duration_s
         self._snapshot_lock = defaultdict(asyncio.Lock)
+        self._flow_creation_times = {}  # Track flow creation times in memory
 
     async def get_debug_sessions(
         self,
@@ -201,6 +195,46 @@ class InsightEngine:
         for service, stats in service_physical_stats.items():
             services_stats.append(ServicePhysicalStatsRecord(service=service, stats=stats))
         return PhysicalViewData(services=services_stats, nodes=node_physical_stats)
+
+    # Snapshot management methods
+    async def list_snapshots(self, flow_id: str = None) -> List[Dict]:
+        """List all snapshots, optionally filtered by flow_id"""
+        latest_storage = self._snapshots["latest"]
+        return latest_storage._storage.list_snapshots(flow_id)
+
+    async def get_snapshot_by_label(self, label: str) -> Optional[SnapshotStorage]:
+        """Get a specific snapshot by label"""
+        if label == "latest":
+            return self._snapshots["latest"]
+        
+        if label in self._snapshots:
+            return self._snapshots[label]
+        
+        # Try to restore from stored snapshots
+        latest_storage = self._snapshots["latest"]
+        backend_snapshot = latest_storage._storage.get_snapshot(label)
+        if backend_snapshot:
+            snapshot = SnapshotStorage(self._snapshot_storage_type, self._storage_dir)
+            snapshot._storage = backend_snapshot
+            self._snapshots[label] = snapshot
+            return snapshot
+        
+        return None
+
+    async def create_snapshot(self, flow_id: str, label: str = None) -> str:
+        """Create a new snapshot for a flow"""
+        if label is None:
+            timestamp = int(time.time() * 1000)
+            label = f"{flow_id}:{timestamp}"
+        
+        latest_storage = self._snapshots["latest"]
+        latest_storage._storage.store_snapshot(label, flow_id)
+        
+        return label
+
+
+
+
 
     async def get_call_graph_data(
         self, flow_id, stack_mode=False, snapshot: Optional[SnapshotStorage] = None
@@ -350,57 +384,60 @@ class InsightEngine:
         return filtered_graph, reachable_methods, reachable_services, reachable_funcs
 
     async def get_flow_creation_time(self, flow_id: str):
-        return await self._persist_storage.get_flow_creation_time(flow_id)
+        """Get flow creation time from memory"""
+        return self._flow_creation_times.get(flow_id, int(time.time() * 1000))
 
     async def record_event(self, event: any):
-        if isinstance(event, CallSubmitEvent):
-            await self.emit_call_submit(event)
-        elif isinstance(event, CallBeginEvent):
-            await self.emit_call_begin(event)
-        elif isinstance(event, CallEndEvent):
-            await self.emit_call_end(event)
-        elif isinstance(event, ObjectGetEvent):
-            await self.emit_object_get(event)
-        elif isinstance(event, ObjectPutEvent):
-            await self.emit_object_put(event)
-        elif isinstance(event, ContextEvent):
-            await self.emit_context(event)
-        elif isinstance(event, ResourceUsageEvent):
-            await self.emit_resource_usage(event)
-        elif isinstance(event, DebuggerInfoEvent):
-            await self.emit_debugger_info(event)
-        elif isinstance(event, BatchServicePhysicalStatsEvent):
-            await self.emit_service_physical_stats(event)
-        elif isinstance(event, BatchNodePhysicalStatsEvent):
-            await self.emit_node_physical_stats(event)
-        elif isinstance(event, MetaInfoRegisterEvent):
-            await self.emit_meta_info(event)
-        else:
-            raise ValueError(f"Unknown event type: {type(event)}")
+        """Record an event directly to the latest snapshot"""
+        # Track flow creation time
+        flow_id = getattr(event, 'flow_id', None)
+        if flow_id and flow_id not in self._flow_creation_times:
+            self._flow_creation_times[flow_id] = int(time.time() * 1000)
 
-        await self._persist_storage.record_event(event)
+        # Route events to appropriate handlers
+        if hasattr(event, 'flow_id'):
+            if isinstance(event, CallSubmitEvent):
+                await self.emit_call_submit(event)
+            elif isinstance(event, CallBeginEvent):
+                await self.emit_call_begin(event)
+            elif isinstance(event, CallEndEvent):
+                await self.emit_call_end(event)
+            elif isinstance(event, ObjectGetEvent):
+                await self.emit_object_get(event)
+            elif isinstance(event, ObjectPutEvent):
+                await self.emit_object_put(event)
+            elif isinstance(event, ContextEvent):
+                await self.emit_context(event)
+            elif isinstance(event, ResourceUsageEvent):
+                await self.emit_resource_usage(event)
+            elif isinstance(event, DebuggerInfoEvent):
+                await self.emit_debugger_info(event)
+            elif isinstance(event, BatchServicePhysicalStatsEvent):
+                await self.emit_service_physical_stats(event)
+            elif isinstance(event, BatchNodePhysicalStatsEvent):
+                await self.emit_node_physical_stats(event)
+            elif isinstance(event, MetaInfoRegisterEvent):
+                await self.emit_meta_info(event)
+            else:
+                print(f"Unknown event type: {type(event)}")
 
     async def periodic_snapshot(self):
+        """Periodically create snapshots for all active flows"""
         while True:
-            for flow_id in await self._persist_storage.get_flow_ids():
+            for flow_id in list(self._flow_creation_times.keys()):
                 await self.try_take_snapshot(flow_id)
-            await asyncio.sleep(600)
+            await asyncio.sleep(self._snapshot_duration_s)
 
     async def try_take_snapshot(self, flow_id: str):
+        """Take a snapshot if enough time has passed since the last one"""
         async with self._snapshot_lock[flow_id]:
             current = int(time.time() * 1000)
             latest_timestamp = -1
-            keys = sorted(
-                map(
-                    lambda x: math.inf if x == "latest" else int(x.split(":")[-1]),
-                    filter(lambda x: x.startswith(flow_id), self._snapshots.keys()),
-                )
-            )
-            for key in keys:
-                if key <= current:
-                    latest_timestamp = key
-                else:
-                    break
+            
+            # Find the most recent snapshot for this flow
+            snapshots = await self.list_snapshots(flow_id)
+            if snapshots:
+                latest_timestamp = snapshots[0]["timestamp"]
 
             if (
                 latest_timestamp > 0
@@ -408,99 +445,9 @@ class InsightEngine:
             ):
                 return
 
-            snapshot = await self.replay(flow_id, str(current))
-            if f"{flow_id}:{current}" not in self._snapshots:
-                snapshot.store_snapshot(current)
-                self._snapshots[f"{flow_id}:{current}"] = snapshot
-                print(f"Snapshot taken for flow {flow_id} at {current}")
-
-    async def recover(self):
-        latest_snapshot = self._snapshots["latest"]
-        events = await self._persist_storage.query_all_events()
-        await self._do_replay(events, latest_snapshot)
-
-        print(f"Recovered {len(events)} events")
-
-        for label, snapshot in latest_snapshot.restore_snapshots().items():
-            self._snapshots[label] = snapshot
-
-        print(f"Recovered {len(latest_snapshot.restore_snapshots())} snapshots")
-
-    async def replay(self, flow_id: str, end_time: Optional[str] = None):
-        if end_time is None and self._persist_storage_type == PersistStorageType.INFLUXDB:
-            end_time = int(time.time() * 1000)
-        elif end_time is None:
-            return None
-        end_time = int(end_time)
-        creation_time = await self._persist_storage.get_flow_creation_time(flow_id)
-        if creation_time == -1:
-            return None
-        if end_time < creation_time:
-            return SnapshotStorage(self._snapshot_storage_type)
-        async with self._snapshot_lock[flow_id]:
-            latest_snapshot = None
-            latest_timestamp = -1
-            keys = sorted(
-                map(
-                    lambda x: math.inf if x == "latest" else int(x.split(":")[-1]),
-                    filter(lambda x: x.startswith(flow_id), self._snapshots.keys()),
-                )
-            )
-            for key in keys:
-                if key <= end_time:
-                    latest_timestamp = key
-                else:
-                    break
-
-            if latest_timestamp == -1:
-                latest_snapshot = SnapshotStorage(self._snapshot_storage_type)
-            else:
-                latest_snapshot = self._snapshots[
-                    f"{flow_id}:{str(latest_timestamp)}"
-                ].take_snapshot()
-
-            events = await self._persist_storage.query_events(flow_id, latest_timestamp, end_time)
-            events.extend(
-                await self._persist_storage.query_events(
-                    internal_flow_id, latest_timestamp, end_time
-                )
-            )
-
-            await self._do_replay(events, latest_snapshot)
-
-            if end_time - latest_timestamp > 300 * 1000:
-                latest_snapshot.store_snapshot(end_time)
-                self._snapshots[f"{flow_id}:{end_time}"] = latest_snapshot
-                print(f"Snapshot taken for flow {flow_id} at {end_time}")
-
-            return latest_snapshot
-
-    async def _do_replay(self, events: List[Any], snapshot: SnapshotStorage):
-        for event in events:
-            if isinstance(event, CallSubmitEvent):
-                await self.emit_call_submit(event, snapshot)
-            elif isinstance(event, CallBeginEvent):
-                await self.emit_call_begin(event, snapshot)
-            elif isinstance(event, CallEndEvent):
-                await self.emit_call_end(event, snapshot)
-            elif isinstance(event, ObjectGetEvent):
-                await self.emit_object_get(event, snapshot)
-            elif isinstance(event, ObjectPutEvent):
-                await self.emit_object_put(event, snapshot)
-            elif isinstance(event, ContextEvent):
-                await self.emit_context(event, snapshot)
-            elif isinstance(event, ResourceUsageEvent):
-                await self.emit_resource_usage(event, snapshot)
-            elif isinstance(event, DebuggerInfoEvent):
-                await self.emit_debugger_info(event, snapshot)
-            elif isinstance(event, BatchServicePhysicalStatsEvent):
-                await self.emit_service_physical_stats(event, snapshot)
-            elif isinstance(event, BatchNodePhysicalStatsEvent):
-                await self.emit_node_physical_stats(event, snapshot)
-            elif isinstance(event, MetaInfoRegisterEvent):
-                await self.emit_meta_info(event, snapshot)
-            else:
-                raise ValueError(f"Unknown event type: {type(event)}")
+            # Create a new snapshot
+            await self.create_snapshot(flow_id)
+            print(f"Snapshot taken for flow {flow_id} at {current}")
 
     async def emit_call_submit(
         self, call_submit: CallSubmitEvent, snapshot: Optional[SnapshotStorage] = None

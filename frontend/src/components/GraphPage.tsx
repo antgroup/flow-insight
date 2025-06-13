@@ -97,8 +97,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const [rightDrawerOpen, setRightDrawerOpen] = useState(true);
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
 
-  // Replace timelineRange with a single startTimestamp
-  const [startTimestamp, setStartTimestamp] = useState<number>(Date.now() - 3600000);
+  // Snapshot-based time travel
+  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [selectedSnapshot, setSelectedSnapshot] = useState<string>('latest');
   const [currentTimestamp, setCurrentTimestamp] = useState<number>(Date.now());
   const [isLatestTime, setIsLatestTime] = useState<boolean>(true);
 
@@ -118,36 +119,39 @@ const GraphPage: React.FC<GraphPageProps> = ({
   // Time selector state
   const [timeMenuAnchorEl, setTimeMenuAnchorEl] = useState<null | HTMLElement>(null);
   const timeMenuOpen = Boolean(timeMenuAnchorEl);
-  const [customTimeValue, setCustomTimeValue] = useState<string>('');
-  const [customTimeUnit, setCustomTimeUnit] = useState<string>('m');
 
-  // Predefined time ranges
-  const timeRangeOptions = [
-    { label: 'Last 10 seconds', value: 10 * 1000 },
-    { label: 'Last 30 seconds', value: 30 * 1000 },
-    { label: 'Last 1 minutes', value: 1 * 60 * 1000 },
-    { label: 'Last 5 minutes', value: 5 * 60 * 1000 },
-    { label: 'Last 15 minutes', value: 15 * 60 * 1000 },
-    { label: 'Last 30 minutes', value: 30 * 60 * 1000 },
-    { label: 'Last 1 hour', value: 60 * 60 * 1000 },
-    { label: 'Last 3 hours', value: 3 * 60 * 60 * 1000 },
-    { label: 'Last 6 hours', value: 6 * 60 * 60 * 1000 },
-    { label: 'Last 12 hours', value: 12 * 60 * 60 * 1000 },
-    { label: 'Last 24 hours', value: 24 * 60 * 60 * 1000 },
-  ];
+
+  const fetchSnapshots = useCallback(
+    async (flowId?: string) => {
+      if (!flowId) return;
+
+      try {
+        const snapshotList = await apiService.listSnapshots(flowId);
+        setSnapshots(snapshotList);
+      } catch (err) {
+        console.error('Failed to fetch snapshots:', err);
+      }
+    },
+    [apiService]
+  );
 
   const fetchGraphData = useCallback(
-    async (id?: string, stackMode?: boolean, isLatestTime?: boolean, timestamp?: number) => {
+    async (id?: string, stackMode?: boolean, snapshot?: string) => {
       if (!id) {
         return;
       }
 
       try {
-        const graphData = await apiService.getGraphData(
-          id,
-          stackMode,
-          isLatestTime ? undefined : timestamp
-        );
+        // Convert snapshot label to timestamp
+        let timestamp: number | undefined;
+        if (snapshot === 'latest' || !snapshot) {
+          timestamp = undefined;
+        } else {
+          const snapshotObj = snapshots.find(s => s.label === snapshot);
+          timestamp = snapshotObj ? snapshotObj.timestamp : undefined;
+        }
+
+        const graphData = await apiService.getGraphData(id, stackMode, timestamp);
 
         if (graphData) {
           if (stackMode) {
@@ -161,7 +165,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         setError(err instanceof Error ? err.message : 'Failed to fetch graph data');
       }
     },
-    [apiService]
+    [apiService, snapshots]
   );
 
   // Update currentFlowId when route FlowId changes
@@ -171,7 +175,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
     }
   }, [routeFlowId]);
 
-  // Fetch flow creation time and calculate duration
+  // Fetch flow creation time and initial snapshots when flowId changes
   useEffect(() => {
     if (currentFlowId) {
       (async () => {
@@ -179,24 +183,32 @@ const GraphPage: React.FC<GraphPageProps> = ({
           // Get flow creation time from API
           const creationTime = await apiService.getFlowCreationTime(currentFlowId);
           const now = Date.now();
-          // Update start timestamp with the flow creation time
-          setStartTimestamp(creationTime);
-          setCurrentTimestamp(now);
+
+          // Only set timestamp to now if we're currently on latest, preserve existing selection
+          if (selectedSnapshot === 'latest') {
+            setCurrentTimestamp(now);
+          }
+
           // Calculate flow duration
           setFlowDuration(now - creationTime);
+
+          // Fetch snapshots for this flow only if we don't have any
+          if (snapshots.length === 0) {
+            await fetchSnapshots(currentFlowId);
+          }
         } catch (err) {
-          console.error('Failed to fetch flow creation time:', err);
+          console.error('Failed to fetch flow creation time or snapshots:', err);
         }
       })();
     }
   }, [currentFlowId, apiService]);
 
-  // Update the current timestamp periodically if auto-refresh is enabled
+  // Update the current timestamp periodically if auto-refresh is enabled and latest snapshot is selected
   useEffect(() => {
-    if (autoRefresh) {
+    if (autoRefresh && selectedSnapshot === 'latest') {
       const intervalId = setInterval(() => {
         const now = Date.now();
-        // When auto-refresh is enabled, always update the timestamp to the latest
+        // Only update timestamp when auto-refresh is enabled AND latest snapshot is selected
         setCurrentTimestamp(now);
         // Ensure isLatestTime remains true during auto-refresh
         setIsLatestTime(true);
@@ -206,7 +218,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         clearInterval(intervalId);
       };
     }
-  }, [autoRefresh]);
+  }, [autoRefresh, selectedSnapshot]);
 
   // Initial data fetch
   useEffect(() => {
@@ -229,15 +241,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
     }
   }, [currentFlowId, fetchGraphData, apiService]);
 
-  // eslint-disable-next-line
   const fetchDatas = async (
-    isLatest?: boolean,
-    timestamp?: number,
+    snapshot?: string,
     showLoading = true,
     viewType?: string
   ) => {
-    const useLatestTime = isLatest !== undefined ? isLatest : isLatestTime;
-    const useTimestamp = timestamp !== undefined ? timestamp : currentTimestamp;
+    const useSnapshot = snapshot !== undefined ? snapshot : selectedSnapshot;
     const targetViewType = viewType || currentViewType;
 
     try {
@@ -246,18 +255,23 @@ const GraphPage: React.FC<GraphPageProps> = ({
       }
 
       if (targetViewType === 'call_stack') {
-        await fetchGraphData(currentFlowId, true, useLatestTime, useTimestamp);
+        await fetchGraphData(currentFlowId, true, useSnapshot);
       }
       if (targetViewType === 'logical') {
-        await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
+        await fetchGraphData(currentFlowId, false, useSnapshot);
       }
       if (targetViewType === 'physical') {
-        await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
+        await fetchGraphData(currentFlowId, false, useSnapshot);
         try {
-          const data = await apiService.getPhysicalViewData(
-            currentFlowId!,
-            useLatestTime ? undefined : useTimestamp
-          );
+          // Convert snapshot label to timestamp
+          let timestamp: number | undefined;
+          if (useSnapshot === 'latest' || !useSnapshot) {
+            timestamp = undefined;
+          } else {
+            const snapshotObj = snapshots.find(s => s.label === useSnapshot);
+            timestamp = snapshotObj ? snapshotObj.timestamp : undefined;
+          }
+          const data = await apiService.getPhysicalViewData(currentFlowId!, timestamp);
           setPhysicalViewData(data);
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch physical view data');
@@ -268,17 +282,19 @@ const GraphPage: React.FC<GraphPageProps> = ({
         targetViewType === 'gantt' ||
         targetViewType === 'analysis'
       ) {
-        await fetchGraphData(currentFlowId, false, useLatestTime, useTimestamp);
+        await fetchGraphData(currentFlowId, false, useSnapshot);
         try {
-          const data = await apiService.getPhysicalViewData(
-            currentFlowId!,
-            useLatestTime ? undefined : useTimestamp
-          );
+          // Convert snapshot label to timestamp
+          let timestamp: number | undefined;
+          if (useSnapshot === 'latest' || !useSnapshot) {
+            timestamp = undefined;
+          } else {
+            const snapshotObj = snapshots.find(s => s.label === useSnapshot);
+            timestamp = snapshotObj ? snapshotObj.timestamp : undefined;
+          }
+          const data = await apiService.getPhysicalViewData(currentFlowId!, timestamp);
           setPhysicalViewData(data);
-          const flameData = await apiService.getFlameGraphData(
-            currentFlowId!,
-            useLatestTime ? undefined : useTimestamp
-          );
+          const flameData = await apiService.getFlameGraphData(currentFlowId!, timestamp);
           setFlameData(flameData);
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch view data');
@@ -292,11 +308,11 @@ const GraphPage: React.FC<GraphPageProps> = ({
       }
     }
   };
-  // Auto-refresh effect for call stack view
+  // Auto-refresh effect for call stack view - only refresh when latest snapshot is selected
   useEffect(() => {
-    if (autoRefresh) {
+    if (autoRefresh && selectedSnapshot === 'latest') {
       const intervalId = setInterval(async () => {
-        await fetchDatas(undefined, undefined, false);
+        await fetchDatas('latest', false);
       }, 2000);
 
       autoRefreshIntervalRef.current = intervalId;
@@ -312,7 +328,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
       autoRefreshIntervalRef.current = null;
     }
     // eslint-disable-next-line
-  }, [autoRefresh, currentFlowId, fetchGraphData, currentViewType]);
+  }, [autoRefresh, selectedSnapshot, currentFlowId, fetchGraphData, currentViewType]);
 
   const handleElementClick = useCallback((data: ElementData, skip_zoom = false) => {
     setInfoCardData({ ...data });
@@ -326,12 +342,13 @@ const GraphPage: React.FC<GraphPageProps> = ({
   }, []);
 
   const handleUpdate = useCallback(async () => {
-    // Always get latest data and update timeline when manually updating
+    // Always get latest data when manually updating
     const now = Date.now();
     setCurrentTimestamp(now);
     setIsLatestTime(true);
+    setSelectedSnapshot('latest');
 
-    await fetchDatas(true, undefined, false);
+    await fetchDatas('latest', false);
   }, [fetchDatas]);
 
   const handleSearchChange = useCallback((term: string) => {
@@ -343,75 +360,164 @@ const GraphPage: React.FC<GraphPageProps> = ({
       // First change to the new view type
       setCurrentViewType(viewType);
 
-      // Then fetch data for this view type with the current time settings, passing the viewType explicitly
-      await fetchDatas(isLatestTime, currentTimestamp, true, viewType);
+      // Then fetch data for this view type with the current snapshot, passing the viewType explicitly
+      await fetchDatas(selectedSnapshot, true, viewType);
     },
-    [fetchDatas, isLatestTime, currentTimestamp]
+    [fetchDatas, selectedSnapshot]
   );
 
-  // Handle time menu open
+  // Handle snapshot menu open
   const handleTimeMenuClick = (event: React.MouseEvent<HTMLElement>) => {
     setTimeMenuAnchorEl(event.currentTarget);
 
-    // Call get_flow_creation_time each time time range is opened
-    if (currentFlowId) {
-      (async () => {
-        try {
-          // Get flow creation time from API
-          const creationTime = await apiService.getFlowCreationTime(currentFlowId);
-          const now = Date.now();
-          // Update start timestamp with the flow creation time
-          setStartTimestamp(creationTime);
-          // Calculate flow duration
-          setFlowDuration(now - creationTime);
-        } catch (err) {
-          console.error('Failed to fetch flow creation time:', err);
-        }
-      })();
+    // Only refresh snapshots if we don't have any yet, don't force refresh to avoid state reset
+    if (currentFlowId && snapshots.length === 0) {
+      fetchSnapshots(currentFlowId);
     }
   };
 
-  // Handle time menu close
+  // Handle snapshot menu close
   const handleTimeMenuClose = () => {
     setTimeMenuAnchorEl(null);
   };
 
-  // Handle time range selection
-  const handleTimeRangeSelect = (rangeMs: number) => {
-    const now = Date.now();
-    // Only calculate a new start point, don't change the current timestamp
-    // which remains the endpoint for the time range
-    const newStartTimestamp = now - rangeMs;
+  // Handle snapshot selection
+  const handleSnapshotSelect = (snapshotLabel: string) => {
+    setSelectedSnapshot(snapshotLabel);
+    setIsLatestTime(snapshotLabel === 'latest');
 
-    // Make sure we don't go earlier than the flow start time
-    if (newStartTimestamp < startTimestamp) {
-      // Keep using the original start timestamp
-      // No change needed
+    // Update current timestamp based on selected snapshot
+    if (snapshotLabel === 'latest') {
+      setCurrentTimestamp(Date.now());
     } else {
-      setStartTimestamp(newStartTimestamp);
+      const snapshot = snapshots.find(s => s.label === snapshotLabel);
+      if (snapshot) {
+        setCurrentTimestamp(snapshot.timestamp);
+      }
     }
 
-    applyTimePoint(newStartTimestamp);
+    // Fetch data without showing loading indicators to prevent page blinking
+    fetchDatas(snapshotLabel, false);
     handleTimeMenuClose();
+  };
+
+  // Handle quick time selection (e.g., "5m ago", "1h ago")
+  const handleQuickTimeSelect = (minutesAgo: number) => {
+    const targetTime = Date.now() - (minutesAgo * 60 * 1000);
+    selectClosestSnapshot(targetTime);
+  };
+
+  // Handle custom time selection from datetime input
+  const handleCustomTimeSelect = (dateTimeValue: string) => {
+    if (dateTimeValue) {
+      const targetTime = new Date(dateTimeValue).getTime();
+      selectClosestSnapshot(targetTime);
+    }
+  };
+
+  // Find and select the closest snapshot to a target time
+  const selectClosestSnapshot = (targetTime: number) => {
+    if (snapshots.length === 0) {
+      return;
+    }
+
+    // Find the snapshot closest to the target time
+    let closestSnapshot = snapshots[0];
+    let minDiff = Math.abs(targetTime - snapshots[0].timestamp);
+
+    for (const snapshot of snapshots) {
+      const diff = Math.abs(targetTime - snapshot.timestamp);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestSnapshot = snapshot;
+      }
+    }
+
+    // If target time is very recent (within 30 seconds), use latest
+    if (Math.abs(targetTime - Date.now()) < 30000) {
+      handleSnapshotSelect('latest');
+    } else {
+      handleSnapshotSelect(closestSnapshot.label);
+    }
+  };
+
+  // Navigation between snapshots
+  const handlePreviousSnapshot = () => {
+    if (selectedSnapshot === 'latest' && snapshots.length > 0) {
+      handleSnapshotSelect(snapshots[0].label);
+    } else {
+      const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
+      if (currentIndex > 0) {
+        handleSnapshotSelect(snapshots[currentIndex - 1].label);
+      }
+    }
+  };
+
+  const handleNextSnapshot = () => {
+    const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
+    if (currentIndex >= 0 && currentIndex < snapshots.length - 1) {
+      handleSnapshotSelect(snapshots[currentIndex + 1].label);
+    } else if (currentIndex === snapshots.length - 1) {
+      handleSnapshotSelect('latest');
+    }
+  };
+
+  const canGoPreviousSnapshot = () => {
+    if (selectedSnapshot === 'latest') {
+      return snapshots.length > 0;
+    }
+    const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
+    return currentIndex > 0;
+  };
+
+  const canGoNextSnapshot = () => {
+    if (selectedSnapshot === 'latest') {
+      return false;
+    }
+    const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
+    return currentIndex >= 0 && currentIndex < snapshots.length - 1;
+  };
+
+  const getCurrentSnapshotIndex = () => {
+    if (selectedSnapshot === 'latest') {
+      return snapshots.length + 1;
+    }
+    const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
+    return currentIndex >= 0 ? snapshots.length - currentIndex : 1;
+  };
+
+  // Format timestamp for datetime-local input
+  const formatDateTimeForInput = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   const handleAutoRefreshChange = useCallback((enabled: boolean) => {
     setAutoRefresh(enabled);
 
-    // When enabling auto-refresh, set to latest time
+    // When enabling auto-refresh, automatically switch to latest snapshot
     if (enabled) {
       const now = Date.now();
       setCurrentTimestamp(now);
       setIsLatestTime(true);
+      setSelectedSnapshot('latest');
+      // Fetch latest data
+      fetchDatas('latest', false);
     }
-  }, []);
+  }, [fetchDatas]);
 
   // Handle setting current time to now
   const handleSetToNow = () => {
     const now = Date.now();
     setCurrentTimestamp(now);
     setIsLatestTime(true);
-    fetchDatas(true);
+    setSelectedSnapshot('latest');
+    fetchDatas('latest');
   };
 
   // Toggle drawer states
@@ -636,64 +742,16 @@ const GraphPage: React.FC<GraphPageProps> = ({
     }
   };
 
-  // Apply selected timestamp for the end_time parameter
+  // Apply selected timestamp - kept for compatibility but now uses snapshots
   const applyTimePoint = (timestamp: number) => {
     setCurrentTimestamp(timestamp);
-    setIsLatestTime(timestamp === Date.now());
-    fetchDatas(timestamp === Date.now(), timestamp);
+    const isLatest = timestamp === Date.now();
+    setIsLatestTime(isLatest);
+    setSelectedSnapshot(isLatest ? 'latest' : 'latest'); // For now, always use latest
+    fetchDatas('latest');
   };
 
-  // Handle custom time input change
-  const handleCustomTimeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomTimeValue(event.target.value);
-  };
 
-  // Handle custom time unit change
-  const handleCustomTimeUnitChange = (unit: string) => {
-    setCustomTimeUnit(unit);
-  };
-
-  // Handle custom time submission
-  const handleCustomTimeSubmit = () => {
-    const value = parseInt(customTimeValue, 10);
-    if (isNaN(value) || value <= 0) {
-      return;
-    }
-
-    let milliseconds = 0;
-    switch (customTimeUnit) {
-      case 's':
-        milliseconds = value * 1000;
-        break;
-      case 'm':
-        milliseconds = value * 60 * 1000;
-        break;
-      case 'h':
-        milliseconds = value * 60 * 60 * 1000;
-        break;
-      case 'd':
-        milliseconds = value * 24 * 60 * 60 * 1000;
-        break;
-      default:
-        milliseconds = value * 60 * 1000; // default to minutes
-    }
-
-    const now = Date.now();
-    const newStartTimestamp = now - milliseconds;
-
-    // Check if time range exceeds flow duration
-    if (newStartTimestamp < startTimestamp) {
-      // If exceeds, don't change the start timestamp
-      // No change needed
-    } else {
-      setStartTimestamp(newStartTimestamp);
-    }
-
-    applyTimePoint(newStartTimestamp);
-
-    handleTimeMenuClose();
-    setCustomTimeValue('');
-  };
 
   // Format flow duration for display
   const formatDuration = (ms: number) => {
@@ -713,11 +771,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
     }
   };
 
-  // Check if a time range exceeds flow duration
-  const isTimeRangeExceedingDuration = (rangeMs: number) => {
-    if (!flowDuration) return false;
-    return rangeMs > flowDuration;
-  };
+
 
   if (error) {
     return <Box color="error.main">Error: {error}</Box>;
@@ -880,12 +934,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   </Tooltip>
                 )}
 
-                {/* Time selector button - moved to align with IDE button group */}
+                {/* Time selector button */}
                 <Tooltip
                   title={
                     autoRefresh
                       ? 'Time selection disabled during auto refresh'
-                      : 'Select time range'
+                      : 'Select time point'
                   }
                 >
                   <IconButton
@@ -912,142 +966,192 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   </IconButton>
                 </Tooltip>
 
-                {/* Time selection menu */}
+                {/* Time selector menu */}
                 <Menu
                   anchorEl={timeMenuAnchorEl}
                   open={timeMenuOpen}
                   onClose={handleTimeMenuClose}
+                  anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'center',
+                  }}
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'center',
+                  }}
                   MenuListProps={{
                     'aria-labelledby': 'time-selector-button',
                   }}
                   slotProps={{
                     paper: {
                       sx: {
-                        width: '220px',
-                        maxHeight: '400px',
+                        width: '350px',
+                        maxHeight: '500px',
                         overflow: 'auto',
                         zIndex: 100000,
+                        marginTop: '4px',
                       },
                     },
                   }}
                   style={{ zIndex: 100000 }}
                   sx={{ zIndex: 100000 }}
                 >
+                  {/* Latest option */}
                   <MenuItem
-                    onClick={handleSetToNow}
-                    sx={{ fontWeight: isLatestTime ? 'bold' : 'normal' }}
+                    onClick={() => handleSnapshotSelect('latest')}
+                    sx={{
+                      fontWeight: selectedSnapshot === 'latest' ? 'bold' : 'normal',
+                      backgroundColor: selectedSnapshot === 'latest' ? 'action.selected' : 'transparent',
+                    }}
                   >
-                    Now
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <Clock size={16} style={{ marginRight: '8px' }} />
+                      <Typography variant="body2">Latest (Live)</Typography>
+                    </Box>
                   </MenuItem>
 
                   <Divider />
 
-                  {flowDuration && (
-                    <>
-                      <Typography
-                        variant="caption"
-                        sx={{ p: 1, display: 'block', color: 'text.secondary' }}
-                      >
-                        Flow duration: {formatDuration(flowDuration)}
+                  {/* Time range selection */}
+                  <Box sx={{ p: 2 }}>
+                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                      Select Time Point
+                    </Typography>
+
+                    {/* Quick time options */}
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block' }}>
+                        Quick Select:
                       </Typography>
-                      <Divider />
-                    </>
-                  )}
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {[
+                          { label: '5m ago', minutes: 5 },
+                          { label: '15m ago', minutes: 15 },
+                          { label: '30m ago', minutes: 30 },
+                          { label: '1h ago', minutes: 60 },
+                          { label: '2h ago', minutes: 120 },
+                          { label: '6h ago', minutes: 360 },
+                        ].map(({ label, minutes }) => (
+                          <Button
+                            key={label}
+                            variant="outlined"
+                            size="small"
+                            onClick={() => handleQuickTimeSelect(minutes)}
+                            sx={{
+                              fontSize: '0.7rem',
+                              minWidth: 'auto',
+                              px: 1,
+                              py: 0.5,
+                            }}
+                          >
+                            {label}
+                          </Button>
+                        ))}
+                      </Box>
+                    </Box>
 
-                  {/* Move custom field above quick range */}
-                  <Typography
-                    variant="caption"
-                    sx={{ p: 1, display: 'block', color: 'text.secondary' }}
-                  >
-                    Custom time range
-                  </Typography>
+                    {/* Custom time input */}
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block' }}>
+                        Custom Time:
+                      </Typography>
+                      <TextField
+                        type="datetime-local"
+                        size="small"
+                        fullWidth
+                        value={formatDateTimeForInput(currentTimestamp)}
+                        onChange={(e) => handleCustomTimeSelect(e.target.value)}
+                        sx={{
+                          '& .MuiInputBase-input': {
+                            fontSize: '0.85rem',
+                            py: 1,
+                          }
+                        }}
+                      />
+                    </Box>
 
-                  <Box sx={{ p: 1, display: 'flex', alignItems: 'center' }}>
-                    <TextField
-                      size="small"
-                      value={customTimeValue}
-                      onChange={handleCustomTimeChange}
-                      onKeyPress={e => {
-                        if (e.key === 'Enter') {
-                          handleCustomTimeSubmit();
-                        }
-                      }}
-                      type="number"
-                      inputProps={{
-                        min: 1,
-                        sx: {
-                          fontSize: '0.75rem', // Make font inside custom field input smaller
-                          padding: '8px 6px',
-                        },
-                      }}
-                      sx={{ width: '80px', mr: 1 }}
-                      placeholder="Time"
-                    />
-                    <Box sx={{ display: 'flex', gap: '4px' }}>
-                      {['s', 'm', 'h', 'd'].map(unit => (
-                        <Button
-                          key={unit}
-                          size="small"
-                          variant={customTimeUnit === unit ? 'contained' : 'outlined'}
-                          onClick={() => handleCustomTimeUnitChange(unit)}
-                          sx={{
-                            minWidth: '24px',
-                            p: '2px 8px',
-                            fontSize: '0.75rem', // Make font smaller
-                          }}
-                        >
-                          {unit}
-                        </Button>
-                      ))}
+                    {/* Snapshot navigation */}
+                    {snapshots.length > 0 && (
+                      <Box>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block' }}>
+                          Navigate Snapshots ({snapshots.length} available):
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <IconButton
+                            size="small"
+                            onClick={handlePreviousSnapshot}
+                            disabled={!canGoPreviousSnapshot()}
+                            sx={{
+                              width: 28,
+                              height: 28,
+                              '&.Mui-disabled': { opacity: 0.3 }
+                            }}
+                          >
+                            ←
+                          </IconButton>
+                          <Box sx={{ flex: 1, textAlign: 'center' }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              {getCurrentSnapshotIndex()} of {snapshots.length}
+                            </Typography>
+                            {!isLatestTime && (
+                              <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6rem' }}>
+                                {formatTime(currentTimestamp)}
+                              </Typography>
+                            )}
+                          </Box>
+                          <IconButton
+                            size="small"
+                            onClick={handleNextSnapshot}
+                            disabled={!canGoNextSnapshot()}
+                            sx={{
+                              width: 28,
+                              height: 28,
+                              '&.Mui-disabled': { opacity: 0.3 }
+                            }}
+                          >
+                            →
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    )}
+
+                    <Divider sx={{ my: 1 }} />
+
+                    {/* Action buttons */}
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={async (e) => {
+                          e.stopPropagation(); // Prevent event bubbling
+                          try {
+                            await fetchSnapshots(currentFlowId!);
+                          } catch (err) {
+                            console.error('Failed to refresh snapshots:', err);
+                          }
+                        }}
+                        sx={{ fontSize: '0.75rem', flex: 1 }}
+                      >
+                        Refresh
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={async (e) => {
+                          e.stopPropagation(); // Prevent event bubbling
+                          try {
+                            await apiService.createSnapshot(currentFlowId!);
+                            await fetchSnapshots(currentFlowId!);
+                          } catch (err) {
+                            console.error('Failed to create snapshot:', err);
+                          }
+                        }}
+                        sx={{ fontSize: '0.75rem', flex: 1 }}
+                      >
+                        Create New
+                      </Button>
                     </Box>
                   </Box>
-
-                  <Box sx={{ p: 1 }}>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      fullWidth
-                      onClick={handleCustomTimeSubmit}
-                      disabled={!customTimeValue || parseInt(customTimeValue, 10) <= 0}
-                      sx={{ fontSize: '0.75rem' }} // Make font smaller
-                    >
-                      Apply
-                    </Button>
-                  </Box>
-
-                  <Divider />
-
-                  <Typography
-                    variant="caption"
-                    sx={{ p: 1, display: 'block', color: 'text.secondary' }}
-                  >
-                    Quick ranges
-                  </Typography>
-
-                  {timeRangeOptions.map(option => {
-                    const exceeds = isTimeRangeExceedingDuration(option.value);
-                    return (
-                      <MenuItem
-                        key={option.value}
-                        onClick={() => handleTimeRangeSelect(option.value)}
-                        sx={{
-                          color: exceeds ? 'text.disabled' : 'text.primary',
-                          '&:hover': {
-                            backgroundColor: exceeds ? 'transparent' : undefined,
-                          },
-                          fontSize: '0.8rem', // Make font smaller
-                        }}
-                        disabled={exceeds}
-                      >
-                        {option.label}
-                        {exceeds && (
-                          <Typography variant="caption" sx={{ ml: 1, color: 'text.disabled' }}>
-                            (exceeds duration)
-                          </Typography>
-                        )}
-                      </MenuItem>
-                    );
-                  })}
                 </Menu>
 
                 {(currentViewType === 'logical' ||
@@ -1056,26 +1160,26 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   currentViewType === 'flame' ||
                   currentViewType === 'gantt' ||
                   currentViewType === 'analysis') && (
-                  <Tooltip title="Export as SVG">
-                    <IconButton
-                      onClick={handleExportSvg}
-                      size="small"
-                      sx={{
-                        backgroundColor: 'white',
-                        boxShadow: 1,
-                        padding: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        '&:hover': {
-                          backgroundColor: 'grey.100',
-                        },
-                      }}
-                    >
-                      <Download size={16} />
-                    </IconButton>
-                  </Tooltip>
-                )}
+                    <Tooltip title="Export as SVG">
+                      <IconButton
+                        onClick={handleExportSvg}
+                        size="small"
+                        sx={{
+                          backgroundColor: 'white',
+                          boxShadow: 1,
+                          padding: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          '&:hover': {
+                            backgroundColor: 'grey.100',
+                          },
+                        }}
+                      >
+                        <Download size={16} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
 
                 {(currentViewType === 'flame' || currentViewType === 'gantt') && flameData && (
                   <Tooltip title="Export as Chrome Tracing JSON">

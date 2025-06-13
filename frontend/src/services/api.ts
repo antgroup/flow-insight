@@ -315,40 +315,40 @@ export class ApiService {
           serviceStatsMap[service.instanceId]
             ? nodeStats[serviceStatsMap[service.instanceId].nodeId]
             : {
-                nodeId: '',
-                devices: {
-                  gpu: [],
-                },
-                resources: {},
-                cpuPercent: 0,
-                memoryInfo: {
-                  total: 0,
-                  available: 0,
-                  used: 0,
-                },
+              nodeId: '',
+              devices: {
+                gpu: [],
               },
+              resources: {},
+              cpuPercent: 0,
+              memoryInfo: {
+                total: 0,
+                available: 0,
+                used: 0,
+              },
+            },
           serviceStatsMap[service.instanceId]
             ? serviceStatsMap[service.instanceId]
             : {
-                nodeId: '',
-                devices: {
-                  gpu: [],
-                },
-                cpuPercent: 0,
-                memoryInfo: {
-                  rss: 0,
-                  vms: 0,
-                  shared: 0,
-                  text: 0,
-                  lib: 0,
-                  data: 0,
-                  dirty: 0,
-                },
-                pid: 0,
-                state: 'unknown',
-                requiredResources: {},
-                placementId: '',
+              nodeId: '',
+              devices: {
+                gpu: [],
               },
+              cpuPercent: 0,
+              memoryInfo: {
+                rss: 0,
+                vms: 0,
+                shared: 0,
+                text: 0,
+                lib: 0,
+                data: 0,
+                dirty: 0,
+              },
+              pid: 0,
+              state: 'unknown',
+              requiredResources: {},
+              placementId: '',
+            },
           service.instanceId,
           service.serviceName
         )
@@ -662,6 +662,34 @@ export class ApiService {
   ): Promise<boolean> {
     return this.setBreakpoints(flowId, spanId, breakpoints);
   }
+
+  // Snapshot management
+  public async listSnapshots(flowId?: string): Promise<any[]> {
+    let path = 'list_snapshots';
+    if (flowId) {
+      path += `?flow_id=${flowId}`;
+    }
+    const response = await this.request<ApiResponse<any[]>>(path);
+    if (!response.result) {
+      throw new Error(response.msg || 'Failed to list snapshots');
+    }
+    return response.data;
+  }
+
+  public async createSnapshot(flowId: string, label?: string): Promise<string> {
+    const path = 'create_snapshot';
+    const response = await this.request<ApiResponse<{ label: string }>>(
+      path,
+      { method: 'POST' },
+      { flow_id: flowId, label: label }
+    );
+    if (!response.result) {
+      throw new Error(response.msg || 'Failed to create snapshot');
+    }
+    return response.data.label;
+  }
+
+
 
   // Count Tokens
   public countTokens(text: string, model = 'gpt-4'): number {

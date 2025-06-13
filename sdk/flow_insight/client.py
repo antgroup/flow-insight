@@ -1,5 +1,4 @@
-from flow_insight.storage.persist.base import StorageType
-from flow_insight.storage.persist.model import (
+from flow_insight.storage.snapshot.model import (
     BatchNodePhysicalStatsEvent,
     BatchServicePhysicalStatsEvent,
     CallBeginEvent,
@@ -14,17 +13,11 @@ from flow_insight.storage.persist.model import (
     ResourceUsageEvent,
 )
 from flow_insight.storage_client.http_client import HTTPStorageClient
-from flow_insight.storage_client.influxdb_client import InfluxDBStorageClient
 
 
 class InsightClient:
-    def __init__(self, server_url: str, storage_type: StorageType, **storage_config):
-        if storage_type == StorageType.DISK:
-            self._storage_client = HTTPStorageClient(server_url)
-        elif storage_type == StorageType.INFLUXDB:
-            self._storage_client = InfluxDBStorageClient(server_url, **storage_config)
-        else:
-            raise ValueError(f"Unsupported storage type: {storage_type}")
+    def __init__(self, server_url: str):
+        self._storage_client = HTTPStorageClient(server_url)
 
     async def async_ping(self):
         return await self._storage_client.async_ping()
