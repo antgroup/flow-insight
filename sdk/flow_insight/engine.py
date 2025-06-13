@@ -1,5 +1,4 @@
 import asyncio
-import math
 import time
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
@@ -10,9 +9,9 @@ from flow_insight.storage.snapshot.model import (
     BatchNodePhysicalStatsEvent,
     BatchServicePhysicalStatsEvent,
     Breakpoint,
-    CallerInfo,
     CallBeginEvent,
     CallEndEvent,
+    CallerInfo,
     CallFlow,
     CallGraphData,
     CallSubmitEvent,
@@ -25,7 +24,6 @@ from flow_insight.storage.snapshot.model import (
     DebugSession,
     FlameTree,
     FlameTreeNode,
-    internal_flow_id,
     MetaInfoRegisterEvent,
     Method,
     MethodInfo,
@@ -46,7 +44,8 @@ class InsightEngine:
     def __init__(
         self,
         snapshot_storage_type: StorageType = StorageType.MEMORY,
-        snapshot_duration_s: int = 600,
+        snapshot_duration_s: int = 300,
+        max_snapshots_per_flow: int = 100,
         storage_dir: str = "/tmp/flow_insight_snapshots",
     ):
         self._snapshot_storage_type = snapshot_storage_type
@@ -54,6 +53,7 @@ class InsightEngine:
         self._debug_sessions = defaultdict(dict)
         self._snapshots = {"latest": SnapshotStorage(snapshot_storage_type, storage_dir)}
         self._snapshot_duration_s = snapshot_duration_s
+        self._max_snapshots_per_flow = max_snapshots_per_flow
         self._snapshot_lock = defaultdict(asyncio.Lock)
         self._flow_creation_times = {}  # Track flow creation times in memory
 
@@ -206,10 +206,10 @@ class InsightEngine:
         """Get a specific snapshot by label"""
         if label == "latest":
             return self._snapshots["latest"]
-        
+
         if label in self._snapshots:
             return self._snapshots[label]
-        
+
         # Try to restore from stored snapshots
         latest_storage = self._snapshots["latest"]
         backend_snapshot = latest_storage._storage.get_snapshot(label)
@@ -218,7 +218,7 @@ class InsightEngine:
             snapshot._storage = backend_snapshot
             self._snapshots[label] = snapshot
             return snapshot
-        
+
         return None
 
     async def create_snapshot(self, flow_id: str, label: str = None) -> str:
@@ -226,15 +226,65 @@ class InsightEngine:
         if label is None:
             timestamp = int(time.time() * 1000)
             label = f"{flow_id}:{timestamp}"
-        
+
         latest_storage = self._snapshots["latest"]
         latest_storage._storage.store_snapshot(label, flow_id)
-        
+
+        # Clean up old snapshots if we exceed the limit
+        await self._cleanup_snapshots(flow_id)
+
         return label
 
+    async def _cleanup_snapshots(self, flow_id: str):
+        """Clean up old snapshots using a time-distributed retention strategy"""
+        snapshots = await self.list_snapshots(flow_id)
 
+        if len(snapshots) <= self._max_snapshots_per_flow:
+            return
 
+        # Sort snapshots by timestamp (newest first)
+        snapshots.sort(key=lambda x: x["timestamp"], reverse=True)
 
+        # Calculate time ranges and intervals
+        current_time = int(time.time() * 1000)
+        one_hour = 60 * 60 * 1000
+        six_hours = 6 * one_hour
+        one_day = 24 * one_hour
+
+        snapshots_to_keep = []
+
+        for i, snapshot in enumerate(snapshots):
+            age = current_time - snapshot["timestamp"]
+            keep = False
+
+            if age <= one_hour:
+                # Keep all snapshots from the last hour
+                keep = True
+            elif age <= six_hours:
+                # Keep every 5th snapshot from 1-6 hours ago
+                keep = i % 5 == 0
+            elif age <= one_day:
+                # Keep every 10th snapshot from 6-24 hours ago
+                keep = i % 10 == 0
+            else:
+                # Keep every 20th snapshot from 1+ days ago
+                keep = i % 20 == 0
+
+            if keep:
+                snapshots_to_keep.append(snapshot)
+
+        # Ensure we don't exceed the max limit even after filtering
+        if len(snapshots_to_keep) > self._max_snapshots_per_flow:
+            snapshots_to_keep = snapshots_to_keep[: self._max_snapshots_per_flow]
+
+        # Delete snapshots that are not in the keep list
+        labels_to_keep = {s["label"] for s in snapshots_to_keep}
+        latest_storage = self._snapshots["latest"]
+
+        for snapshot in snapshots:
+            if snapshot["label"] not in labels_to_keep:
+                latest_storage._storage.delete_snapshot(snapshot["label"])
+                print(f"Deleted old snapshot: {snapshot['label']}")
 
     async def get_call_graph_data(
         self, flow_id, stack_mode=False, snapshot: Optional[SnapshotStorage] = None
@@ -390,12 +440,12 @@ class InsightEngine:
     async def record_event(self, event: any):
         """Record an event directly to the latest snapshot"""
         # Track flow creation time
-        flow_id = getattr(event, 'flow_id', None)
+        flow_id = getattr(event, "flow_id", None)
         if flow_id and flow_id not in self._flow_creation_times:
             self._flow_creation_times[flow_id] = int(time.time() * 1000)
 
         # Route events to appropriate handlers
-        if hasattr(event, 'flow_id'):
+        if hasattr(event, "flow_id"):
             if isinstance(event, CallSubmitEvent):
                 await self.emit_call_submit(event)
             elif isinstance(event, CallBeginEvent):
@@ -433,7 +483,7 @@ class InsightEngine:
         async with self._snapshot_lock[flow_id]:
             current = int(time.time() * 1000)
             latest_timestamp = -1
-            
+
             # Find the most recent snapshot for this flow
             snapshots = await self.list_snapshots(flow_id)
             if snapshots:
@@ -512,7 +562,7 @@ class InsightEngine:
         timestamp = object_get.timestamp
         try:
             object_event: ObjectEvent = await snapshot.get_object_events(flow_id, object_id)
-        except:
+        except Exception:
             return
         caller_service = object_event.sender_service
         caller_method = object_event.sender_method

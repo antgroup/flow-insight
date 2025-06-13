@@ -25,7 +25,6 @@ from flow_insight.storage.snapshot.model import (
     RecordType,
     ResourceUsageEvent,
 )
-from flow_insight.storage.snapshot.base import StorageType
 
 logger = logging.getLogger(__name__)
 
@@ -310,19 +309,19 @@ class FastAPIInsightServer(APIInterface):
                 snapshots = await self.engine.list_snapshots(flow_id)
                 best_snapshot = None
                 end_time_int = int(end_time)
-                
+
                 for snapshot_info in snapshots:
                     if snapshot_info["timestamp"] <= end_time_int:
                         best_snapshot = snapshot_info["label"]
                         break
-                
+
                 if best_snapshot:
                     snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
                 else:
                     snapshot = await self.engine.get_snapshot_by_label("latest")
             else:
                 snapshot = await self.engine.get_snapshot_by_label("latest")
-            
+
             graph_data = await self.engine.get_call_graph_data(flow_id, stack_mode, snapshot)
             return JSONResponse(
                 rest_response(
@@ -348,19 +347,19 @@ class FastAPIInsightServer(APIInterface):
             snapshots = await self.engine.list_snapshots(flow_id)
             best_snapshot = None
             end_time_int = int(end_time)
-            
+
             for snapshot_info in snapshots:
                 if snapshot_info["timestamp"] <= end_time_int:
                     best_snapshot = snapshot_info["label"]
                     break
-            
+
             if best_snapshot:
                 snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
             else:
                 snapshot = await self.engine.get_snapshot_by_label("latest")
         else:
             snapshot = await self.engine.get_snapshot_by_label("latest")
-        
+
         flame_data = await self.engine.get_flame_graph_data(flow_id, snapshot)
         return JSONResponse(
             rest_response(
@@ -381,19 +380,19 @@ class FastAPIInsightServer(APIInterface):
             snapshots = await self.engine.list_snapshots(flow_id)
             best_snapshot = None
             end_time_int = int(end_time)
-            
+
             for snapshot_info in snapshots:
                 if snapshot_info["timestamp"] <= end_time_int:
                     best_snapshot = snapshot_info["label"]
                     break
-            
+
             if best_snapshot:
                 snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
             else:
                 snapshot = await self.engine.get_snapshot_by_label("latest")
         else:
             snapshot = await self.engine.get_snapshot_by_label("latest")
-        
+
         physical_view_data = await self.engine.get_physical_view_data(flow_id, snapshot)
         return JSONResponse(
             rest_response(
@@ -415,19 +414,19 @@ class FastAPIInsightServer(APIInterface):
                 snapshots = await self.engine.list_snapshots(flow_id)
                 best_snapshot = None
                 end_time_int = int(end_time)
-                
+
                 for snapshot_info in snapshots:
                     if snapshot_info["timestamp"] <= end_time_int:
                         best_snapshot = snapshot_info["label"]
                         break
-                
+
                 if best_snapshot:
                     snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
                 else:
                     snapshot = await self.engine.get_snapshot_by_label("latest")
             else:
                 snapshot = await self.engine.get_snapshot_by_label("latest")
-            
+
             context = await self.engine.get_context(flow_id, snapshot)
             return JSONResponse(
                 rest_response(
@@ -454,19 +453,19 @@ class FastAPIInsightServer(APIInterface):
                 snapshots = await self.engine.list_snapshots(flow_id)
                 best_snapshot = None
                 end_time_int = int(end_time)
-                
+
                 for snapshot_info in snapshots:
                     if snapshot_info["timestamp"] <= end_time_int:
                         best_snapshot = snapshot_info["label"]
                         break
-                
+
                 if best_snapshot:
                     snapshot = await self.engine.get_snapshot_by_label(best_snapshot)
                 else:
                     snapshot = await self.engine.get_snapshot_by_label("latest")
             else:
                 snapshot = await self.engine.get_snapshot_by_label("latest")
-            
+
             resource_usage = await self.engine.get_resource_usage(flow_id, snapshot)
             return JSONResponse(
                 rest_response(
@@ -483,8 +482,6 @@ class FastAPIInsightServer(APIInterface):
 
     async def get_prompt(self, request: Request) -> JSONResponse:
         """Get the prompt."""
-        data = await self._parse_request(request)
-        flow_id = data.get("flow_id", "")
         try:
             snapshot = await self.engine.get_snapshot_by_label("latest")
             prompt = await self.engine.get_prompt(snapshot)
@@ -517,7 +514,7 @@ class FastAPIInsightServer(APIInterface):
         """List all snapshots for a flow."""
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", None)
-        
+
         try:
             snapshots = await self.engine.list_snapshots(flow_id)
             return JSONResponse(
@@ -538,7 +535,7 @@ class FastAPIInsightServer(APIInterface):
         data = await self._parse_request(request)
         flow_id = data.get("flow_id", "")
         label = data.get("label", None)
-        
+
         try:
             snapshot_label = await self.engine.create_snapshot(flow_id, label)
             return JSONResponse(
@@ -553,5 +550,3 @@ class FastAPIInsightServer(APIInterface):
             return JSONResponse(
                 rest_response(result=False, msg=f"Error creating snapshot: {str(e)}")
             )
-
-

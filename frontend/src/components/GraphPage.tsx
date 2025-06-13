@@ -12,6 +12,7 @@ import {
   TextField,
   InputAdornment,
   CircularProgress,
+  Popover,
 } from '@mui/material';
 import { Download, RefreshCw, PanelLeft, PanelRight, Bug, Clock, FileText } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -120,7 +121,6 @@ const GraphPage: React.FC<GraphPageProps> = ({
   const [timeMenuAnchorEl, setTimeMenuAnchorEl] = useState<null | HTMLElement>(null);
   const timeMenuOpen = Boolean(timeMenuAnchorEl);
 
-
   const fetchSnapshots = useCallback(
     async (flowId?: string) => {
       if (!flowId) return;
@@ -135,6 +135,18 @@ const GraphPage: React.FC<GraphPageProps> = ({
     [apiService]
   );
 
+  // Helper function to convert snapshot label to timestamp
+  const getTimestampFromSnapshot = useCallback(
+    (snapshotLabel?: string): number | undefined => {
+      if (!snapshotLabel || snapshotLabel === 'latest') {
+        return undefined;
+      }
+      const snapshotObj = snapshots.find(s => s.label === snapshotLabel);
+      return snapshotObj ? snapshotObj.timestamp : undefined;
+    },
+    [snapshots]
+  );
+
   const fetchGraphData = useCallback(
     async (id?: string, stackMode?: boolean, snapshot?: string) => {
       if (!id) {
@@ -142,15 +154,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
       }
 
       try {
-        // Convert snapshot label to timestamp
-        let timestamp: number | undefined;
-        if (snapshot === 'latest' || !snapshot) {
-          timestamp = undefined;
-        } else {
-          const snapshotObj = snapshots.find(s => s.label === snapshot);
-          timestamp = snapshotObj ? snapshotObj.timestamp : undefined;
-        }
-
+        const timestamp = getTimestampFromSnapshot(snapshot);
         const graphData = await apiService.getGraphData(id, stackMode, timestamp);
 
         if (graphData) {
@@ -165,7 +169,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         setError(err instanceof Error ? err.message : 'Failed to fetch graph data');
       }
     },
-    [apiService, snapshots]
+    [apiService, getTimestampFromSnapshot]
   );
 
   // Update currentFlowId when route FlowId changes
@@ -175,33 +179,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
     }
   }, [routeFlowId]);
 
-  // Fetch flow creation time and initial snapshots when flowId changes
-  useEffect(() => {
-    if (currentFlowId) {
-      (async () => {
-        try {
-          // Get flow creation time from API
-          const creationTime = await apiService.getFlowCreationTime(currentFlowId);
-          const now = Date.now();
-
-          // Only set timestamp to now if we're currently on latest, preserve existing selection
-          if (selectedSnapshot === 'latest') {
-            setCurrentTimestamp(now);
-          }
-
-          // Calculate flow duration
-          setFlowDuration(now - creationTime);
-
-          // Fetch snapshots for this flow only if we don't have any
-          if (snapshots.length === 0) {
-            await fetchSnapshots(currentFlowId);
-          }
-        } catch (err) {
-          console.error('Failed to fetch flow creation time or snapshots:', err);
-        }
-      })();
-    }
-  }, [currentFlowId, apiService]);
+  // Removed useEffect that was causing page reloads
 
   // Update the current timestamp periodically if auto-refresh is enabled and latest snapshot is selected
   useEffect(() => {
@@ -220,11 +198,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
     }
   }, [autoRefresh, selectedSnapshot]);
 
-  // Initial data fetch
+  // Initial data fetch - only when component mounts or flowId changes
   useEffect(() => {
-    if (currentFlowId) {
+    if (currentFlowId && initialLoading) {
       (async () => {
-        setInitialLoading(true);
         try {
           await fetchGraphData(currentFlowId, false);
           await fetchGraphData(currentFlowId, true);
@@ -232,6 +209,19 @@ const GraphPage: React.FC<GraphPageProps> = ({
           setPhysicalViewData(data);
           const flameData = await apiService.getFlameGraphData(currentFlowId);
           setFlameData(flameData);
+
+          // Also fetch flow creation time and initial snapshots
+          try {
+            const creationTime = await apiService.getFlowCreationTime(currentFlowId);
+            const now = Date.now();
+            setCurrentTimestamp(now);
+            setFlowDuration(now - creationTime);
+
+            // Fetch snapshots for this flow
+            await fetchSnapshots(currentFlowId);
+          } catch (err) {
+            console.error('Failed to fetch flow creation time or snapshots:', err);
+          }
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch view data');
         } finally {
@@ -239,13 +229,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
         }
       })();
     }
-  }, [currentFlowId, fetchGraphData, apiService]);
+  }, [currentFlowId, initialLoading]); // Only depend on flowId and initialLoading flag
 
-  const fetchDatas = async (
-    snapshot?: string,
-    showLoading = true,
-    viewType?: string
-  ) => {
+  const fetchDatas = async (snapshot?: string, showLoading = true, viewType?: string) => {
     const useSnapshot = snapshot !== undefined ? snapshot : selectedSnapshot;
     const targetViewType = viewType || currentViewType;
 
@@ -263,14 +249,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
       if (targetViewType === 'physical') {
         await fetchGraphData(currentFlowId, false, useSnapshot);
         try {
-          // Convert snapshot label to timestamp
-          let timestamp: number | undefined;
-          if (useSnapshot === 'latest' || !useSnapshot) {
-            timestamp = undefined;
-          } else {
-            const snapshotObj = snapshots.find(s => s.label === useSnapshot);
-            timestamp = snapshotObj ? snapshotObj.timestamp : undefined;
-          }
+          const timestamp = getTimestampFromSnapshot(useSnapshot);
           const data = await apiService.getPhysicalViewData(currentFlowId!, timestamp);
           setPhysicalViewData(data);
         } catch (err) {
@@ -284,14 +263,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
       ) {
         await fetchGraphData(currentFlowId, false, useSnapshot);
         try {
-          // Convert snapshot label to timestamp
-          let timestamp: number | undefined;
-          if (useSnapshot === 'latest' || !useSnapshot) {
-            timestamp = undefined;
-          } else {
-            const snapshotObj = snapshots.find(s => s.label === useSnapshot);
-            timestamp = snapshotObj ? snapshotObj.timestamp : undefined;
-          }
+          const timestamp = getTimestampFromSnapshot(useSnapshot);
           const data = await apiService.getPhysicalViewData(currentFlowId!, timestamp);
           setPhysicalViewData(data);
           const flameData = await apiService.getFlameGraphData(currentFlowId!, timestamp);
@@ -308,7 +280,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
       }
     }
   };
-  // Auto-refresh effect for call stack view - only refresh when latest snapshot is selected
+  // Simplified auto-refresh without problematic dependencies
   useEffect(() => {
     if (autoRefresh && selectedSnapshot === 'latest') {
       const intervalId = setInterval(async () => {
@@ -327,8 +299,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
       clearInterval(autoRefreshIntervalRef.current);
       autoRefreshIntervalRef.current = null;
     }
-    // eslint-disable-next-line
-  }, [autoRefresh, selectedSnapshot, currentFlowId, fetchGraphData, currentViewType]);
+  }, [autoRefresh, selectedSnapshot]); // Removed problematic dependencies
 
   const handleElementClick = useCallback((data: ElementData, skip_zoom = false) => {
     setInfoCardData({ ...data });
@@ -368,6 +339,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
   // Handle snapshot menu open
   const handleTimeMenuClick = (event: React.MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     setTimeMenuAnchorEl(event.currentTarget);
 
     // Only refresh snapshots if we don't have any yet, don't force refresh to avoid state reset
@@ -376,13 +349,17 @@ const GraphPage: React.FC<GraphPageProps> = ({
     }
   };
 
-  // Handle snapshot menu close
-  const handleTimeMenuClose = () => {
-    setTimeMenuAnchorEl(null);
+  // Handle snapshot menu close - completely prevent unwanted closing
+  const handleTimeMenuClose = (event?: any, reason?: 'backdropClick' | 'escapeKeyDown') => {
+    // Only close on backdrop click or escape key
+    if (reason === 'backdropClick' || reason === 'escapeKeyDown') {
+      setTimeMenuAnchorEl(null);
+    }
+    // Prevent any other reasons from closing the menu
   };
 
-  // Handle snapshot selection
-  const handleSnapshotSelect = (snapshotLabel: string) => {
+  // Handle snapshot selection (internal - doesn't close menu)
+  const selectSnapshot = (snapshotLabel: string) => {
     setSelectedSnapshot(snapshotLabel);
     setIsLatestTime(snapshotLabel === 'latest');
 
@@ -398,13 +375,19 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
     // Fetch data without showing loading indicators to prevent page blinking
     fetchDatas(snapshotLabel, false);
-    handleTimeMenuClose();
+  };
+
+  // Handle explicit user snapshot selection (keeps menu open)
+  const handleSnapshotSelect = (snapshotLabel: string) => {
+    selectSnapshot(snapshotLabel);
+    // Keep menu open for all snapshot selections
   };
 
   // Handle quick time selection (e.g., "5m ago", "1h ago")
   const handleQuickTimeSelect = (minutesAgo: number) => {
-    const targetTime = Date.now() - (minutesAgo * 60 * 1000);
+    const targetTime = Date.now() - minutesAgo * 60 * 1000;
     selectClosestSnapshot(targetTime);
+    // Keep menu open for quick time selection
   };
 
   // Handle custom time selection from datetime input
@@ -412,6 +395,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
     if (dateTimeValue) {
       const targetTime = new Date(dateTimeValue).getTime();
       selectClosestSnapshot(targetTime);
+      // Keep menu open for custom time selection
     }
   };
 
@@ -435,55 +419,57 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
     // If target time is very recent (within 30 seconds), use latest
     if (Math.abs(targetTime - Date.now()) < 30000) {
-      handleSnapshotSelect('latest');
+      selectSnapshot('latest');
     } else {
-      handleSnapshotSelect(closestSnapshot.label);
+      selectSnapshot(closestSnapshot.label);
     }
   };
 
   // Navigation between snapshots
   const handlePreviousSnapshot = () => {
+    // Left arrow = go to earlier (older) time
+    const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
     if (selectedSnapshot === 'latest' && snapshots.length > 0) {
-      handleSnapshotSelect(snapshots[0].label);
-    } else {
-      const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
-      if (currentIndex > 0) {
-        handleSnapshotSelect(snapshots[currentIndex - 1].label);
-      }
+      selectSnapshot(snapshots[0].label);
+    } else if (currentIndex >= 0 && currentIndex < snapshots.length - 1) {
+      selectSnapshot(snapshots[currentIndex + 1].label);
     }
   };
 
   const handleNextSnapshot = () => {
+    // Right arrow = go to later (newer) time
     const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
-    if (currentIndex >= 0 && currentIndex < snapshots.length - 1) {
-      handleSnapshotSelect(snapshots[currentIndex + 1].label);
-    } else if (currentIndex === snapshots.length - 1) {
-      handleSnapshotSelect('latest');
+    if (currentIndex > 0) {
+      selectSnapshot(snapshots[currentIndex - 1].label);
+    } else if (currentIndex === 0) {
+      selectSnapshot('latest');
     }
   };
 
   const canGoPreviousSnapshot = () => {
+    // Can go to earlier (left arrow) if we're not at the oldest snapshot
     if (selectedSnapshot === 'latest') {
       return snapshots.length > 0;
-    }
-    const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
-    return currentIndex > 0;
-  };
-
-  const canGoNextSnapshot = () => {
-    if (selectedSnapshot === 'latest') {
-      return false;
     }
     const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
     return currentIndex >= 0 && currentIndex < snapshots.length - 1;
   };
 
-  const getCurrentSnapshotIndex = () => {
+  const canGoNextSnapshot = () => {
+    // Can go to later (right arrow) if we're not at latest
     if (selectedSnapshot === 'latest') {
-      return snapshots.length + 1;
+      return false;
     }
     const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
-    return currentIndex >= 0 ? snapshots.length - currentIndex : 1;
+    return currentIndex > 0 || currentIndex === 0; // Can always go from any snapshot back to latest
+  };
+
+  const getCurrentSnapshotIndex = () => {
+    if (selectedSnapshot === 'latest') {
+      return 1; // Latest is position 1
+    }
+    const currentIndex = snapshots.findIndex(s => s.label === selectedSnapshot);
+    return currentIndex >= 0 ? currentIndex + 2 : 1; // +2 because: latest(1) + snapshot_index + 1
   };
 
   // Format timestamp for datetime-local input
@@ -497,19 +483,22 @@ const GraphPage: React.FC<GraphPageProps> = ({
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
-  const handleAutoRefreshChange = useCallback((enabled: boolean) => {
-    setAutoRefresh(enabled);
+  const handleAutoRefreshChange = useCallback(
+    (enabled: boolean) => {
+      setAutoRefresh(enabled);
 
-    // When enabling auto-refresh, automatically switch to latest snapshot
-    if (enabled) {
-      const now = Date.now();
-      setCurrentTimestamp(now);
-      setIsLatestTime(true);
-      setSelectedSnapshot('latest');
-      // Fetch latest data
-      fetchDatas('latest', false);
-    }
-  }, [fetchDatas]);
+      // When enabling auto-refresh, automatically switch to latest snapshot
+      if (enabled) {
+        const now = Date.now();
+        setCurrentTimestamp(now);
+        setIsLatestTime(true);
+        setSelectedSnapshot('latest');
+        // Fetch latest data
+        fetchDatas('latest', false);
+      }
+    },
+    [fetchDatas]
+  );
 
   // Handle setting current time to now
   const handleSetToNow = () => {
@@ -751,8 +740,6 @@ const GraphPage: React.FC<GraphPageProps> = ({
     fetchDatas('latest');
   };
 
-
-
   // Format flow duration for display
   const formatDuration = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
@@ -770,8 +757,6 @@ const GraphPage: React.FC<GraphPageProps> = ({
       return `${seconds}s`;
     }
   };
-
-
 
   if (error) {
     return <Box color="error.main">Error: {error}</Box>;
@@ -967,9 +952,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
                 </Tooltip>
 
                 {/* Time selector menu */}
-                <Menu
-                  anchorEl={timeMenuAnchorEl}
+                <Popover
                   open={timeMenuOpen}
+                  anchorEl={timeMenuAnchorEl}
                   onClose={handleTimeMenuClose}
                   anchorOrigin={{
                     vertical: 'bottom',
@@ -979,29 +964,45 @@ const GraphPage: React.FC<GraphPageProps> = ({
                     vertical: 'top',
                     horizontal: 'center',
                   }}
-                  MenuListProps={{
-                    'aria-labelledby': 'time-selector-button',
+                  disableScrollLock={true}
+                  disablePortal={false}
+                  keepMounted={false}
+                  disableAutoFocus={true}
+                  disableEnforceFocus={true}
+                  disableRestoreFocus={true}
+                  sx={{
+                    zIndex: 99999,
+                    position: 'fixed',
                   }}
-                  slotProps={{
-                    paper: {
-                      sx: {
-                        width: '350px',
-                        maxHeight: '500px',
-                        overflow: 'auto',
-                        zIndex: 100000,
-                        marginTop: '4px',
-                      },
+                  PaperProps={{
+                    sx: {
+                      width: '350px',
+                      maxHeight: '500px',
+                      overflow: 'auto',
+                      marginTop: '8px',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      boxShadow: theme => theme.shadows[8],
+                      position: 'relative',
+                    },
+                    onClick: (e: any) => {
+                      e.stopPropagation();
+                    },
+                    onMouseDown: (e: any) => {
+                      e.stopPropagation();
                     },
                   }}
-                  style={{ zIndex: 100000 }}
-                  sx={{ zIndex: 100000 }}
                 >
                   {/* Latest option */}
                   <MenuItem
-                    onClick={() => handleSnapshotSelect('latest')}
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleSnapshotSelect('latest');
+                    }}
                     sx={{
                       fontWeight: selectedSnapshot === 'latest' ? 'bold' : 'normal',
-                      backgroundColor: selectedSnapshot === 'latest' ? 'action.selected' : 'transparent',
+                      backgroundColor:
+                        selectedSnapshot === 'latest' ? 'action.selected' : 'transparent',
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
@@ -1013,14 +1014,17 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   <Divider />
 
                   {/* Time range selection */}
-                  <Box sx={{ p: 2 }}>
+                  <Box sx={{ p: 2 }} onClick={e => e.stopPropagation()}>
                     <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
                       Select Time Point
                     </Typography>
 
                     {/* Quick time options */}
                     <Box sx={{ mb: 2 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{ color: 'text.secondary', mb: 1, display: 'block' }}
+                      >
                         Quick Select:
                       </Typography>
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -1036,7 +1040,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
                             key={label}
                             variant="outlined"
                             size="small"
-                            onClick={() => handleQuickTimeSelect(minutes)}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleQuickTimeSelect(minutes);
+                            }}
                             sx={{
                               fontSize: '0.7rem',
                               minWidth: 'auto',
@@ -1052,7 +1059,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
                     {/* Custom time input */}
                     <Box sx={{ mb: 2 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{ color: 'text.secondary', mb: 1, display: 'block' }}
+                      >
                         Custom Time:
                       </Typography>
                       <TextField
@@ -1060,12 +1070,16 @@ const GraphPage: React.FC<GraphPageProps> = ({
                         size="small"
                         fullWidth
                         value={formatDateTimeForInput(currentTimestamp)}
-                        onChange={(e) => handleCustomTimeSelect(e.target.value)}
+                        onChange={e => {
+                          e.stopPropagation();
+                          handleCustomTimeSelect(e.target.value);
+                        }}
+                        onClick={e => e.stopPropagation()}
                         sx={{
                           '& .MuiInputBase-input': {
                             fontSize: '0.85rem',
                             py: 1,
-                          }
+                          },
                         }}
                       />
                     </Box>
@@ -1073,40 +1087,52 @@ const GraphPage: React.FC<GraphPageProps> = ({
                     {/* Snapshot navigation */}
                     {snapshots.length > 0 && (
                       <Box>
-                        <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block' }}>
+                        <Typography
+                          variant="caption"
+                          sx={{ color: 'text.secondary', mb: 1, display: 'block' }}
+                        >
                           Navigate Snapshots ({snapshots.length} available):
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <IconButton
                             size="small"
-                            onClick={handlePreviousSnapshot}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handlePreviousSnapshot();
+                            }}
                             disabled={!canGoPreviousSnapshot()}
                             sx={{
                               width: 28,
                               height: 28,
-                              '&.Mui-disabled': { opacity: 0.3 }
+                              '&.Mui-disabled': { opacity: 0.3 },
                             }}
                           >
                             ←
                           </IconButton>
                           <Box sx={{ flex: 1, textAlign: 'center' }}>
                             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                              {getCurrentSnapshotIndex()} of {snapshots.length}
+                              {getCurrentSnapshotIndex()} of {snapshots.length + 1}
                             </Typography>
                             {!isLatestTime && (
-                              <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6rem' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{ display: 'block', fontSize: '0.6rem' }}
+                              >
                                 {formatTime(currentTimestamp)}
                               </Typography>
                             )}
                           </Box>
                           <IconButton
                             size="small"
-                            onClick={handleNextSnapshot}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleNextSnapshot();
+                            }}
                             disabled={!canGoNextSnapshot()}
                             sx={{
                               width: 28,
                               height: 28,
-                              '&.Mui-disabled': { opacity: 0.3 }
+                              '&.Mui-disabled': { opacity: 0.3 },
                             }}
                           >
                             →
@@ -1122,13 +1148,13 @@ const GraphPage: React.FC<GraphPageProps> = ({
                       <Button
                         variant="outlined"
                         size="small"
-                        onClick={async (e) => {
-                          e.stopPropagation(); // Prevent event bubbling
-                          try {
-                            await fetchSnapshots(currentFlowId!);
-                          } catch (err) {
+                        onClick={e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Keep menu open and run operation in background
+                          fetchSnapshots(currentFlowId!).catch(err => {
                             console.error('Failed to refresh snapshots:', err);
-                          }
+                          });
                         }}
                         sx={{ fontSize: '0.75rem', flex: 1 }}
                       >
@@ -1137,14 +1163,18 @@ const GraphPage: React.FC<GraphPageProps> = ({
                       <Button
                         variant="outlined"
                         size="small"
-                        onClick={async (e) => {
-                          e.stopPropagation(); // Prevent event bubbling
-                          try {
-                            await apiService.createSnapshot(currentFlowId!);
-                            await fetchSnapshots(currentFlowId!);
-                          } catch (err) {
-                            console.error('Failed to create snapshot:', err);
-                          }
+                        onClick={e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Keep menu open and run operations in background
+                          (async () => {
+                            try {
+                              await apiService.createSnapshot(currentFlowId!);
+                              await fetchSnapshots(currentFlowId!);
+                            } catch (err) {
+                              console.error('Failed to create snapshot:', err);
+                            }
+                          })();
                         }}
                         sx={{ fontSize: '0.75rem', flex: 1 }}
                       >
@@ -1152,7 +1182,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
                       </Button>
                     </Box>
                   </Box>
-                </Menu>
+                </Popover>
 
                 {(currentViewType === 'logical' ||
                   currentViewType === 'call_stack' ||
@@ -1160,26 +1190,26 @@ const GraphPage: React.FC<GraphPageProps> = ({
                   currentViewType === 'flame' ||
                   currentViewType === 'gantt' ||
                   currentViewType === 'analysis') && (
-                    <Tooltip title="Export as SVG">
-                      <IconButton
-                        onClick={handleExportSvg}
-                        size="small"
-                        sx={{
-                          backgroundColor: 'white',
-                          boxShadow: 1,
-                          padding: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          '&:hover': {
-                            backgroundColor: 'grey.100',
-                          },
-                        }}
-                      >
-                        <Download size={16} />
-                      </IconButton>
-                    </Tooltip>
-                  )}
+                  <Tooltip title="Export as SVG">
+                    <IconButton
+                      onClick={handleExportSvg}
+                      size="small"
+                      sx={{
+                        backgroundColor: 'white',
+                        boxShadow: 1,
+                        padding: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        '&:hover': {
+                          backgroundColor: 'grey.100',
+                        },
+                      }}
+                    >
+                      <Download size={16} />
+                    </IconButton>
+                  </Tooltip>
+                )}
 
                 {(currentViewType === 'flame' || currentViewType === 'gantt') && flameData && (
                   <Tooltip title="Export as Chrome Tracing JSON">

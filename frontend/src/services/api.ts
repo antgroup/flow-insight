@@ -315,40 +315,40 @@ export class ApiService {
           serviceStatsMap[service.instanceId]
             ? nodeStats[serviceStatsMap[service.instanceId].nodeId]
             : {
-              nodeId: '',
-              devices: {
-                gpu: [],
+                nodeId: '',
+                devices: {
+                  gpu: [],
+                },
+                resources: {},
+                cpuPercent: 0,
+                memoryInfo: {
+                  total: 0,
+                  available: 0,
+                  used: 0,
+                },
               },
-              resources: {},
-              cpuPercent: 0,
-              memoryInfo: {
-                total: 0,
-                available: 0,
-                used: 0,
-              },
-            },
           serviceStatsMap[service.instanceId]
             ? serviceStatsMap[service.instanceId]
             : {
-              nodeId: '',
-              devices: {
-                gpu: [],
+                nodeId: '',
+                devices: {
+                  gpu: [],
+                },
+                cpuPercent: 0,
+                memoryInfo: {
+                  rss: 0,
+                  vms: 0,
+                  shared: 0,
+                  text: 0,
+                  lib: 0,
+                  data: 0,
+                  dirty: 0,
+                },
+                pid: 0,
+                state: 'unknown',
+                requiredResources: {},
+                placementId: '',
               },
-              cpuPercent: 0,
-              memoryInfo: {
-                rss: 0,
-                vms: 0,
-                shared: 0,
-                text: 0,
-                lib: 0,
-                data: 0,
-                dirty: 0,
-              },
-              pid: 0,
-              state: 'unknown',
-              requiredResources: {},
-              placementId: '',
-            },
           service.instanceId,
           service.serviceName
         )
@@ -688,8 +688,6 @@ export class ApiService {
     }
     return response.data.label;
   }
-
-
 
   // Count Tokens
   public countTokens(text: string, model = 'gpt-4'): number {

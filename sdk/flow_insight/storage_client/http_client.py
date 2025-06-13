@@ -1,35 +1,36 @@
 import asyncio
+from typing import Any
+
 import httpx
-from typing import Any, Dict
 
 from flow_insight.storage.snapshot.model import RecordType
 
 
 class StorageClient:
     """Base class for storage clients"""
-    
+
     async def async_ping(self):
         raise NotImplementedError
-        
+
     def sync_ping(self):
         raise NotImplementedError
-        
+
     async def async_emit_record(self, record_type: RecordType, data: Any):
         raise NotImplementedError
-        
+
     def sync_emit_record(self, record_type: RecordType, data: Any):
         raise NotImplementedError
-        
+
     async def aclose(self):
         raise NotImplementedError
-        
+
     def close(self):
         raise NotImplementedError
 
 
 class HTTPStorageClient(StorageClient):
     def __init__(self, base_url: str):
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self._client = None
 
     def _get_client(self):
@@ -58,7 +59,7 @@ class HTTPStorageClient(StorageClient):
         try:
             payload = {
                 "record_type": record_type.value,
-                "record": data.model_dump() if hasattr(data, 'model_dump') else data
+                "record": data.model_dump() if hasattr(data, "model_dump") else data,
             }
             response = await client.post(f"{self.base_url}/emit", json=payload)
             return response.json()
@@ -70,7 +71,7 @@ class HTTPStorageClient(StorageClient):
             try:
                 payload = {
                     "record_type": record_type.value,
-                    "record": data.model_dump() if hasattr(data, 'model_dump') else data
+                    "record": data.model_dump() if hasattr(data, "model_dump") else data,
                 }
                 response = client.post(f"{self.base_url}/emit", json=payload)
                 return response.json()
