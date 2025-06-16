@@ -423,77 +423,18 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       // Generate HTML content directly
       let htmlContent = `
 <div style="font-family: 'Inter', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px;">
-<h1 style="color: #6366f1; border-bottom: 3px solid #6366f1; padding-bottom: 8px; margin-bottom: 24px;">
+<h1 style="color: #60a5fa; border-bottom: 3px solid #60a5fa; padding-bottom: 8px; margin-bottom: 24px;">
   Flow Insight - Gantt Analysis Report
 </h1>
 
-<div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
-  <p><strong style="color: #6366f1;">Generated:</strong> ${new Date().toLocaleString()}</p>
-  <p><strong style="color: #6366f1;">Total Tasks Analyzed:</strong> ${reportTasks.length}${tasks.length !== reportTasks.length ? ` (${tasks.length} total)` : ''}</p>
-  <p><strong style="color: #6366f1;">Task Groups:</strong> ${taskGroups.size}</p>
-  <p><strong style="color: #6366f1;">Total Execution Time:</strong> ${totalDuration.toFixed(3)}s</p>
+<div style="background: #eff6ff; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+  <p><strong style="color: #1e40af;">Generated:</strong> ${new Date().toLocaleString()}</p>
+  <p><strong style="color: #1e40af;">Total Tasks Analyzed:</strong> ${reportTasks.length}${tasks.length !== reportTasks.length ? ` (${tasks.length} total)` : ''}</p>
+  <p><strong style="color: #1e40af;">Task Groups:</strong> ${taskGroups.size}</p>
+  <p><strong style="color: #1e40af;">Total Execution Time:</strong> ${totalDuration.toFixed(3)}s</p>
 </div>
 
-<h2 style="color: #8b5cf6; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; margin: 24px 0 12px 0;">
-  📊 Task Groups Summary
-</h2>
-`;
-
-      // Task Groups Summary Table
-      const sortedGroups = Array.from(taskGroups.values()).sort(
-        (a, b) => b.totalDuration - a.totalDuration
-      );
-
-      htmlContent += `
-<div style="overflow-x: auto; margin: 16px 0; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-<table style="border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; font-family: 'Inter', sans-serif; border-radius: 8px; overflow: hidden;">
-  <thead>
-    <tr style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
-      <th style="border: 1px solid rgba(255,255,255,0.2); padding: 12px 8px; text-align: center; color: white; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Group Name</th>
-      <th style="border: 1px solid rgba(255,255,255,0.2); padding: 12px 8px; text-align: center; color: white; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Count</th>
-      <th style="border: 1px solid rgba(255,255,255,0.2); padding: 12px 8px; text-align: center; color: white; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Total (s)</th>
-      <th style="border: 1px solid rgba(255,255,255,0.2); padding: 12px 8px; text-align: center; color: white; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Avg (s)</th>
-      <th style="border: 1px solid rgba(255,255,255,0.2); padding: 12px 8px; text-align: center; color: white; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Min (s)</th>
-      <th style="border: 1px solid rgba(255,255,255,0.2); padding: 12px 8px; text-align: center; color: white; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Max (s)</th>
-      <th style="border: 1px solid rgba(255,255,255,0.2); padding: 12px 8px; text-align: center; color: white; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Median (s)</th>
-      <th style="border: 1px solid rgba(255,255,255,0.2); padding: 12px 8px; text-align: center; color: white; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">% of Total</th>
-    </tr>
-  </thead>
-  <tbody>`;
-
-      sortedGroups.forEach((group, index) => {
-        const durations = group.tasks
-          .map(task => task.endTime - task.startTime)
-          .sort((a, b) => a - b);
-        const minDuration = Math.min(...durations);
-        const maxDuration = Math.max(...durations);
-        const medianDuration =
-          durations.length % 2 === 0
-            ? (durations[durations.length / 2 - 1] + durations[durations.length / 2]) / 2
-            : durations[Math.floor(durations.length / 2)];
-        const percentage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
-
-        const rowBg = index % 2 === 0 ? '#ffffff' : '#f8fafc';
-
-        htmlContent += `
-    <tr style="background: ${rowBg};">
-      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${group.groupName}</td>
-      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${group.executionCount}</td>
-      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${group.totalDuration.toFixed(3)}</td>
-      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${group.avgDuration.toFixed(3)}</td>
-      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${minDuration.toFixed(3)}</td>
-      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${maxDuration.toFixed(3)}</td>
-      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${medianDuration.toFixed(3)}</td>
-      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${percentage}%</td>
-    </tr>`;
-      });
-
-      htmlContent += `
-  </tbody>
-</table>
-</div>
-
-<h2 style="color: #8b5cf6; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; margin: 24px 0 12px 0;">
+<h2 style="color: #60a5fa; border-bottom: 2px solid #dbeafe; padding-bottom: 4px; margin: 24px 0 12px 0;">
   📊 Hierarchical Task Breakdown
 </h2>
 `;
@@ -825,12 +766,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           // Generate HTML table
           let tableHtml = `
 <div class="hierarchical-table" style="overflow-x: auto; width: 100%; position: relative; margin: 24px 0; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-<table style="border-collapse: separate; border-spacing: 0; width: 100%; font-family: 'Inter', sans-serif; border-radius: 8px; overflow: hidden;">`;
+<table style="border-collapse: separate; border-spacing: 0; width: 100%; font-family: 'Inter', sans-serif; border-radius: 8px; overflow: visible; table-layout: auto;">`;
 
           // Generate header rows
           for (let row = 0; row < maxDepth; row++) {
-            const levelColor = row === 0 ? '#4f46e5' : '#6366f1';
-            const levelColor2 = row === 0 ? '#6366f1' : '#8b5cf6';
+            const levelColor = row === 0 ? '#f8fafc' : '#f1f5f9';
+            const levelColor2 = row === 0 ? '#f1f5f9' : '#e2e8f0';
 
             tableHtml += `
   <tr style="background: linear-gradient(135deg, ${levelColor}, ${levelColor2});">`;
@@ -843,10 +784,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
      <th colspan="${cell.colspan}" rowspan="${cell.rowspan}" style="
        padding: 12px 8px; 
        text-align: center; 
-       color: white; 
+       color: #374151; 
        font-weight: 700; 
        font-size: 12px; 
-       border: 1px solid rgba(255,255,255,0.2); 
+       border: 1px solid #d1d5db; 
        white-space: normal; 
        word-wrap: break-word; 
        word-break: break-word;
@@ -854,10 +795,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
        min-width: 120px;
      ">
        <div style="margin-bottom: 4px; line-height: 1.2; word-wrap: break-word;">${cell.node.name}</div>
-       <div style="font-size: 10px; font-weight: 600; opacity: 0.9; line-height: 1.1;">
+       <div style="font-size: 10px; font-weight: 600; opacity: 0.8; line-height: 1.1;">
          ⏱️ ${cell.node.stats.avg.toFixed(3)}s avg
        </div>
-       <div style="font-size: 9px; font-weight: 500; opacity: 0.8; line-height: 1.1;">
+       <div style="font-size: 9px; font-weight: 500; opacity: 0.7; line-height: 1.1;">
          ${cell.node.stats.count} tasks
        </div>
      </th>`;
@@ -890,8 +831,66 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         htmlContent += `<p style="color: #64748b; font-style: italic;">*No tasks available for breakdown analysis.*</p>`;
       }
 
+      // Add Task Groups Summary section after hierarchical table
+      const sortedGroups = Array.from(taskGroups.values()).sort(
+        (a, b) => b.totalDuration - a.totalDuration
+      );
+
       htmlContent += `
-<hr style="margin: 32px 0; border: none; border-top: 1px solid #e2e8f0;">
+<h2 style="color: #60a5fa; border-bottom: 2px solid #dbeafe; padding-bottom: 4px; margin: 24px 0 12px 0;">
+  📊 Task Groups Summary
+</h2>
+
+<div style="overflow-x: auto; margin: 16px 0; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+<table style="border-collapse: separate; border-spacing: 0; width: 100%; table-layout: auto; font-family: 'Inter', sans-serif; border-radius: 8px; overflow: visible;">
+  <thead>
+    <tr style="background: linear-gradient(135deg, #f8fafc, #f1f5f9);">
+      <th style="border: 1px solid #d1d5db; padding: 12px 8px; text-align: center; color: #374151; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Group Name</th>
+      <th style="border: 1px solid #d1d5db; padding: 12px 8px; text-align: center; color: #374151; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Count</th>
+      <th style="border: 1px solid #d1d5db; padding: 12px 8px; text-align: center; color: #374151; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Total (s)</th>
+      <th style="border: 1px solid #d1d5db; padding: 12px 8px; text-align: center; color: #374151; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Avg (s)</th>
+      <th style="border: 1px solid #d1d5db; padding: 12px 8px; text-align: center; color: #374151; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Min (s)</th>
+      <th style="border: 1px solid #d1d5db; padding: 12px 8px; text-align: center; color: #374151; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Max (s)</th>
+      <th style="border: 1px solid #d1d5db; padding: 12px 8px; text-align: center; color: #374151; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">Median (s)</th>
+      <th style="border: 1px solid #d1d5db; padding: 12px 8px; text-align: center; color: #374151; font-weight: 700; font-size: 13px; white-space: normal; word-wrap: break-word; line-height: 1.3;">% of Total</th>
+    </tr>
+  </thead>
+  <tbody>`;
+
+      sortedGroups.forEach((group, index) => {
+        const durations = group.tasks
+          .map(task => task.endTime - task.startTime)
+          .sort((a, b) => a - b);
+        const minDuration = Math.min(...durations);
+        const maxDuration = Math.max(...durations);
+        const medianDuration =
+          durations.length % 2 === 0
+            ? (durations[durations.length / 2 - 1] + durations[durations.length / 2]) / 2
+            : durations[Math.floor(durations.length / 2)];
+        const percentage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
+
+        const rowBg = index % 2 === 0 ? '#ffffff' : '#f8fafc';
+
+        htmlContent += `
+    <tr style="background: ${rowBg};">
+      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${group.groupName}</td>
+      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${group.executionCount}</td>
+      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${group.totalDuration.toFixed(3)}</td>
+      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${group.avgDuration.toFixed(3)}</td>
+      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${minDuration.toFixed(3)}</td>
+      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${maxDuration.toFixed(3)}</td>
+      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${medianDuration.toFixed(3)}</td>
+      <td style="border: 1px solid #e2e8f0; padding: 10px 8px; text-align: center; font-size: 13px; color: #64748b; white-space: normal; word-wrap: break-word; line-height: 1.3;">${percentage}%</td>
+    </tr>`;
+      });
+
+      htmlContent += `
+  </tbody>
+</table>
+</div>`;
+
+      htmlContent += `
+<hr style="margin: 32px 0; border: none; border-top: 1px solid #dbeafe;">
 <p style="color: #64748b; font-style: italic; text-align: center;">
   *Report generated by Flow Insight Task Analysis*
 </p>
@@ -948,7 +947,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             padding: 20px;
         }
         
-        /* Ensure tables are properly scrollable */
+        /* Ensure tables are properly scrollable and text wraps */
         table {
             border-collapse: separate !important;
             border-spacing: 0 !important;
@@ -957,7 +956,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             margin: 0 !important;
             font-family: 'Inter', sans-serif !important;
             border-radius: 8px !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             table-layout: auto !important;
             position: relative !important;
         }
@@ -983,9 +982,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             line-height: 1.3 !important;
         }
         table th {
-            background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
-            color: white !important;
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9) !important;
+            color: #374151 !important;
             font-weight: 700 !important;
+            border: 1px solid #d1d5db !important;
         }
         table td {
             background: #ffffff !important;
@@ -1015,13 +1015,13 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             margin-bottom: 16px;
         }
         h1 {
-            color: #6366f1;
-            border-bottom: 3px solid #6366f1;
+            color: #60a5fa;
+            border-bottom: 3px solid #60a5fa;
             padding-bottom: 8px;
         }
         h2 {
-            color: #8b5cf6;
-            border-bottom: 2px solid #e2e8f0;
+            color: #60a5fa;
+            border-bottom: 2px solid #dbeafe;
             padding-bottom: 4px;
         }
         
@@ -1231,14 +1231,14 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     }
                     table th {
                       font-weight: 600 !important;
-                      background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
-                      color: white !important;
+                      background: linear-gradient(135deg, #f8fafc, #f1f5f9) !important;
+                      color: #374151 !important;
                     }
                     table tr:nth-child(odd) td {
-                      background: #f0f9ff !important;
+                      background: #ffffff !important;
                     }
                     table tr:nth-child(even) td {
-                      background: #fefce8 !important;
+                      background: #f8fafc !important;
                     }
                   `}</style>
                 </div>
