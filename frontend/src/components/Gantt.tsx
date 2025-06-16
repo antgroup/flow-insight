@@ -1,3 +1,4 @@
+import mermaid from 'mermaid';
 import React, {
   forwardRef,
   useEffect,
@@ -9,7 +10,6 @@ import React, {
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import remarkGfm from 'remark-gfm';
-import mermaid from 'mermaid';
 
 import { GraphData, PhysicalViewData, FlameGraphData, FlameTreeNode } from '../types';
 
@@ -365,37 +365,68 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         group.avgDuration = group.totalDuration / group.tasks.length;
         group.executionCount = group.tasks.length;
 
-        // Build caller/callee group relationships
+        // Build caller/callee group relationships based on parentId (hierarchical structure)
         group.tasks.forEach(task => {
-          // Find caller groups
-          task.callers.forEach(callerId => {
-            const callerTask = allTasks.find(t => t.id === callerId || t.fullName === callerId);
-            if (callerTask) {
-              const callerGroupName = extractGroupName(callerTask.name) || extractGroupName(callerTask.fullName) || callerTask.name;
-              if (callerGroupName !== group.groupName) {
-                if (!group.callerGroups.has(callerGroupName)) {
-                  group.callerGroups.set(callerGroupName, { count: 0, totalDuration: 0, avgDuration: 0 });
+          // Find parent (caller) groups using parentId
+          if (task.parentId) {
+            const parentTask = allTasks.find(t => t.id === task.parentId);
+            if (parentTask) {
+              const parentGroupName =
+                extractGroupName(parentTask.name) ||
+                extractGroupName(parentTask.fullName) ||
+                parentTask.name;
+              if (parentGroupName !== group.groupName) {
+                // Add parent as caller
+                if (!group.callerGroups.has(parentGroupName)) {
+                  group.callerGroups.set(parentGroupName, {
+                    count: 0,
+                    totalDuration: 0,
+                    avgDuration: 0,
+                  });
                 }
-                const callerInfo = group.callerGroups.get(callerGroupName)!;
+                const callerInfo = group.callerGroups.get(parentGroupName)!;
                 callerInfo.count += 1;
                 callerInfo.totalDuration += task.endTime - task.startTime;
                 callerInfo.avgDuration = callerInfo.totalDuration / callerInfo.count;
+
+                // Add this group as callee to parent group
+                const parentGroup = groups.get(parentGroupName);
+                if (parentGroup) {
+                  if (!parentGroup.calleeGroups.has(group.groupName)) {
+                    parentGroup.calleeGroups.set(group.groupName, {
+                      count: 0,
+                      totalDuration: 0,
+                      avgDuration: 0,
+                    });
+                  }
+                  const calleeInfo = parentGroup.calleeGroups.get(group.groupName)!;
+                  calleeInfo.count += 1;
+                  calleeInfo.totalDuration += task.endTime - task.startTime;
+                  calleeInfo.avgDuration = calleeInfo.totalDuration / calleeInfo.count;
+                }
               }
             }
-          });
+          }
 
-          // Find callee groups
-          task.callees.forEach(calleeId => {
-            const calleeTask = allTasks.find(t => t.id === calleeId || t.fullName === calleeId);
-            if (calleeTask) {
-              const calleeGroupName = extractGroupName(calleeTask.name) || extractGroupName(calleeTask.fullName) || calleeTask.name;
-              if (calleeGroupName !== group.groupName) {
-                if (!group.calleeGroups.has(calleeGroupName)) {
-                  group.calleeGroups.set(calleeGroupName, { count: 0, totalDuration: 0, avgDuration: 0 });
+          // Find child (callee) groups - tasks that have this task as parent
+          allTasks.forEach(childTask => {
+            if (childTask.parentId === task.id) {
+              const childGroupName =
+                extractGroupName(childTask.name) ||
+                extractGroupName(childTask.fullName) ||
+                childTask.name;
+              if (childGroupName !== group.groupName) {
+                // Add child as callee
+                if (!group.calleeGroups.has(childGroupName)) {
+                  group.calleeGroups.set(childGroupName, {
+                    count: 0,
+                    totalDuration: 0,
+                    avgDuration: 0,
+                  });
                 }
-                const calleeInfo = group.calleeGroups.get(calleeGroupName)!;
+                const calleeInfo = group.calleeGroups.get(childGroupName)!;
                 calleeInfo.count += 1;
-                calleeInfo.totalDuration += calleeTask.endTime - calleeTask.startTime;
+                calleeInfo.totalDuration += childTask.endTime - childTask.startTime;
                 calleeInfo.avgDuration = calleeInfo.totalDuration / calleeInfo.count;
               }
             }
@@ -444,13 +475,16 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
       const reportTasks = actuallyFilteredTasks.length > 0 ? actuallyFilteredTasks : filteredTasks;
       const taskGroups = generateTaskGroups(reportTasks);
-      const totalDuration = reportTasks.reduce((sum, task) => sum + (task.endTime - task.startTime), 0);
+      const totalDuration = reportTasks.reduce(
+        (sum, task) => sum + (task.endTime - task.startTime),
+        0
+      );
 
       let report = `# Flow Insight - Gantt Analysis Report\n\n`;
-      report += `**Generated:** ${new Date().toLocaleString()}\n`;
-      report += `**Report Scope:** ${searchTerm ? `Direct matches for "${searchTerm}"` : 'All tasks'}\n`;
-      report += `**Total Tasks Analyzed:** ${reportTasks.length}${tasks.length !== reportTasks.length ? ` (${tasks.length} total)` : ''}\n`;
-      report += `**Task Groups:** ${taskGroups.size}\n`;
+      report += `**Generated:** ${new Date().toLocaleString()}\n\n`;
+      report += `**Report Scope:** ${searchTerm ? `Direct matches for "${searchTerm}"` : 'All tasks'}\n\n`;
+      report += `**Total Tasks Analyzed:** ${reportTasks.length}${tasks.length !== reportTasks.length ? ` (${tasks.length} total)` : ''}\n\n`;
+      report += `**Task Groups:** ${taskGroups.size}\n\n`;
       report += `**Total Execution Time:** ${totalDuration.toFixed(3)}s\n\n`;
 
       // 1. Task Groups Summary Table with Enhanced Statistics
@@ -458,551 +492,595 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       report += `| Group Name | Count | Total (s) | Avg (s) | Min (s) | Max (s) | Median (s) | % of Total |\n`;
       report += `|------------|-------|-----------|---------|---------|---------|------------|------------|\n`;
 
-      const sortedGroups = Array.from(taskGroups.values()).sort((a, b) => b.totalDuration - a.totalDuration);
+      const sortedGroups = Array.from(taskGroups.values()).sort(
+        (a, b) => b.totalDuration - a.totalDuration
+      );
       sortedGroups.forEach(group => {
-        const durations = group.tasks.map(task => task.endTime - task.startTime).sort((a, b) => a - b);
+        const durations = group.tasks
+          .map(task => task.endTime - task.startTime)
+          .sort((a, b) => a - b);
         const minDuration = Math.min(...durations);
         const maxDuration = Math.max(...durations);
-        const medianDuration = durations.length % 2 === 0
-          ? (durations[durations.length / 2 - 1] + durations[durations.length / 2]) / 2
-          : durations[Math.floor(durations.length / 2)];
+        const medianDuration =
+          durations.length % 2 === 0
+            ? (durations[durations.length / 2 - 1] + durations[durations.length / 2]) / 2
+            : durations[Math.floor(durations.length / 2)];
         const percentage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
 
         report += `| ${group.groupName} | ${group.executionCount} | ${group.totalDuration.toFixed(3)} | ${group.avgDuration.toFixed(3)} | ${minDuration.toFixed(3)} | ${maxDuration.toFixed(3)} | ${medianDuration.toFixed(3)} | ${percentage}% |\n`;
       });
 
-      // 2. Simplified Execution Coverage
-      report += `\n## 📊 Hierarchical Execution Coverage\n\n`;
+      // 2. Hierarchical Task Breakdown
+      report += `\n## 📊 Hierarchical Task Breakdown\n\n`;
 
-      // Simple parent-child relationship table
-      const parentChildRelations: Array<{ parent: string, child: string, count: number, duration: number, avgDuration: number }> = [];
+      console.log('🔍 [Report Generation] Starting hierarchical breakdown analysis...');
+      console.log('📊 [Report Generation] Total reportTasks:', reportTasks.length);
+      console.log(
+        '📊 [Report Generation] ReportTasks sample:',
+        reportTasks.slice(0, 3).map(t => ({
+          id: t.id,
+          name: t.name,
+          parentId: t.parentId,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          duration: t.endTime - t.startTime,
+        }))
+      );
 
-      taskGroups.forEach((group, groupName) => {
-        group.calleeGroups.forEach((calleeInfo, calleeName) => {
-          parentChildRelations.push({
-            parent: groupName,
-            child: calleeName,
-            count: calleeInfo.count,
-            duration: calleeInfo.totalDuration,
-            avgDuration: calleeInfo.avgDuration
-          });
+      // Build hierarchical task tree from reportTasks using parentId
+      const buildTaskHierarchy = () => {
+        const taskMap = new Map<string, CustomTask>();
+        const rootTasks: CustomTask[] = [];
+        const childrenMap = new Map<string, CustomTask[]>();
+
+        console.log('🏗️ [Hierarchy Builder] Building task hierarchy...');
+
+        // Build maps
+        reportTasks.forEach(task => {
+          taskMap.set(task.id, task);
+          if (task.parentId) {
+            if (!childrenMap.has(task.parentId)) {
+              childrenMap.set(task.parentId, []);
+            }
+            childrenMap.get(task.parentId)!.push(task);
+          } else {
+            rootTasks.push(task);
+          }
         });
-      });
 
-      if (parentChildRelations.length > 0) {
-        // Sort by total duration descending
-        parentChildRelations.sort((a, b) => b.duration - a.duration);
+        console.log('🏗️ [Hierarchy Builder] Root tasks found:', rootTasks.length);
+        console.log('🏗️ [Hierarchy Builder] Parent-child relationships:', childrenMap.size);
+        console.log(
+          '🏗️ [Hierarchy Builder] Root tasks:',
+          rootTasks.map(t => ({ id: t.id, name: t.name }))
+        );
 
-        report += `| Parent Group | Child Group | Calls | Total (s) | Avg (s) | % of Total |\n`;
-        report += `|--------------|-------------|-------|-----------|---------|------------|\n`;
-
-        parentChildRelations.slice(0, 10).forEach(relation => { // Show top 10
-          const percentage = ((relation.duration / totalDuration) * 100).toFixed(1);
-          report += `| ${relation.parent} | ${relation.child} | ${relation.count} | ${relation.duration.toFixed(3)} | ${relation.avgDuration.toFixed(3)} | ${percentage}% |\n`;
+        // Sort children by duration descending
+        childrenMap.forEach(children => {
+          children.sort((a, b) => b.endTime - b.startTime - (a.endTime - a.startTime));
         });
-      } else {
-        report += `*No parent-child relationships found in the analyzed tasks.*\n`;
-      }
 
-      // 3. Performance Insights
-      report += `\n## ⚡ Performance Insights\n\n`;
+        const sortedRootTasks = rootTasks.sort(
+          (a, b) => b.endTime - b.startTime - (a.endTime - a.startTime)
+        );
+        console.log(
+          '🏗️ [Hierarchy Builder] Sorted root tasks:',
+          sortedRootTasks.map(t => ({
+            id: t.id,
+            name: t.name,
+            duration: t.endTime - t.startTime,
+          }))
+        );
 
-      const longestGroup = sortedGroups[0];
-      const shortestGroup = sortedGroups[sortedGroups.length - 1];
-      const mostCalledGroup = Array.from(taskGroups.values()).sort((a, b) => b.executionCount - a.executionCount)[0];
+        return { rootTasks: sortedRootTasks, childrenMap };
+      };
 
-      report += `- **Longest Running Group:** ${longestGroup?.groupName} (${longestGroup?.totalDuration.toFixed(3)}s)\n`;
-      report += `- **Most Frequently Called:** ${mostCalledGroup?.groupName} (${mostCalledGroup?.executionCount} executions)\n`;
-      report += `- **Performance Bottleneck:** Groups taking >10% of total time: ${sortedGroups.filter(g => (g.totalDuration / totalDuration) > 0.1).length}\n\n`;
+      const { rootTasks, childrenMap } = buildTaskHierarchy();
 
-      // 4. Execution Flow Overview
-      report += `## 🌊 Execution Flow Overview\n\n`;
+      // Always show hierarchical breakdown if we have tasks
+      if (reportTasks.length > 0) {
+        console.log('✅ [Breakdown Strategy] reportTasks.length > 0, proceeding with breakdown');
 
-      if (sortedGroups.length > 0) {
-        // Add flow statistics first
-        report += `### 📊 Flow Statistics\n\n`;
-        report += `| Metric | Value |\n`;
-        report += `|--------|-------|\n`;
+        const maxTopLevelTasks = 8;
+        const maxSubTasks = 12;
 
-        const totalGroups = sortedGroups.length;
-        const groupsWithChildren = sortedGroups.filter(g => g.calleeGroups.size > 0).length;
-        const independentGroups = totalGroups - groupsWithChildren;
-        const avgGroupDuration = totalDuration / totalGroups;
-        const avgGroupExecutions = sortedGroups.reduce((sum, g) => sum + g.executionCount, 0) / totalGroups;
+        // Sort all tasks by duration for consistent ordering
+        const allTasksSorted = [...reportTasks].sort(
+          (a, b) => b.endTime - b.startTime - (a.endTime - a.startTime)
+        );
+        console.log(
+          '📈 [Breakdown Strategy] All tasks sorted by duration:',
+          allTasksSorted.map(t => ({
+            name: t.name,
+            duration: (t.endTime - t.startTime).toFixed(3),
+          }))
+        );
 
-        // Calculate medians for use throughout the report
-        const executionCounts = sortedGroups.map(g => g.executionCount).sort((a, b) => a - b);
-        const execMedian = executionCounts.length % 2 === 0
-          ? (executionCounts[executionCounts.length / 2 - 1] + executionCounts[executionCounts.length / 2]) / 2
-          : executionCounts[Math.floor(executionCounts.length / 2)];
+        // Determine task breakdown strategy
+        let topLevelTasks: CustomTask[] = [];
+        let topSubTasks: CustomTask[] = [];
 
-        // Distribution categories
-        const heavyGroups = sortedGroups.filter(g => (g.totalDuration / totalDuration) > 0.1);
-        const mediumGroups = sortedGroups.filter(g => (g.totalDuration / totalDuration) > 0.05 && (g.totalDuration / totalDuration) <= 0.1);
-        const lightGroups = sortedGroups.filter(g => (g.totalDuration / totalDuration) <= 0.05);
-        const frequentGroups = sortedGroups.filter(g => g.executionCount > execMedian);
-        const rareGroups = sortedGroups.filter(g => g.executionCount <= execMedian);
+        // Strategy 1: If we have true hierarchical structure, use it
+        if (rootTasks.length > 0 && childrenMap.size > 0) {
+          console.log(
+            '🎯 [Strategy 1] Using hierarchical structure:',
+            rootTasks.length,
+            'root tasks,',
+            childrenMap.size,
+            'parent-child relationships'
+          );
 
-        // Calculate flow depth (max call chain length)
-        const calculateMaxDepth = (): number => {
-          const visited = new Set<string>();
-          const getDepth = (groupName: string, currentDepth: number): number => {
-            if (visited.has(groupName)) return currentDepth; // Avoid cycles
-            visited.add(groupName);
+          topLevelTasks = rootTasks.slice(0, maxTopLevelTasks);
+          console.log(
+            '🎯 [Strategy 1] Selected top-level tasks:',
+            topLevelTasks.map(t => ({ id: t.id, name: t.name }))
+          );
 
-            const group = taskGroups.get(groupName);
-            if (!group || group.calleeGroups.size === 0) return currentDepth;
-
-            let maxChildDepth = currentDepth;
-            group.calleeGroups.forEach((_, childName) => {
-              const childDepth = getDepth(childName, currentDepth + 1);
-              maxChildDepth = Math.max(maxChildDepth, childDepth);
+          // Collect all sub-tasks from top-level tasks
+          const allSubTasks: CustomTask[] = [];
+          topLevelTasks.forEach(rootTask => {
+            const children = childrenMap.get(rootTask.id) || [];
+            console.log('🎯 [Strategy 1] Children for', rootTask.name, ':', children.length);
+            children.forEach(child => {
+              allSubTasks.push(child);
+              // Also include grandchildren
+              const grandChildren = childrenMap.get(child.id) || [];
+              console.log(
+                '🎯 [Strategy 1] Grandchildren for',
+                child.name,
+                ':',
+                grandChildren.length
+              );
+              grandChildren.forEach(grandChild => {
+                allSubTasks.push(grandChild);
+              });
             });
+          });
 
-            visited.delete(groupName);
-            return maxChildDepth;
+          console.log('🎯 [Strategy 1] Total sub-tasks collected:', allSubTasks.length);
+
+          // Sort sub-tasks by duration and take top ones
+          allSubTasks.sort((a, b) => b.endTime - b.startTime - (a.endTime - a.startTime));
+          topSubTasks = allSubTasks.slice(0, maxSubTasks);
+          console.log(
+            '🎯 [Strategy 1] Selected sub-tasks:',
+            topSubTasks.map(t => ({ name: t.name, duration: (t.endTime - t.startTime).toFixed(3) }))
+          );
+        }
+        // Strategy 2: Use flat task structure, split into main and sub-tasks
+        else {
+          console.log(
+            '🎯 [Strategy 2] Using flat structure with',
+            allTasksSorted.length,
+            'total tasks'
+          );
+          console.log(
+            '🎯 [Strategy 2] Reason: rootTasks.length =',
+            rootTasks.length,
+            ', childrenMap.size =',
+            childrenMap.size
+          );
+
+          topLevelTasks = allTasksSorted.slice(0, maxTopLevelTasks);
+          topSubTasks = allTasksSorted.slice(maxTopLevelTasks, maxTopLevelTasks + maxSubTasks);
+
+          console.log(
+            '🎯 [Strategy 2] Top-level tasks:',
+            topLevelTasks.map(t => ({
+              name: t.name,
+              duration: (t.endTime - t.startTime).toFixed(3),
+            }))
+          );
+          console.log(
+            '🎯 [Strategy 2] Sub-tasks:',
+            topSubTasks.map(t => ({ name: t.name, duration: (t.endTime - t.startTime).toFixed(3) }))
+          );
+        }
+
+        console.log('📊 [Final Results] topLevelTasks.length:', topLevelTasks.length);
+        console.log('📊 [Final Results] topSubTasks.length:', topSubTasks.length);
+
+        report += `**Task Execution Breakdown** (step duration: ${totalDuration.toFixed(1)}s):\n\n`;
+
+        // Generate single hierarchical table
+        console.log('🏁 [Hierarchical Table] Generating single hierarchical table...');
+
+        // Build hierarchical table data aggregated by group with parent-child relationships
+        const buildHierarchicalTable = () => {
+          const tableRows: Array<{
+            level: number;
+            name: string;
+            total: number;
+            avg: number;
+            min: number;
+            max: number;
+            median: number;
+            p95: number;
+            p99: number;
+            count: number;
+          }> = [];
+
+          // Helper function to extract group name (last part after /)
+          const extractGroupName = (taskName: string): string => {
+            if (!taskName) return 'Unknown';
+            const parts = taskName.split('/');
+            return parts[parts.length - 1].trim() || taskName;
           };
 
-          let maxDepth = 0;
-          sortedGroups.forEach(group => {
-            if (group.callerGroups.size === 0) { // Start from root groups
-              maxDepth = Math.max(maxDepth, getDepth(group.groupName, 1));
+          // Helper function to calculate percentiles
+          const calculatePercentile = (sortedValues: number[], percentile: number): number => {
+            if (sortedValues.length === 0) return 0;
+            if (sortedValues.length === 1) return sortedValues[0];
+
+            const index = (percentile / 100) * (sortedValues.length - 1);
+            const lower = Math.floor(index);
+            const upper = Math.ceil(index);
+
+            if (lower === upper) {
+              return sortedValues[lower];
+            }
+
+            const weight = index - lower;
+            return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+          };
+
+          // Helper function to calculate median
+          const calculateMedian = (sortedValues: number[]): number => {
+            if (sortedValues.length === 0) return 0;
+            if (sortedValues.length === 1) return sortedValues[0];
+
+            const mid = Math.floor(sortedValues.length / 2);
+            if (sortedValues.length % 2 === 0) {
+              return (sortedValues[mid - 1] + sortedValues[mid]) / 2;
+            }
+            return sortedValues[mid];
+          };
+
+          // Aggregate tasks by group
+          const taskGroups = new Map<
+            string,
+            {
+              tasks: CustomTask[];
+              durations: number[];
+              children: Set<string>;
+              parents: Set<string>;
+            }
+          >();
+
+          console.log(
+            '🏁 [Hierarchical Table] Aggregating tasks by group and analyzing relationships...'
+          );
+
+          // Collect all tasks to process
+          const tasksToProcess = allTasksSorted.length > 0 ? allTasksSorted : reportTasks;
+
+          // First pass: collect tasks by group
+          tasksToProcess.forEach(task => {
+            const groupName = extractGroupName(task.name || task.fullName || 'Unknown');
+            const taskDuration = task.endTime - task.startTime;
+
+            if (!taskGroups.has(groupName)) {
+              taskGroups.set(groupName, {
+                tasks: [],
+                durations: [],
+                children: new Set(),
+                parents: new Set(),
+              });
+            }
+
+            const group = taskGroups.get(groupName)!;
+            group.tasks.push(task);
+            group.durations.push(taskDuration);
+          });
+
+          // Second pass: analyze parent-child relationships between groups
+          tasksToProcess.forEach(task => {
+            const taskGroupName = extractGroupName(task.name || task.fullName || 'Unknown');
+
+            // Find parent tasks and their groups
+            if (task.parentId) {
+              const parentTask = tasksToProcess.find(t => t.id === task.parentId);
+              if (parentTask) {
+                const parentGroupName = extractGroupName(
+                  parentTask.name || parentTask.fullName || 'Unknown'
+                );
+                if (parentGroupName !== taskGroupName) {
+                  // Different groups - establish parent-child relationship
+                  taskGroups.get(taskGroupName)?.parents.add(parentGroupName);
+                  taskGroups.get(parentGroupName)?.children.add(taskGroupName);
+                }
+              }
             }
           });
-          return maxDepth;
+
+          console.log('🏁 [Hierarchical Table] Group relationships analyzed');
+          console.log(
+            '🏁 [Hierarchical Table] Groups with relationships:',
+            Array.from(taskGroups.entries()).map(([name, data]) => ({
+              name,
+              parents: Array.from(data.parents),
+              children: Array.from(data.children),
+            }))
+          );
+
+          // Calculate statistics for each group
+          const groupStats = new Map<
+            string,
+            {
+              groupName: string;
+              total: number;
+              avg: number;
+              min: number;
+              max: number;
+              median: number;
+              p95: number;
+              p99: number;
+              count: number;
+              children: Set<string>;
+              parents: Set<string>;
+            }
+          >();
+
+          taskGroups.forEach((groupData, groupName) => {
+            const sortedDurations = [...groupData.durations].sort((a, b) => a - b);
+            const total = groupData.durations.reduce((sum, d) => sum + d, 0);
+            const avg = total / groupData.durations.length;
+            const min = Math.min(...groupData.durations);
+            const max = Math.max(...groupData.durations);
+            const median = calculateMedian(sortedDurations);
+            const p95 = calculatePercentile(sortedDurations, 95);
+            const p99 = calculatePercentile(sortedDurations, 99);
+
+            groupStats.set(groupName, {
+              groupName,
+              total,
+              avg,
+              min,
+              max,
+              median,
+              p95,
+              p99,
+              count: groupData.durations.length,
+              children: groupData.children,
+              parents: groupData.parents,
+            });
+          });
+
+          // Build hierarchical structure
+          const addedGroups = new Set<string>();
+
+          // Helper function to add group and its children recursively
+          const addGroupHierarchy = (groupName: string, level: number) => {
+            if (addedGroups.has(groupName)) return;
+
+            const stats = groupStats.get(groupName);
+            if (!stats) return;
+
+            addedGroups.add(groupName);
+
+            // Add current group
+            tableRows.push({
+              level,
+              name: `${stats.groupName} (${stats.count} tasks)`,
+              total: stats.total,
+              avg: stats.avg,
+              min: stats.min,
+              max: stats.max,
+              median: stats.median,
+              p95: stats.p95,
+              p99: stats.p99,
+              count: stats.count,
+            });
+
+            // Add children recursively, sorted by total duration
+            const childrenArray = Array.from(stats.children)
+              .map(childName => groupStats.get(childName))
+              .filter(child => child !== undefined)
+              .sort((a, b) => b!.total - a!.total);
+
+            childrenArray.forEach(child => {
+              addGroupHierarchy(child!.groupName, level + 1);
+            });
+          };
+
+          // Start with root groups (groups with no parents) sorted by total duration
+          const rootGroups = Array.from(groupStats.values())
+            .filter(group => group.parents.size === 0)
+            .sort((a, b) => b.total - a.total);
+
+          console.log(
+            '🏁 [Hierarchical Table] Root groups:',
+            rootGroups.map(g => g.groupName)
+          );
+
+          if (rootGroups.length > 0) {
+            rootGroups.forEach(rootGroup => {
+              addGroupHierarchy(rootGroup.groupName, 0);
+            });
+          } else {
+            // Fallback: if no clear hierarchy, show all groups sorted by total duration
+            console.log('🏁 [Hierarchical Table] No clear hierarchy found, showing flat structure');
+            const allGroups = Array.from(groupStats.values()).sort((a, b) => b.total - a.total);
+            allGroups.forEach(group => {
+              addGroupHierarchy(group.groupName, 0);
+            });
+          }
+
+          // Add any remaining groups that weren't added (orphaned groups)
+          const remainingGroups = Array.from(groupStats.values())
+            .filter(group => !addedGroups.has(group.groupName))
+            .sort((a, b) => b.total - a.total);
+
+          if (remainingGroups.length > 0) {
+            console.log(
+              '🏁 [Hierarchical Table] Adding orphaned groups:',
+              remainingGroups.map(g => g.groupName)
+            );
+            remainingGroups.forEach(group => {
+              addGroupHierarchy(group.groupName, 0);
+            });
+          }
+
+          console.log(
+            '🏁 [Hierarchical Table] Generated hierarchical table with',
+            tableRows.length,
+            'group rows'
+          );
+
+          return tableRows;
         };
 
-        const maxFlowDepth = calculateMaxDepth();
+        const hierarchicalRows = buildHierarchicalTable();
 
-        report += `| Total Task Groups | ${totalGroups} |\n`;
-        report += `| Groups with Children | ${groupsWithChildren} |\n`;
-        report += `| Independent Groups | ${independentGroups} |\n`;
-        report += `| Average Group Duration | ${avgGroupDuration.toFixed(3)}s |\n`;
-        report += `| Average Group Executions | ${avgGroupExecutions.toFixed(1)} |\n`;
-        report += `| Max Flow Depth | ${maxFlowDepth} levels |\n`;
-        report += `| Flow Complexity | ${(groupsWithChildren / totalGroups * 100).toFixed(1)}% interconnected |\n\n`;
+        if (hierarchicalRows.length > 0) {
+          console.log('🏁 [Hierarchical Table] Generated', hierarchicalRows.length, 'rows');
 
-        // Enhanced Mermaid diagram with styling and categories
-        report += `### 🔄 Flow Diagram\n\n`;
-        report += '```mermaid\n';
-        report += 'graph TD\n';
+          // Generate the hierarchical table
+          report += `**Hierarchical Task Breakdown:**\n\n`;
+          report += `| Task Hierarchy | Total (s) | Avg (s) | Min (s) | Max (s) | Median (s) | 95th % (s) | 99th % (s) |\n`;
+          report += `|----------------|-----------|---------|---------|---------|------------|------------|------------|\n`;
 
-        // Create nodes for top groups with detailed info and styling
-        const topGroups = sortedGroups.slice(0, Math.min(12, sortedGroups.length));
+          hierarchicalRows.forEach(row => {
+            // Create indentation for hierarchy levels
+            const indent = '　'.repeat(row.level); // Using full-width space for better alignment
+            const hierarchyMarker = row.level > 0 ? '└─ ' : '';
+            const taskName = indent + hierarchyMarker + row.name;
 
-        // Categorize groups for styling
-        const heavyGroupsSet = new Set(heavyGroups.map((g: TaskGroup) => g.groupName));
-        const mediumGroupsSet = new Set(mediumGroups.map((g: TaskGroup) => g.groupName));
-        const frequentGroupsSet = new Set(frequentGroups.map((g: TaskGroup) => g.groupName));
+            // Truncate long names to fit table
+            const displayName = taskName.length > 40 ? taskName.substring(0, 37) + '...' : taskName;
 
-        topGroups.forEach((group, index) => {
-          const nodeId = `G${index}`;
-          const duration = group.totalDuration.toFixed(2);
-          const avgDuration = group.avgDuration.toFixed(3);
-          const execCount = group.executionCount;
-          const percentage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
-
-          // Escape special characters in group names for Mermaid
-          const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `Group${index}`;
-
-          // Determine node style based on performance category
-          let nodeStyle = '';
-          let nodeIcon = '';
-          if (heavyGroupsSet.has(group.groupName)) {
-            nodeStyle = 'fill:#ff6b6b,stroke:#d63031,stroke-width:3px,color:#fff';
-            nodeIcon = '🔥';
-          } else if (mediumGroupsSet.has(group.groupName)) {
-            nodeStyle = 'fill:#fdcb6e,stroke:#e17055,stroke-width:2px,color:#2d3436';
-            nodeIcon = '⚡';
-          } else if (frequentGroupsSet.has(group.groupName)) {
-            nodeStyle = 'fill:#74b9ff,stroke:#0984e3,stroke-width:2px,color:#fff';
-            nodeIcon = '🔄';
-          } else {
-            nodeStyle = 'fill:#a29bfe,stroke:#6c5ce7,stroke-width:1px,color:#fff';
-            nodeIcon = '💨';
-          }
-
-          report += `    ${nodeId}["${nodeIcon} ${safeName}<br/>📊 ${percentage}% of total<br/>⏱️ Total: ${duration}s<br/>📈 Avg: ${avgDuration}s<br/>🔢 Calls: ${execCount}"]\n`;
-          report += `    style ${nodeId} ${nodeStyle}\n`;
-        });
-
-        // Add relationships between top groups with enhanced edge information
-        const addedRelationships = new Set<string>();
-        topGroups.forEach((group, index) => {
-          const nodeId = `G${index}`;
-          group.calleeGroups.forEach((calleeInfo, calleeName) => {
-            const calleeIndex = topGroups.findIndex(g => g.groupName === calleeName);
-            if (calleeIndex !== -1 && calleeIndex !== index) {
-              const calleeNodeId = `G${calleeIndex}`;
-              const relationshipKey = `${nodeId}-${calleeNodeId}`;
-
-              if (!addedRelationships.has(relationshipKey)) {
-                addedRelationships.add(relationshipKey);
-
-                const callCount = calleeInfo.count;
-                const avgCallDuration = calleeInfo.avgDuration.toFixed(3);
-                const totalCallTime = calleeInfo.totalDuration.toFixed(2);
-                const callPercentage = ((calleeInfo.totalDuration / totalDuration) * 100).toFixed(1);
-
-                // Determine edge thickness based on call frequency
-                let edgeStyle = '';
-                if (callCount > execMedian * 2) {
-                  edgeStyle = 'stroke:#e17055,stroke-width:4px';
-                } else if (callCount > execMedian) {
-                  edgeStyle = 'stroke:#fdcb6e,stroke-width:3px';
-                } else {
-                  edgeStyle = 'stroke:#74b9ff,stroke-width:2px';
-                }
-
-                report += `    ${nodeId} -->|"📞 ${callCount}x calls<br/>⏱️ ${totalCallTime}s (${callPercentage}%)<br/>📊 avg: ${avgCallDuration}s"| ${calleeNodeId}\n`;
-                report += `    linkStyle ${Array.from(addedRelationships).length - 1} ${edgeStyle}\n`;
-              }
-            }
+            report += `| ${displayName} | ${row.total.toFixed(3)} | ${row.avg.toFixed(3)} | ${row.min.toFixed(3)} | ${row.max.toFixed(3)} | ${row.median.toFixed(3)} | ${row.p95.toFixed(3)} | ${row.p99.toFixed(3)} |\n`;
           });
-        });
 
-        // Add legend/subgraph for categories
-        report += `\n    subgraph Legend["📋 Performance Categories"]\n`;
-        report += `        L1["🔥 Heavy >10%"]\n`;
-        report += `        L2["⚡ Medium 5-10%"]\n`;
-        report += `        L3["🔄 Frequent >${execMedian.toFixed(0)} calls"]\n`;
-        report += `        L4["💨 Light <5%"]\n`;
-        report += `    end\n`;
-        report += `    style L1 fill:#ff6b6b,stroke:#d63031,stroke-width:2px,color:#fff\n`;
-        report += `    style L2 fill:#fdcb6e,stroke:#e17055,stroke-width:2px,color:#2d3436\n`;
-        report += `    style L3 fill:#74b9ff,stroke:#0984e3,stroke-width:2px,color:#fff\n`;
-        report += `    style L4 fill:#a29bfe,stroke:#6c5ce7,stroke-width:1px,color:#fff\n`;
+          report += `\n`;
+          console.log('🏁 [Hierarchical Table] Hierarchical table added to report');
+        } else {
+          console.log('❌ [Hierarchical Table] No hierarchical table - no rows generated');
 
-        // Add summary statistics box
-        report += `\n    subgraph Stats["📈 Flow Summary"]\n`;
-        report += `        S1["📊 ${totalGroups} total groups"]\n`;
-        report += `        S2["🔗 ${groupsWithChildren} with children"]\n`;
-        report += `        S3["📏 ${maxFlowDepth} max depth"]\n`;
-        report += `        S4["🎯 ${(groupsWithChildren / totalGroups * 100).toFixed(0)}% interconnected"]\n`;
-        report += `    end\n`;
-        report += `    style S1 fill:#00b894,stroke:#00a085,stroke-width:1px,color:#fff\n`;
-        report += `    style S2 fill:#00b894,stroke:#00a085,stroke-width:1px,color:#fff\n`;
-        report += `    style S3 fill:#00b894,stroke:#00a085,stroke-width:1px,color:#fff\n`;
-        report += `    style S4 fill:#00b894,stroke:#00a085,stroke-width:1px,color:#fff\n`;
+          // Fallback: simple task list
+          console.log('⚠️ [Fallback] Showing simple task list');
+          report += `**Task List (sorted by duration):**\n\n`;
 
-        report += '```\n\n';
-      } else {
-        report += `*No task groups available for flow diagram.*\n\n`;
-      }
-
-      // 5. Performance Distribution & Analysis
-      report += `## 📈 Performance Distribution & Analysis\n\n`;
-
-      if (sortedGroups.length > 0) {
-        // Identify parent-child relationships to avoid comparing parents with their children
-        const parentChildMap = new Map<string, Set<string>>(); // parent -> set of children
-        const childParentMap = new Map<string, string>(); // child -> parent
-
-        // Build parent-child relationships based on task hierarchy
-        reportTasks.forEach(task => {
-          const taskGroupName = extractGroupName(task.name) || extractGroupName(task.fullName) || task.name;
-
-          if (task.parentId) {
-            const parentTask = reportTasks.find(t => t.id === task.parentId);
-            if (parentTask) {
-              const parentGroupName = extractGroupName(parentTask.name) || extractGroupName(parentTask.fullName) || parentTask.name;
-
-              if (parentGroupName !== taskGroupName) {
-                if (!parentChildMap.has(parentGroupName)) {
-                  parentChildMap.set(parentGroupName, new Set());
-                }
-                parentChildMap.get(parentGroupName)!.add(taskGroupName);
-                childParentMap.set(taskGroupName, parentGroupName);
-              }
-            }
-          }
-        });
-
-        // Separate groups into independent (leaf) and hierarchical (parent) categories
-        const leafGroups = sortedGroups.filter(g => !parentChildMap.has(g.groupName));
-        const parentGroups = sortedGroups.filter(g => parentChildMap.has(g.groupName));
-
-        // Calculate distribution metrics for leaf groups only (to avoid parent-child comparison issues)
-        const leafDurations = leafGroups.map(g => g.totalDuration).sort((a, b) => a - b);
-        const leafAvgDurations = leafGroups.map(g => g.avgDuration).sort((a, b) => a - b);
-        const leafExecutionCounts = leafGroups.map(g => g.executionCount).sort((a, b) => a - b);
-
-        const leafDurationMedian = leafDurations.length > 0 ? (leafDurations.length % 2 === 0
-          ? (leafDurations[leafDurations.length / 2 - 1] + leafDurations[leafDurations.length / 2]) / 2
-          : leafDurations[Math.floor(leafDurations.length / 2)]) : 0;
-
-        const leafAvgDurationMedian = leafAvgDurations.length > 0 ? (leafAvgDurations.length % 2 === 0
-          ? (leafAvgDurations[leafAvgDurations.length / 2 - 1] + leafAvgDurations[leafAvgDurations.length / 2]) / 2
-          : leafAvgDurations[Math.floor(leafAvgDurations.length / 2)]) : 0;
-
-        const leafExecMedian = leafExecutionCounts.length > 0 ? (leafExecutionCounts.length % 2 === 0
-          ? (leafExecutionCounts[leafExecutionCounts.length / 2 - 1] + leafExecutionCounts[leafExecutionCounts.length / 2]) / 2
-          : leafExecutionCounts[Math.floor(leafExecutionCounts.length / 2)]) : 0;
-
-        // Detailed distribution statistics
-        report += `### 📊 Distribution Statistics\n\n`;
-        report += `**Analysis Note:** Comparing leaf groups only to avoid parent-child timing overlap.\n\n`;
-
-        report += `| Distribution Metric | Leaf Groups | All Groups |\n`;
-        report += `|---------------------|-------------|------------|\n`;
-        report += `| Group Count | ${leafGroups.length} | ${sortedGroups.length} |\n`;
-        report += `| Parent Groups | ${parentGroups.length} | - |\n`;
-        if (leafDurations.length > 0) {
-          report += `| Duration Range | ${leafDurations[0].toFixed(3)}s - ${leafDurations[leafDurations.length - 1].toFixed(3)}s | ${sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[0].toFixed(3)}s - ${sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[sortedGroups.length - 1].toFixed(3)}s |\n`;
-          report += `| Duration Median | ${leafDurationMedian.toFixed(3)}s | ${(sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b).length % 2 === 0 ? (sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2) - 1] + sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]) / 2 : sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]).toFixed(3)}s |\n`;
-        }
-        if (leafExecutionCounts.length > 0) {
-          report += `| Execution Range | ${leafExecutionCounts[0]} - ${leafExecutionCounts[leafExecutionCounts.length - 1]} calls | ${sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[0]} - ${sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[sortedGroups.length - 1]} calls |\n`;
-          report += `| Execution Median | ${leafExecMedian.toFixed(0)} calls | ${(sortedGroups.map(g => g.executionCount).sort((a, b) => a - b).length % 2 === 0 ? (sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2) - 1] + sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]) / 2 : sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]).toFixed(0)} calls |\n`;
-        }
-        if (leafAvgDurations.length > 0) {
-          report += `| Avg Duration Range | ${leafAvgDurations[0].toFixed(3)}s - ${leafAvgDurations[leafAvgDurations.length - 1].toFixed(3)}s | ${sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[0].toFixed(3)}s - ${sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[sortedGroups.length - 1].toFixed(3)}s |\n`;
-          report += `| Avg Duration Median | ${leafAvgDurationMedian.toFixed(3)}s | ${(sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b).length % 2 === 0 ? (sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2) - 1] + sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]) / 2 : sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]).toFixed(3)}s |\n`;
-        }
-        report += `\n`;
-
-        // Calculate performance categories based on leaf groups only
-        const leafTotalDuration = leafGroups.reduce((sum, g) => sum + g.totalDuration, 0);
-        const heavyGroups = leafGroups.filter(g => leafTotalDuration > 0 && (g.totalDuration / leafTotalDuration) > 0.1);
-        const mediumGroups = leafGroups.filter(g => leafTotalDuration > 0 && (g.totalDuration / leafTotalDuration) > 0.05 && (g.totalDuration / leafTotalDuration) <= 0.1);
-        const lightGroups = leafGroups.filter(g => leafTotalDuration > 0 && (g.totalDuration / leafTotalDuration) <= 0.05);
-        const frequentGroups = leafGroups.filter(g => g.executionCount > leafExecMedian);
-        const rareGroups = leafGroups.filter(g => g.executionCount <= leafExecMedian);
-
-        report += `### 🎯 Performance Categories (Leaf Groups Only)\n\n`;
-        report += `**Analysis Note:** Categories based on leaf groups (${leafGroups.length} groups) to avoid parent-child timing overlap. Parent groups (${parentGroups.length}) are shown separately.\n\n`;
-
-        report += `| Category | Count | Total Time | Avg Time | Description |\n`;
-        report += `|----------|-------|------------|----------|-------------|\n`;
-        report += `| 🔥 Heavy (>10%) | ${heavyGroups.length} | ${heavyGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${heavyGroups.length > 0 ? (heavyGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / heavyGroups.length).toFixed(3) : '0'}s | Performance critical |\n`;
-        report += `| ⚡ Medium (5-10%) | ${mediumGroups.length} | ${mediumGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${mediumGroups.length > 0 ? (mediumGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / mediumGroups.length).toFixed(3) : '0'}s | Moderate impact |\n`;
-        report += `| 💨 Light (<5%) | ${lightGroups.length} | ${lightGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${lightGroups.length > 0 ? (lightGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / lightGroups.length).toFixed(3) : '0'}s | Low impact |\n`;
-        report += `| 🔄 Frequent (>${leafExecMedian.toFixed(0)} calls) | ${frequentGroups.length} | ${frequentGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${frequentGroups.length > 0 ? (frequentGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / frequentGroups.length).toFixed(3) : '0'}s | High usage |\n`;
-        report += `| 🔹 Rare (≤${leafExecMedian.toFixed(0)} calls) | ${rareGroups.length} | ${rareGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${rareGroups.length > 0 ? (rareGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / rareGroups.length).toFixed(3) : '0'}s | Low usage |\n\n`;
-
-        // Add hierarchical groups summary
-        if (parentGroups.length > 0) {
-          report += `### 🏗️ Hierarchical Groups (Parent Groups)\n\n`;
-          report += `These groups contain child groups and their execution time includes child execution time.\n\n`;
-          report += `| Parent Group | Child Groups | Total Time | Avg Time | Description |\n`;
-          report += `|--------------|--------------|------------|----------|-------------|\n`;
-
-          parentGroups.forEach(group => {
-            const children = parentChildMap.get(group.groupName);
-            const childrenNames = children ? Array.from(children).slice(0, 3).join(', ') + (children.size > 3 ? '...' : '') : 'None';
-            const childCount = children ? children.size : 0;
-
-            report += `| ${group.groupName} | ${childCount > 0 ? `${childCount}: ${childrenNames}` : 'None'} | ${group.totalDuration.toFixed(3)}s | ${group.avgDuration.toFixed(3)}s | Orchestration/coordination |\n`;
+          allTasksSorted.slice(0, 10).forEach((task, index) => {
+            const duration = (task.endTime - task.startTime).toFixed(3);
+            const name = task.name || task.fullName || 'Unknown';
+            report += `${index + 1}. **${name}** - ${duration}s\n`;
           });
           report += `\n`;
         }
 
-        // Enhanced Performance Distribution Pie Chart
-        report += `### 🥧 Time Distribution\n\n`;
-
-        const topPerformanceGroups = leafGroups.slice(0, 8); // Use leaf groups only
-
-        // Add summary before the chart
-        const leafTotalDurationForChart = leafGroups.reduce((sum, g) => sum + g.totalDuration, 0);
-        report += `**Distribution Summary:** ${topPerformanceGroups.length} leaf groups shown (${leafTotalDurationForChart > 0 ? ((topPerformanceGroups.reduce((sum, g) => sum + g.totalDuration, 0) / leafTotalDurationForChart) * 100).toFixed(1) : '0'}% of leaf group time)\n\n`;
-
-        report += '```mermaid\n';
-        report += '%%{init: {"pie": {"textPosition": 0.75}, "themeVariables": {"pieOuterStrokeWidth": "2px"}}}%%\n';
-        report += 'pie title Execution Time Distribution by Leaf Groups\n';
-        const othersDuration = leafGroups.slice(8).reduce((sum, group) => sum + group.totalDuration, 0);
-
-        topPerformanceGroups.forEach((group, index) => {
-          const percentage = leafTotalDurationForChart > 0 ? ((group.totalDuration / leafTotalDurationForChart) * 100).toFixed(1) : '0';
-          const duration = group.totalDuration.toFixed(2);
-          // Escape special characters in group names for Mermaid pie chart
-          const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `Group${index}`;
-          const displayName = safeName.length > 20 ? safeName.substring(0, 17) + '...' : safeName;
-          report += `    "${displayName} (${duration}s)" : ${percentage}\n`;
-        });
-
-        if (othersDuration > 0) {
-          const othersPercentage = leafTotalDurationForChart > 0 ? ((othersDuration / leafTotalDurationForChart) * 100).toFixed(1) : '0';
-          const othersCount = leafGroups.length - 8;
-          report += `    "Others (${othersCount} groups)" : ${othersPercentage}\n`;
-        }
-
-        report += '```\n\n';
-
-        // Enhanced Execution Frequency Distribution
-        report += `### 📊 Execution Frequency Distribution\n\n`;
-
-        const leafTotalExecutions = leafGroups.reduce((sum, g) => sum + g.executionCount, 0);
-        const topExecutionGroups = [...leafGroups].sort((a, b) => b.executionCount - a.executionCount).slice(0, 8);
-        const othersExecutions = [...leafGroups].sort((a, b) => b.executionCount - a.executionCount).slice(8).reduce((sum, group) => sum + group.executionCount, 0);
-
-        // Add summary before the chart
-        report += `**Frequency Summary:** ${topExecutionGroups.length} most active leaf groups (${leafTotalExecutions > 0 ? ((topExecutionGroups.reduce((sum, g) => sum + g.executionCount, 0) / leafTotalExecutions) * 100).toFixed(1) : '0'}% of leaf group calls)\n\n`;
-
-        report += '```mermaid\n';
-        report += '%%{init: {"pie": {"textPosition": 0.75}, "themeVariables": {"pieOuterStrokeWidth": "2px"}}}%%\n';
-        report += 'pie title Call Frequency Distribution by Leaf Groups\n';
-
-        topExecutionGroups.forEach((group, index) => {
-          const percentage = leafTotalExecutions > 0 ? ((group.executionCount / leafTotalExecutions) * 100).toFixed(1) : '0';
-          const execCount = group.executionCount;
-          const avgDuration = group.avgDuration.toFixed(3);
-          const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `Group${index}`;
-          const displayName = safeName.length > 15 ? safeName.substring(0, 12) + '...' : safeName;
-          report += `    "${displayName} (${execCount}x, ${avgDuration}s avg)" : ${percentage}\n`;
-        });
-
-        if (othersExecutions > 0) {
-          const othersPercentage = leafTotalExecutions > 0 ? ((othersExecutions / leafTotalExecutions) * 100).toFixed(1) : '0';
-          const othersCount = leafGroups.length - 8;
-          report += `    "Others (${othersCount} groups)" : ${othersPercentage}\n`;
-        }
-
-        report += '```\n\n';
-
-        // Add Performance vs Frequency Scatter Analysis for leaf groups
-        report += `### 🎯 Performance vs Frequency Analysis (Leaf Groups)\n\n`;
-        report += '```mermaid\n';
-        report += 'quadrantChart\n';
-        report += '    title Performance vs Frequency Matrix (Leaf Groups Only)\n';
-        report += '    x-axis Low_Frequency --> High_Frequency\n';
-        report += '    y-axis Low_Impact --> High_Impact\n';
-        report += '    quadrant-1 High Impact, High Frequency (Critical)\n';
-        report += '    quadrant-2 High Impact, Low Frequency (Optimize)\n';
-        report += '    quadrant-3 Low Impact, Low Frequency (Monitor)\n';
-        report += '    quadrant-4 Low Impact, High Frequency (Review)\n';
-
-        // Plot top leaf groups on the quadrant
-        const maxLeafExecCount = leafGroups.length > 0 ? Math.max(...leafGroups.map(g => g.executionCount)) : 1;
-        const maxLeafDuration = leafGroups.length > 0 ? Math.max(...leafGroups.map(g => g.totalDuration)) : 1;
-
-        leafGroups.slice(0, 10).forEach((group, index) => {
-          const xPos = (group.executionCount / maxLeafExecCount * 0.8 + 0.1).toFixed(2); // 0.1 to 0.9
-          const yPos = (group.totalDuration / maxLeafDuration * 0.8 + 0.1).toFixed(2); // 0.1 to 0.9
-          const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `G${index}`;
-          const shortName = safeName.length > 10 ? safeName.substring(0, 8) + '..' : safeName;
-          report += `    ${shortName}: [${xPos}, ${yPos}]\n`;
-        });
-
-        report += '```\n\n';
-
+        console.log('📋 [Summary] Breakdown summary removed as requested');
       } else {
-        report += `*No task groups available for performance distribution.*\n\n`;
+        console.log('❌ [No Tasks] reportTasks.length is 0, showing fallback message');
+        report += `*No tasks available for breakdown analysis.*\n\n`;
       }
 
-      // 6. Call Relationship Diagram
-      report += `## 🔄 Call Relationship Network\n\n`;
+      // 3. Task-Specific Performance Analysis
+      report += `\n## 📊 Task Performance Analysis\n\n`;
 
-      // Check if there are any significant relationships
-      const significantRelationships = new Set<string>();
-      let hasRelationships = false;
+      const longestGroup = sortedGroups[0];
+      const mostCalledGroup = Array.from(taskGroups.values()).sort(
+        (a, b) => b.executionCount - a.executionCount
+      )[0];
 
-      taskGroups.forEach((group, groupName) => {
-        group.calleeGroups.forEach((calleeInfo, calleeName) => {
-          if (calleeInfo.count > 1) { // Only show relationships with multiple calls
-            const relationship = `${groupName} --> ${calleeName}`;
-            if (!significantRelationships.has(relationship)) {
-              hasRelationships = true;
-              significantRelationships.add(relationship);
-            }
-          }
-        });
-      });
+      report += `- **Longest Running Task Group:** ${longestGroup?.groupName} (${longestGroup?.totalDuration.toFixed(3)}s)\n`;
+      report += `- **Most Frequently Called Task Group:** ${mostCalledGroup?.groupName} (${mostCalledGroup?.executionCount} executions)\n`;
+      report += `- **Performance Critical Task Groups:** ${sortedGroups.filter(g => g.totalDuration / totalDuration > 0.1).length} groups consuming >10% of total time\n\n`;
 
-      if (hasRelationships) {
-        report += '```mermaid\n';
-        report += 'graph LR\n';
+      // Task hierarchy details will be shown in the hierarchical execution coverage section above
 
-        taskGroups.forEach((group, groupName) => {
-          group.calleeGroups.forEach((calleeInfo, calleeName) => {
-            if (calleeInfo.count > 1) { // Only show relationships with multiple calls
-              const relationship = `${groupName} --> ${calleeName}`;
-              if (significantRelationships.has(relationship)) {
-                const shortGroupName = groupName.length > 15 ? groupName.substring(0, 15) + '...' : groupName;
-                const shortCalleeName = calleeName.length > 15 ? calleeName.substring(0, 15) + '...' : calleeName;
-                // Escape special characters in group names for Mermaid
-                const safeGroupName = shortGroupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || 'UnknownGroup';
-                const safeCalleeName = shortCalleeName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || 'UnknownCallee';
-                report += `    "${safeGroupName}" -->|${calleeInfo.count}x| "${safeCalleeName}"\n`;
-                // Remove from set to avoid duplicates
-                significantRelationships.delete(relationship);
-              }
-            }
-          });
-        });
+      // 8. Task Analysis Summary
+      report += `## 📋 Task Analysis Summary\n\n`;
 
-        report += '```\n\n';
-      } else {
-        report += `*No significant call relationships found (showing only relationships with 2+ calls).*\n\n`;
-      }
-
-      // 7. Timeline Analysis
-      report += `## ⏱️ Timeline Analysis\n\n`;
-      const minStartTime = Math.min(...reportTasks.map(t => t.startTime));
-      const maxEndTime = Math.max(...reportTasks.map(t => t.endTime));
-      const executionTimespan = maxEndTime - minStartTime;
-
-      // Calculate timing statistics
-      const allDurations = reportTasks.map(t => t.endTime - t.startTime).sort((a, b) => a - b);
-      const avgDuration = allDurations.reduce((sum, d) => sum + d, 0) / allDurations.length;
-      const medianDuration = allDurations.length % 2 === 0
-        ? (allDurations[allDurations.length / 2 - 1] + allDurations[allDurations.length / 2]) / 2
-        : allDurations[Math.floor(allDurations.length / 2)];
-      const p95Duration = allDurations[Math.floor(allDurations.length * 0.95)];
-      const p99Duration = allDurations[Math.floor(allDurations.length * 0.99)];
-
-      // Calculate concurrency
-      const runningTasks = reportTasks.filter(t => t.isRunning).length;
-      const completedTasks = reportTasks.length - runningTasks;
-
-      report += `### 📈 Execution Timeline\n`;
-      report += `- **Execution Timespan:** ${executionTimespan.toFixed(3)}s\n`;
-      report += `- **Start Time:** ${minStartTime.toFixed(3)}s\n`;
-      report += `- **End Time:** ${maxEndTime.toFixed(3)}s\n`;
-      report += `- **Concurrency Level:** ${(totalDuration / executionTimespan).toFixed(2)}x average parallel execution\n\n`;
-
-      report += `### 📊 Duration Statistics\n`;
-      report += `- **Average Duration:** ${avgDuration.toFixed(3)}s\n`;
-      report += `- **Median Duration:** ${medianDuration.toFixed(3)}s\n`;
-      report += `- **Min Duration:** ${allDurations[0].toFixed(3)}s\n`;
-      report += `- **Max Duration:** ${allDurations[allDurations.length - 1].toFixed(3)}s\n`;
-      report += `- **95th Percentile:** ${p95Duration.toFixed(3)}s\n`;
-      report += `- **99th Percentile:** ${p99Duration.toFixed(3)}s\n\n`;
-
-      report += `### 🔄 Task Status\n`;
-      report += `- **Completed Tasks:** ${completedTasks} (${((completedTasks / reportTasks.length) * 100).toFixed(1)}%)\n`;
-      report += `- **Running Tasks:** ${runningTasks} (${((runningTasks / reportTasks.length) * 100).toFixed(1)}%)\n\n`;
-
-      // 8. Summary
-      report += `## 📋 Analysis Summary\n\n`;
-
+      // Key task performance insights with specific group/task names
       if (longestGroup) {
-        report += `- **Longest Running Group:** ${longestGroup.groupName} (${longestGroup.totalDuration.toFixed(3)}s, ${((longestGroup.totalDuration / totalDuration) * 100).toFixed(1)}% of total time)\n`;
+        report += `- **Longest Running Task Group:** **${longestGroup.groupName}** (${longestGroup.totalDuration.toFixed(3)}s, ${((longestGroup.totalDuration / totalDuration) * 100).toFixed(1)}% of total execution time)\n`;
       }
 
-      const mostCalled = Array.from(taskGroups.values()).sort((a, b) => b.executionCount - a.executionCount)[0];
+      const mostCalled = Array.from(taskGroups.values()).sort(
+        (a, b) => b.executionCount - a.executionCount
+      )[0];
       if (mostCalled) {
-        report += `- **Most Frequently Called:** ${mostCalled.groupName} (${mostCalled.executionCount} executions)\n`;
+        report += `- **Most Frequently Executed Task Group:** **${mostCalled.groupName}** (${mostCalled.executionCount} executions)\n`;
       }
 
-      const bottleneckGroups = sortedGroups.filter(g => (g.totalDuration / totalDuration) > 0.1);
-      report += `- **Performance Critical Groups:** ${bottleneckGroups.length} groups consuming >10% of total time\n`;
+      const bottleneckGroups = sortedGroups.filter(g => g.totalDuration / totalDuration > 0.1);
+      if (bottleneckGroups.length > 0) {
+        const bottleneckNames = bottleneckGroups.map(g => `**${g.groupName}**`).join(', ');
+        report += `- **Performance Critical Task Groups:** ${bottleneckGroups.length} groups consuming >10% of total execution time: ${bottleneckNames}\n`;
+      } else {
+        report += `- **Performance Critical Task Groups:** No groups consuming >10% of total execution time\n`;
+      }
 
-      const groupDiversities = Array.from(taskGroups.values()).map(g => g.tasks.map(t => t.endTime - t.startTime));
-      const highVariabilityGroups = groupDiversities.filter((durations, index) => {
+      // Find fastest and slowest groups
+      const fastestGroup = sortedGroups[sortedGroups.length - 1];
+      if (fastestGroup && sortedGroups.length > 1) {
+        report += `- **Fastest Task Group:** **${fastestGroup.groupName}** (${fastestGroup.totalDuration.toFixed(3)}s total, ${fastestGroup.avgDuration.toFixed(3)}s average)\n`;
+      }
+
+      // Task execution patterns
+      const taskLevels = new Set(reportTasks.map(t => t.level));
+      const maxLevel = Math.max(...taskLevels);
+      report += `- **Task Hierarchy Depth:** ${maxLevel + 1} levels (from level 0 to ${maxLevel})\n`;
+
+      // Task relationship analysis
+      const parentChildRelationships = Array.from(taskGroups.values())
+        .map(g => g.calleeGroups.size)
+        .reduce((sum, count) => sum + count, 0);
+      report += `- **Task Relationships:** ${parentChildRelationships} parent-child task relationships found\n`;
+
+      // Task execution variability with specific group names
+      const groupDiversities = Array.from(taskGroups.values()).map((g, index) => ({
+        group: g,
+        durations: g.tasks.map(t => t.endTime - t.startTime),
+        index,
+      }));
+
+      const highVariabilityGroups = groupDiversities.filter(({ durations }) => {
+        if (durations.length <= 1) return false;
         const avg = durations.reduce((sum, d) => sum + d, 0) / durations.length;
-        const variance = durations.reduce((sum, d) => sum + Math.pow(d - avg, 2), 0) / durations.length;
+        const variance =
+          durations.reduce((sum, d) => sum + Math.pow(d - avg, 2), 0) / durations.length;
         const stdDev = Math.sqrt(variance);
         return stdDev / avg > 0.5; // High coefficient of variation
       });
-      report += `- **High Variability Groups:** ${highVariabilityGroups.length} groups with inconsistent execution times\n`;
 
-      report += `\n---\n*Report generated by Flow Insight Gantt Analysis*`;
+      if (highVariabilityGroups.length > 0) {
+        const variableGroupNames = highVariabilityGroups
+          .map(g => `**${g.group.groupName}**`)
+          .join(', ');
+        report += `- **Variable Performance Task Groups:** ${highVariabilityGroups.length} groups with inconsistent execution times (>50% coefficient of variation): ${variableGroupNames}\n`;
+      } else {
+        report += `- **Variable Performance Task Groups:** All groups have consistent execution times\n`;
+      }
+
+      // Workflow efficiency insights
+      const avgTasksPerGroup = reportTasks.length / taskGroups.size;
+      report += `- **Task Organization:** ${avgTasksPerGroup.toFixed(1)} average tasks per group across ${taskGroups.size} total groups\n`;
+
+      // Find groups with most and least tasks
+      const groupTaskCounts = Array.from(taskGroups.values()).map(g => ({
+        name: g.groupName,
+        count: g.tasks.length,
+      }));
+      const mostTasksGroup = groupTaskCounts.sort((a, b) => b.count - a.count)[0];
+      const leastTasksGroup = groupTaskCounts.sort((a, b) => a.count - b.count)[0];
+
+      if (mostTasksGroup && leastTasksGroup && taskGroups.size > 1) {
+        report += `- **Largest Task Group:** **${mostTasksGroup.name}** (${mostTasksGroup.count} tasks)\n`;
+        report += `- **Smallest Task Group:** **${leastTasksGroup.name}** (${leastTasksGroup.count} tasks)\n`;
+      }
+
+      report += `\n---\n*Report generated by Flow Insight Task Analysis*`;
 
       return report;
     };
 
     // Modal component for displaying the report
-    const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+    const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
+      isOpen,
+      onClose,
+    }) => {
       const [reportContent, setReportContent] = useState<string>('');
       const [isGenerating, setIsGenerating] = useState(false);
 
@@ -1038,38 +1116,44 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       };
 
       return (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px',
-        }}>
-          <div style={{
-            backgroundColor: COLORS.surface,
-            borderRadius: '12px',
-            border: `1px solid ${COLORS.border}`,
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-            width: '90%',
-            maxWidth: '1000px',
-            height: '80%',
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 1000,
             display: 'flex',
-            flexDirection: 'column',
-          }}>
-            {/* Modal Header */}
-            <div style={{
-              padding: '20px',
-              borderBottom: `1px solid ${COLORS.border}`,
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: COLORS.surface,
+              borderRadius: '12px',
+              border: `1px solid ${COLORS.border}`,
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              width: '90%',
+              maxWidth: '1000px',
+              height: '80%',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
+              flexDirection: 'column',
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '20px',
+                borderBottom: `1px solid ${COLORS.border}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
               <h2 style={{ margin: 0, color: COLORS.text, fontSize: '20px', fontWeight: '600' }}>
                 📊 Gantt Analysis Report
               </h2>
@@ -1125,45 +1209,50 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             </div>
 
             {/* Modal Content */}
-            <div style={{
-              flex: 1,
-              overflow: 'auto',
-              padding: '20px',
-            }}>
+            <div
+              style={{
+                flex: 1,
+                overflow: 'auto',
+                padding: '20px',
+              }}
+            >
               {isGenerating ? (
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '200px',
-                  color: COLORS.textLight,
-                }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '200px',
+                    color: COLORS.textLight,
+                  }}
+                >
                   <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔄</div>
                   <h3 style={{ margin: '0 0 8px 0', color: COLORS.text }}>Generating Report</h3>
                   <p style={{ margin: 0 }}>Analyzing task groups and generating insights...</p>
                 </div>
               ) : (
-                <div style={{
-                  fontFamily: '"Inter", "Segoe UI", "Roboto", sans-serif',
-                  fontSize: '14px',
-                  lineHeight: '1.6',
-                  color: COLORS.text,
-                  backgroundColor: COLORS.background,
-                  padding: '20px',
-                  borderRadius: '8px',
-                  border: `1px solid ${COLORS.border}`,
-                  overflow: 'auto',
-                  margin: 0,
-                }}>
-                  <div style={{
-                    // Global styles for markdown content
-                    fontFamily: 'inherit',
-                  }}>
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={MarkdownComponents}
-                    >
+                <div
+                  style={{
+                    fontFamily: '"Inter", "Segoe UI", "Roboto", sans-serif',
+                    fontSize: '14px',
+                    lineHeight: '1.6',
+                    color: COLORS.text,
+                    backgroundColor: COLORS.background,
+                    padding: '20px',
+                    borderRadius: '8px',
+                    border: `1px solid ${COLORS.border}`,
+                    overflow: 'auto',
+                    margin: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      // Global styles for markdown content
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
                       {reportContent}
                     </ReactMarkdown>
                   </div>
@@ -1377,15 +1466,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         });
       }
 
-      console.log(
-        `Created gantt chart with ${flatTasks.length} total tasks from tree with ${data.root.children?.length || 0} root functions`
-      );
-
       // Debug: Log task hierarchy
       const mainTasks = flatTasks.filter(t => t.type === 'main');
       const methodTasks = flatTasks.filter(t => t.type === 'method');
-      console.log(`Main tasks: ${mainTasks.length}, Method tasks: ${methodTasks.length}`);
-      console.log('Task levels:', flatTasks.map(t => `${t.name}(L${t.level})`).join(', '));
 
       return flatTasks;
     };
@@ -1409,7 +1492,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           // Try to compile as regex with case-sensitive matching
           searchRegex = new RegExp(trimmedSearch);
           useRegex = true;
-          console.log('Using regex search:', trimmedSearch);
         }
       } catch (error) {
         // If regex compilation fails, fall back to string search
@@ -1556,10 +1638,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         };
       });
 
-      console.log(
-        `Filtered tasks: ${validatedTasks.length}/${allTasks.length} (including complete sub-trees)`
-      );
-
       // Debug parent relationships
       const orphanedTasks = validatedTasks.filter(
         t => t.parentId && !filteredTaskIds.has(t.parentId)
@@ -1583,9 +1661,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           );
         }
       });
-      console.log(
-        `Direct matches: ${directMatches.length}, Total with sub-trees: ${validatedTasks.length}`
-      );
 
       return validatedTasks;
     };
@@ -1594,7 +1669,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
     useEffect(() => {
       const newFilteredTasks = applySearchFilter(tasks, searchTerm);
       setFilteredTasks(newFilteredTasks);
-      console.log(`Filtered tasks: ${newFilteredTasks.length}/${tasks.length}`);
     }, [tasks, searchTerm]);
 
     // Get visible tasks based on collapsed nodes in call tree hierarchy - now works with filtered tasks
@@ -1668,7 +1742,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               isCollapsed: collapsedNodes.has(task.id),
             });
           } else {
-            console.log(`Hiding task due to collapsed ancestor: ${task.name} (L${task.level})`);
           }
         }
       });
@@ -1686,7 +1759,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         });
       }
 
-      console.log(`Visible tasks: ${visibleTasks.length}/${filteredTasks.length}`);
       return visibleTasks;
     };
 
@@ -1806,13 +1878,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       if (task.type === 'method') {
         const newCollapsed = new Set(collapsedNodes);
         if (newCollapsed.has(task.id)) {
-          console.log(`Expanding task: ${task.name} (ID: ${task.id})`);
           newCollapsed.delete(task.id);
         } else {
-          console.log(`Collapsing task: ${task.name} (ID: ${task.id})`);
           newCollapsed.add(task.id);
         }
-        console.log('Current collapsed nodes:', Array.from(newCollapsed));
         setCollapsedNodes(newCollapsed);
 
         // Also handle function inspection on method click
@@ -1920,8 +1989,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           });
           setSavedCollapsedState(updatedSavedState);
         }
-
-        console.log(`Expanded level ${targetLevel}, expanded ${tasksToExpand.length} nodes`);
       }
     };
 
@@ -1990,12 +2057,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         // During search, also check if we would hide current search results
         const wouldHideSearchResults = hasSearchTerm
           ? testVisible.filter(task => {
-            const lowerSearch = (searchTerm || '').toLowerCase();
-            return (
-              task.name.toLowerCase().includes(lowerSearch) ||
-              task.fullName.toLowerCase().includes(lowerSearch)
-            );
-          }).length === 0
+              const lowerSearch = (searchTerm || '').toLowerCase();
+              return (
+                task.name.toLowerCase().includes(lowerSearch) ||
+                task.fullName.toLowerCase().includes(lowerSearch)
+              );
+            }).length === 0
           : false;
 
         wouldHideAllTasks = testVisible.length === 0 || wouldHideSearchResults;
@@ -2015,13 +2082,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             });
             setSavedCollapsedState(updatedSavedState);
           }
-
-          console.log(`Collapsed level ${targetLevel}, collapsed ${tasksToCollapse.length} nodes`);
         } else {
-          console.log('Cannot collapse further - would hide all tasks or search results');
         }
       } else if (hasSearchTerm) {
-        console.log('Cannot collapse during search - would hide search results');
       }
     };
 
@@ -2031,13 +2094,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
       const newFlattened = new Set(flattenedGroups);
       if (newFlattened.has(task.id)) {
-        console.log(`Unflattening group: ${task.name} (ID: ${task.id})`);
         newFlattened.delete(task.id);
       } else {
-        console.log(`Flattening group: ${task.name} (ID: ${task.id})`);
         newFlattened.add(task.id);
       }
-      console.log('Current flattened groups:', Array.from(newFlattened));
       setFlattenedGroups(newFlattened);
 
       // If we're in search mode and user manually changes flattening, update the saved state
@@ -2050,7 +2110,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           updatedSavedState.delete(task.id);
         }
         setSavedFlattenedState(updatedSavedState);
-        console.log('Updated saved flattened state during search');
       }
     };
 
@@ -2241,27 +2300,23 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         if (savedCollapsedState === null) {
           setSavedCollapsedState(new Set(collapsedNodes));
           setCollapsedNodes(new Set()); // Clear all collapsed nodes to show all levels
-          console.log('Search triggered: expanding all levels');
         }
 
         // Save current flattened state (don't auto-flatten, just save current state)
         if (savedFlattenedState === null) {
           setSavedFlattenedState(new Set(flattenedGroups));
-          console.log('Search triggered: saved current flattened state');
         }
       } else {
         // Restore saved collapsed state when search is cleared
         if (savedCollapsedState !== null) {
           setCollapsedNodes(new Set(savedCollapsedState));
           setSavedCollapsedState(null);
-          console.log('Search cleared: restoring previous collapsed state');
         }
 
         // Restore saved flattened state when search is cleared
         if (savedFlattenedState !== null) {
           setFlattenedGroups(new Set(savedFlattenedState));
           setSavedFlattenedState(null);
-          console.log('Search cleared: restoring previous flattened state');
         }
       }
     }, [searchTerm, savedCollapsedState, savedFlattenedState, collapsedNodes, flattenedGroups]);
@@ -3177,12 +3232,14 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     {/* Task name with adaptive font size */}
                     {(() => {
                       const hasChildren = filteredTasks.some(t => t.parentId === task.id);
-                      const textStartX = indent + (() => {
-                        if (hasChildren && isCollapsible) return 55; // Has both expand and flatten buttons
-                        if (hasChildren && !isMain) return 35; // Has flatten button only
-                        if (isMain || isMethod) return 35; // Main/method tasks get consistent spacing
-                        return 15; // No buttons, minimal spacing
-                      })();
+                      const textStartX =
+                        indent +
+                        (() => {
+                          if (hasChildren && isCollapsible) return 55; // Has both expand and flatten buttons
+                          if (hasChildren && !isMain) return 35; // Has flatten button only
+                          if (isMain || isMethod) return 35; // Main/method tasks get consistent spacing
+                          return 15; // No buttons, minimal spacing
+                        })();
 
                       // Calculate available width for text (leave some padding before timeline)
                       const availableWidth = labelWidth - textStartX - 10; // 10px padding from timeline
@@ -3219,85 +3276,89 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                             if (hasChildren && isCollapsible) handleTaskClick(task);
                           }}
                         >
-                          {displayText.includes('[FLATTENED]') ? (
-                            // Handle [FLATTENED] styling
-                            (() => {
-                              const parts = displayText.split('[FLATTENED]');
-                              return (
-                                <>
-                                  {parts[0]}
-                                  <tspan fill={COLORS.accent} fontWeight="bold">
-                                    [FLATTENED]
-                                  </tspan>
-                                  {parts[1]}
-                                </>
-                              );
-                            })()
-                          ) : (
-                            displayText
-                          )}
+                          {displayText.includes('[FLATTENED]')
+                            ? // Handle [FLATTENED] styling
+                              (() => {
+                                const parts = displayText.split('[FLATTENED]');
+                                return (
+                                  <>
+                                    {parts[0]}
+                                    <tspan fill={COLORS.accent} fontWeight="bold">
+                                      [FLATTENED]
+                                    </tspan>
+                                    {parts[1]}
+                                  </>
+                                );
+                              })()
+                            : displayText}
                         </text>
                       );
                     })()}
 
                     {/* Call relationship indicators */}
-                    {task.callers.length > 0 && (() => {
-                      const hasChildren = filteredTasks.some(t => t.parentId === task.id);
-                      const textStartX = indent + (() => {
-                        if (hasChildren && isCollapsible) return 55;
-                        if (hasChildren && !isMain) return 35;
-                        if (isMain || isMethod) return 35;
-                        return 15;
-                      })();
+                    {task.callers.length > 0 &&
+                      (() => {
+                        const hasChildren = filteredTasks.some(t => t.parentId === task.id);
+                        const textStartX =
+                          indent +
+                          (() => {
+                            if (hasChildren && isCollapsible) return 55;
+                            if (hasChildren && !isMain) return 35;
+                            if (isMain || isMethod) return 35;
+                            return 15;
+                          })();
 
-                      // Position caller info below the main text
-                      const callerInfoY = y + currentRowHeight / 2 + 12; // Below center line
+                        // Position caller info below the main text
+                        const callerInfoY = y + currentRowHeight / 2 + 12; // Below center line
 
-                      return (
-                        <text
-                          x={textStartX}
-                          y={callerInfoY}
-                          fontSize="8"
-                          fill={COLORS.textLight}
-                          textAnchor="start"
-                          dominantBaseline="central"
-                          fontWeight="400"
-                        >
-                          Called by: {task.callers.length} • Calls: {task.callees.length}
-                        </text>
-                      );
-                    })()}
+                        return (
+                          <text
+                            x={textStartX}
+                            y={callerInfoY}
+                            fontSize="8"
+                            fill={COLORS.textLight}
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            fontWeight="400"
+                          >
+                            Called by: {task.callers.length} • Calls: {task.callees.length}
+                          </text>
+                        );
+                      })()}
 
                     {/* Duration info */}
-                    {!isMethod && (() => {
-                      const hasChildren = filteredTasks.some(t => t.parentId === task.id);
-                      const textStartX = indent + (() => {
-                        if (hasChildren && isCollapsible) return 55;
-                        if (hasChildren && !isMain) return 35;
-                        if (isMain || isMethod) return 35;
-                        return 15;
-                      })();
+                    {!isMethod &&
+                      (() => {
+                        const hasChildren = filteredTasks.some(t => t.parentId === task.id);
+                        const textStartX =
+                          indent +
+                          (() => {
+                            if (hasChildren && isCollapsible) return 55;
+                            if (hasChildren && !isMain) return 35;
+                            if (isMain || isMethod) return 35;
+                            return 15;
+                          })();
 
-                      // Position duration info below caller info (if present) or below main text
-                      let durationY = y + currentRowHeight / 2 + 12; // Below center line
-                      if (task.callers.length > 0) {
-                        durationY += 12; // Below caller info if present
-                      }
+                        // Position duration info below caller info (if present) or below main text
+                        let durationY = y + currentRowHeight / 2 + 12; // Below center line
+                        if (task.callers.length > 0) {
+                          durationY += 12; // Below caller info if present
+                        }
 
-                      return (
-                        <text
-                          x={textStartX}
-                          y={durationY}
-                          fontSize="8"
-                          fill={COLORS.textLight}
-                          textAnchor="start"
-                          dominantBaseline="central"
-                          fontWeight="400"
-                        >
-                          ⏱️ {duration.toFixed(3)}s {task.isRunning ? '🔄' : ''}
-                        </text>
-                      );
-                    })()}
+                        return (
+                          <text
+                            x={textStartX}
+                            y={durationY}
+                            fontSize="8"
+                            fill={COLORS.textLight}
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            fontWeight="400"
+                          >
+                            ⏱️ {duration.toFixed(3)}s {task.isRunning ? '🔄' : ''}
+                          </text>
+                        );
+                      })()}
                   </g>
 
                   {/* Enhanced Task Bar */}
@@ -3307,7 +3368,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       pointerEvents: 'all', // Ensure mouse events are captured
                     }}
                     onMouseEnter={e => {
-                      console.log('Mouse enter on task:', task.name, 'at y:', y); // Debug log
                       setHoveredTask({ id: task.id, index });
 
                       // Get mouse position relative to the container
@@ -3320,7 +3380,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       }
                     }}
                     onMouseLeave={e => {
-                      console.log('Mouse leave on task:', task.name); // Debug log
                       setHoveredTask(null);
                       setTooltipPosition(null);
                     }}
@@ -3462,10 +3521,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           })()}
 
         {/* Report Modal */}
-        <ReportModal
-          isOpen={showReportModal}
-          onClose={() => setShowReportModal(false)}
-        />
+        <ReportModal isOpen={showReportModal} onClose={() => setShowReportModal(false)} />
       </div>
     );
   }

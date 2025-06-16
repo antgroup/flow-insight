@@ -49,7 +49,6 @@ const ElementsPanel = ({
           // Try to compile as regex with case-sensitive matching
           searchRegex = new RegExp(trimmedSearch);
           useRegex = true;
-          console.log('Using regex search in ElementsPanel:', trimmedSearch);
         }
       } catch (error) {
         // If regex compilation fails, fall back to string search
