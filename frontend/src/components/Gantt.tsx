@@ -6,8 +6,137 @@ import React, {
   useState,
   useMemo,
 } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import remarkGfm from 'remark-gfm';
+import mermaid from 'mermaid';
 
 import { GraphData, PhysicalViewData, FlameGraphData, FlameTreeNode } from '../types';
+
+// Initialize mermaid
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'default',
+  securityLevel: 'loose',
+  fontFamily: 'Verdana, sans-serif',
+  suppressErrorRendering: true,
+});
+
+// Mermaid diagram component for report rendering
+const MermaidDiagram = ({ chart }: { chart: string }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [svg, setSvg] = useState<string>('');
+
+  useEffect(() => {
+    if (ref.current && chart && chart.trim()) {
+      try {
+        // Add a timeout to prevent infinite rendering loops
+        const renderTimeout = setTimeout(() => {
+          try {
+            // Generate a valid CSS selector ID (no dots or special characters)
+            const uniqueId = `mermaid-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+            mermaid
+              .render(uniqueId, chart.trim())
+              .then(({ svg }) => {
+                if (svg && svg.trim()) {
+                  setSvg(svg);
+                } else {
+                  console.warn('Empty SVG returned from Mermaid');
+                }
+              })
+              .catch(renderError => {
+                console.warn('Error rendering Mermaid diagram:', renderError);
+                console.warn('Chart content:', chart);
+              });
+          } catch (error) {
+            console.warn('Exception during Mermaid rendering:', error);
+          }
+        }, 0);
+
+        return () => clearTimeout(renderTimeout);
+      } catch (error) {
+        console.warn('Error initializing Mermaid diagram:', error);
+      }
+    }
+  }, [chart]);
+
+  return <div ref={ref} className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
+};
+
+// Custom markdown components for better rendering
+const MarkdownComponents = {
+  // eslint-disable-next-line
+  code({ node, inline, className, children, ...props }: any) {
+    const match = /language-(\w+)/.exec(className || '');
+    const language = match && match[1] ? match[1] : '';
+
+    // Handle Mermaid diagrams specially
+    if (language === 'mermaid') {
+      return <MermaidDiagram chart={String(children)} />;
+    }
+
+    return !inline && language ? (
+      <SyntaxHighlighter language={language} PreTag="div" {...props}>
+        {String(children).replace(/\n$/, '')}
+      </SyntaxHighlighter>
+    ) : (
+      <code className={className} {...props}>
+        {children}
+      </code>
+    );
+  },
+  // eslint-disable-next-line
+  table({ children, ...props }: any) {
+    return (
+      <div style={{ overflowX: 'auto', margin: '16px 0' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%' }} {...props}>
+          {children}
+        </table>
+      </div>
+    );
+  },
+  // eslint-disable-next-line
+  th({ children, ...props }: any) {
+    return (
+      <th
+        style={{
+          textAlign: 'left',
+          padding: '8px',
+          borderBottom: '2px solid #ddd',
+          backgroundColor: '#f5f5f5',
+          fontWeight: '600',
+        }}
+        {...props}
+      >
+        {children}
+      </th>
+    );
+  },
+  // eslint-disable-next-line
+  td({ children, ...props }: any) {
+    return (
+      <td style={{ padding: '8px', borderBottom: '1px solid #ddd' }} {...props}>
+        {children}
+      </td>
+    );
+  },
+  // eslint-disable-next-line
+  a({ children, ...props }: any) {
+    return (
+      <a style={{ color: '#1976d2', textDecoration: 'none' }} {...props}>
+        {children}
+      </a>
+    );
+  },
+  // eslint-disable-next-line
+  img({ src, alt, ...props }: any) {
+    return (
+      <div style={{ textAlign: 'center', margin: '16px 0' }}>
+        <img src={src} alt={alt} style={{ maxWidth: '100%' }} {...props} />
+      </div>
+    );
+  },
+};
 
 type GanttVisualizationProps = {
   flameData: FlameGraphData;
@@ -46,6 +175,17 @@ interface CustomTask {
   color?: string;
   executionCount?: number; // Number of executions
   isRunning?: boolean; // Whether this task is currently running
+}
+
+// Task group interface for report generation
+interface TaskGroup {
+  groupName: string;
+  tasks: CustomTask[];
+  totalDuration: number;
+  avgDuration: number;
+  executionCount: number;
+  callerGroups: Map<string, { count: number; totalDuration: number; avgDuration: number }>;
+  calleeGroups: Map<string, { count: number; totalDuration: number; avgDuration: number }>;
 }
 
 // Tree node structure for building hierarchy (matching FlameNode pattern)
@@ -133,15 +273,678 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
     const [savedCollapsedState, setSavedCollapsedState] = useState<Set<string> | null>(null);
     const [savedFlattenedState, setSavedFlattenedState] = useState<Set<string> | null>(null);
     const [isDataLoading, setIsDataLoading] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
 
     // Chart dimensions
     const chartHeight = 500;
-    const rowHeight = 20;
-    const serviceRowHeight = 22;
-    const methodRowHeight = 21;
+    const baseRowHeight = 20;
+    const minRowHeight = 24;
+    const maxRowHeight = 80;
     const labelWidth = 320;
     const timelineHeight = 50;
     const indentWidth = 20;
+
+    // Helper function to calculate required height for single-line text with metadata
+    const calculateTextHeight = (task: CustomTask): number => {
+      // Base height for single line of text
+      let textHeight = 20; // Single line height
+
+      // Add extra height for caller/callee info if present
+      if (task.callers.length > 0) {
+        textHeight += 12; // Extra line for caller info
+      }
+
+      // Add extra height for duration info if not a method
+      if (task.type !== 'method') {
+        textHeight += 12; // Extra line for duration info
+      }
+
+      // Apply minimum and maximum constraints
+      return Math.max(minRowHeight, Math.min(maxRowHeight, textHeight + 8)); // +8 for padding
+    };
+
+    // Helper function to extract group name from task name
+    const extractGroupName = (taskName: string): string | null => {
+      const parts = taskName.split('/');
+      if (parts.length > 1) {
+        const lastPart = parts[parts.length - 1].trim();
+        if (lastPart) {
+          return lastPart;
+        }
+      }
+      return null;
+    };
+
+    // Generate task groups for report
+    const generateTaskGroups = (allTasks: CustomTask[]): Map<string, TaskGroup> => {
+      const groups = new Map<string, TaskGroup>();
+      const ungroupedTasks: CustomTask[] = [];
+
+      // First pass: categorize tasks by group
+      allTasks.forEach(task => {
+        const groupName = extractGroupName(task.name) || extractGroupName(task.fullName);
+
+        if (groupName) {
+          if (!groups.has(groupName)) {
+            groups.set(groupName, {
+              groupName,
+              tasks: [],
+              totalDuration: 0,
+              avgDuration: 0,
+              executionCount: 0,
+              callerGroups: new Map(),
+              calleeGroups: new Map(),
+            });
+          }
+          groups.get(groupName)!.tasks.push(task);
+        } else {
+          ungroupedTasks.push(task);
+        }
+      });
+
+      // Add ungrouped tasks as individual groups
+      ungroupedTasks.forEach(task => {
+        const groupName = task.name || task.fullName || 'Unknown';
+        if (!groups.has(groupName)) {
+          groups.set(groupName, {
+            groupName,
+            tasks: [task],
+            totalDuration: 0,
+            avgDuration: 0,
+            executionCount: 0,
+            callerGroups: new Map(),
+            calleeGroups: new Map(),
+          });
+        }
+      });
+
+      // Second pass: calculate durations and relationships
+      groups.forEach(group => {
+        const durations = group.tasks.map(task => task.endTime - task.startTime);
+        group.totalDuration = durations.reduce((sum, duration) => sum + duration, 0);
+        group.avgDuration = group.totalDuration / group.tasks.length;
+        group.executionCount = group.tasks.length;
+
+        // Build caller/callee group relationships
+        group.tasks.forEach(task => {
+          // Find caller groups
+          task.callers.forEach(callerId => {
+            const callerTask = allTasks.find(t => t.id === callerId || t.fullName === callerId);
+            if (callerTask) {
+              const callerGroupName = extractGroupName(callerTask.name) || extractGroupName(callerTask.fullName) || callerTask.name;
+              if (callerGroupName !== group.groupName) {
+                if (!group.callerGroups.has(callerGroupName)) {
+                  group.callerGroups.set(callerGroupName, { count: 0, totalDuration: 0, avgDuration: 0 });
+                }
+                const callerInfo = group.callerGroups.get(callerGroupName)!;
+                callerInfo.count += 1;
+                callerInfo.totalDuration += task.endTime - task.startTime;
+                callerInfo.avgDuration = callerInfo.totalDuration / callerInfo.count;
+              }
+            }
+          });
+
+          // Find callee groups
+          task.callees.forEach(calleeId => {
+            const calleeTask = allTasks.find(t => t.id === calleeId || t.fullName === calleeId);
+            if (calleeTask) {
+              const calleeGroupName = extractGroupName(calleeTask.name) || extractGroupName(calleeTask.fullName) || calleeTask.name;
+              if (calleeGroupName !== group.groupName) {
+                if (!group.calleeGroups.has(calleeGroupName)) {
+                  group.calleeGroups.set(calleeGroupName, { count: 0, totalDuration: 0, avgDuration: 0 });
+                }
+                const calleeInfo = group.calleeGroups.get(calleeGroupName)!;
+                calleeInfo.count += 1;
+                calleeInfo.totalDuration += calleeTask.endTime - calleeTask.startTime;
+                calleeInfo.avgDuration = calleeInfo.totalDuration / calleeInfo.count;
+              }
+            }
+          });
+        });
+      });
+
+      return groups;
+    };
+
+    // Generate comprehensive markdown report
+    const generateMarkdownReport = (): string => {
+      // Filter to only include tasks that actually match the search criteria (not just their parents/children)
+      const actuallyFilteredTasks = (() => {
+        if (!searchTerm || searchTerm.trim() === '') {
+          return filteredTasks;
+        }
+
+        const trimmedSearch = searchTerm.trim();
+        let searchRegex: RegExp | null = null;
+        let useRegex = false;
+
+        try {
+          const regexChars = /[.*+?^${}()|[\]\\]/;
+          if (regexChars.test(trimmedSearch)) {
+            searchRegex = new RegExp(trimmedSearch);
+            useRegex = true;
+          }
+        } catch (error) {
+          useRegex = false;
+        }
+
+        // Only include tasks that directly match the search criteria
+        return filteredTasks.filter(task => {
+          if (useRegex && searchRegex) {
+            return searchRegex.test(task.name) || searchRegex.test(task.fullName);
+          } else {
+            const lowerSearch = trimmedSearch.toLowerCase();
+            return (
+              task.name.toLowerCase().includes(lowerSearch) ||
+              task.fullName.toLowerCase().includes(lowerSearch)
+            );
+          }
+        });
+      })();
+
+      const reportTasks = actuallyFilteredTasks.length > 0 ? actuallyFilteredTasks : filteredTasks;
+      const taskGroups = generateTaskGroups(reportTasks);
+      const totalDuration = reportTasks.reduce((sum, task) => sum + (task.endTime - task.startTime), 0);
+
+      let report = `# Flow Insight - Gantt Analysis Report\n\n`;
+      report += `**Generated:** ${new Date().toLocaleString()}\n`;
+      report += `**Report Scope:** ${searchTerm ? `Direct matches for "${searchTerm}"` : 'All tasks'}\n`;
+      report += `**Total Tasks Analyzed:** ${reportTasks.length}${tasks.length !== reportTasks.length ? ` (${tasks.length} total)` : ''}\n`;
+      report += `**Task Groups:** ${taskGroups.size}\n`;
+      report += `**Total Execution Time:** ${totalDuration.toFixed(3)}s\n\n`;
+
+      // 1. Task Groups Summary Table with Enhanced Statistics
+      report += `## 📊 Task Groups Summary\n\n`;
+      report += `| Group Name | Count | Total (s) | Avg (s) | Min (s) | Max (s) | Median (s) | % of Total |\n`;
+      report += `|------------|-------|-----------|---------|---------|---------|------------|------------|\n`;
+
+      const sortedGroups = Array.from(taskGroups.values()).sort((a, b) => b.totalDuration - a.totalDuration);
+      sortedGroups.forEach(group => {
+        const durations = group.tasks.map(task => task.endTime - task.startTime).sort((a, b) => a - b);
+        const minDuration = Math.min(...durations);
+        const maxDuration = Math.max(...durations);
+        const medianDuration = durations.length % 2 === 0
+          ? (durations[durations.length / 2 - 1] + durations[durations.length / 2]) / 2
+          : durations[Math.floor(durations.length / 2)];
+        const percentage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
+
+        report += `| ${group.groupName} | ${group.executionCount} | ${group.totalDuration.toFixed(3)} | ${group.avgDuration.toFixed(3)} | ${minDuration.toFixed(3)} | ${maxDuration.toFixed(3)} | ${medianDuration.toFixed(3)} | ${percentage}% |\n`;
+      });
+
+      // 2. Execution Coverage Analysis - Parent-Child Relationships
+      report += `\n## 🔗 Execution Coverage Analysis\n\n`;
+
+      // Group parent-child relationships by parent
+      const parentGroups = new Map<string, {
+        parentInfo: TaskGroup;
+        children: Map<string, { count: number; totalDuration: number; avgDuration: number }>
+      }>();
+
+      taskGroups.forEach((group, groupName) => {
+        if (group.calleeGroups.size > 0) {
+          parentGroups.set(groupName, {
+            parentInfo: group,
+            children: group.calleeGroups
+          });
+        }
+      });
+
+      // Create a comprehensive coverage table showing parent-child hierarchy
+      report += `### 📊 Hierarchical Execution Coverage\n\n`;
+      report += `| Level | Task Group | Type | Count | Total (s) | Avg (s) | Coverage % | Parent Time % |\n`;
+      report += `|-------|------------|------|-------|-----------|---------|------------|--------------|\n`;
+
+      // Build hierarchical rows
+      sortedGroups.forEach(group => {
+        if (group.calleeGroups.size > 0) {
+          // Parent row
+          const parentCoverage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
+          report += `| 📁 | **${group.groupName}** | Parent | ${group.executionCount} | ${group.totalDuration.toFixed(3)} | ${group.avgDuration.toFixed(3)} | ${parentCoverage}% | - |\n`;
+
+          // Children rows (indented)
+          const sortedChildren = Array.from(group.calleeGroups.entries()).sort((a, b) => b[1].totalDuration - a[1].totalDuration);
+
+          let childrenTotalTime = 0;
+          sortedChildren.forEach(([childName, childInfo]) => {
+            childrenTotalTime += childInfo.totalDuration;
+            const childCoverage = ((childInfo.totalDuration / totalDuration) * 100).toFixed(1);
+            const parentPercentage = ((childInfo.totalDuration / group.totalDuration) * 100).toFixed(1);
+            report += `| ├── | ${childName} | Child | ${childInfo.count} | ${childInfo.totalDuration.toFixed(3)} | ${childInfo.avgDuration.toFixed(3)} | ${childCoverage}% | ${parentPercentage}% |\n`;
+          });
+
+          // Show uncovered time in parent if any
+          const uncoveredTime = group.totalDuration - childrenTotalTime;
+          if (uncoveredTime > 0.001) { // Only show if significant
+            const uncoveredPercentage = ((uncoveredTime / group.totalDuration) * 100).toFixed(1);
+            const uncoveredCoverage = ((uncoveredTime / totalDuration) * 100).toFixed(1);
+            report += `| └── | *${group.groupName} (self)* | Self | - | ${uncoveredTime.toFixed(3)} | - | ${uncoveredCoverage}% | ${uncoveredPercentage}% |\n`;
+          }
+
+          report += `| | | | | | | | |\n`; // Empty separator row
+        }
+      });
+
+      // Coverage Summary Statistics
+      report += `\n### 📈 Coverage Summary\n\n`;
+      report += `| Metric | Value |\n`;
+      report += `|--------|-------|\n`;
+
+      const totalParentTime = Array.from(parentGroups.values()).reduce((sum, p) => sum + p.parentInfo.totalDuration, 0);
+      const totalChildTime = Array.from(parentGroups.values()).reduce((sum, parent) => {
+        return sum + Array.from(parent.children.values()).reduce((childSum, child) => childSum + child.totalDuration, 0);
+      }, 0);
+
+      const coverageRatio = totalParentTime > 0 ? (totalChildTime / totalParentTime * 100).toFixed(1) : '0.0';
+      const independentGroups = sortedGroups.filter(g => g.calleeGroups.size === 0).length;
+      const parentGroups_count = parentGroups.size;
+
+      report += `| Total Parent Groups | ${parentGroups_count} |\n`;
+      report += `| Independent Groups | ${independentGroups} |\n`;
+      report += `| Total Parent Time | ${totalParentTime.toFixed(3)}s |\n`;
+      report += `| Total Child Time | ${totalChildTime.toFixed(3)}s |\n`;
+      report += `| Child Coverage Ratio | ${coverageRatio}% |\n`;
+      report += `| Average Children per Parent | ${parentGroups_count > 0 ? (Array.from(parentGroups.values()).reduce((sum, p) => sum + p.children.size, 0) / parentGroups_count).toFixed(1) : '0'} |\n`;
+
+      // 3. Performance Insights
+      report += `\n## ⚡ Performance Insights\n\n`;
+
+      const longestGroup = sortedGroups[0];
+      const shortestGroup = sortedGroups[sortedGroups.length - 1];
+      const mostCalledGroup = Array.from(taskGroups.values()).sort((a, b) => b.executionCount - a.executionCount)[0];
+
+      report += `- **Longest Running Group:** ${longestGroup?.groupName} (${longestGroup?.totalDuration.toFixed(3)}s)\n`;
+      report += `- **Most Frequently Called:** ${mostCalledGroup?.groupName} (${mostCalledGroup?.executionCount} executions)\n`;
+      report += `- **Performance Bottleneck:** Groups taking >10% of total time: ${sortedGroups.filter(g => (g.totalDuration / totalDuration) > 0.1).length}\n\n`;
+
+      // 4. Execution Flow Diagram
+      report += `## 🌊 Execution Flow Overview\n\n`;
+
+      if (sortedGroups.length > 0) {
+        report += '```mermaid\n';
+        report += 'graph TD\n';
+
+        // Create nodes for top groups
+        const topGroups = sortedGroups.slice(0, Math.min(8, sortedGroups.length));
+        topGroups.forEach((group, index) => {
+          const nodeId = `G${index}`;
+          const duration = group.totalDuration.toFixed(2);
+          // Escape special characters in group names for Mermaid
+          const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `Group${index}`;
+          report += `    ${nodeId}["${safeName}<br/>${duration}s"]\n`;
+        });
+
+        // Add relationships between top groups
+        topGroups.forEach((group, index) => {
+          const nodeId = `G${index}`;
+          group.calleeGroups.forEach((calleeInfo, calleeName) => {
+            const calleeIndex = topGroups.findIndex(g => g.groupName === calleeName);
+            if (calleeIndex !== -1 && calleeIndex !== index) {
+              const calleeNodeId = `G${calleeIndex}`;
+              report += `    ${nodeId} --> ${calleeNodeId}\n`;
+            }
+          });
+        });
+
+        report += '```\n\n';
+      } else {
+        report += `*No task groups available for flow diagram.*\n\n`;
+      }
+
+      // 5. Performance Distribution Chart
+      report += `## 📈 Performance Distribution\n\n`;
+
+      if (sortedGroups.length > 0) {
+        report += '```mermaid\n';
+        report += 'pie title Task Group Performance Distribution\n';
+
+        const topPerformanceGroups = sortedGroups.slice(0, 6);
+        const othersDuration = sortedGroups.slice(6).reduce((sum, group) => sum + group.totalDuration, 0);
+
+        topPerformanceGroups.forEach((group, index) => {
+          const percentage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
+          // Escape special characters in group names for Mermaid pie chart
+          const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `Group${index}`;
+          report += `    "${safeName}" : ${percentage}\n`;
+        });
+
+        if (othersDuration > 0) {
+          const othersPercentage = ((othersDuration / totalDuration) * 100).toFixed(1);
+          report += `    "Others" : ${othersPercentage}\n`;
+        }
+
+        report += '```\n\n';
+      } else {
+        report += `*No task groups available for performance distribution.*\n\n`;
+      }
+
+      // 6. Call Relationship Diagram
+      report += `## 🔄 Call Relationship Network\n\n`;
+
+      // Check if there are any significant relationships
+      const significantRelationships = new Set<string>();
+      let hasRelationships = false;
+
+      taskGroups.forEach((group, groupName) => {
+        group.calleeGroups.forEach((calleeInfo, calleeName) => {
+          if (calleeInfo.count > 1) { // Only show relationships with multiple calls
+            const relationship = `${groupName} --> ${calleeName}`;
+            if (!significantRelationships.has(relationship)) {
+              hasRelationships = true;
+              significantRelationships.add(relationship);
+            }
+          }
+        });
+      });
+
+      if (hasRelationships) {
+        report += '```mermaid\n';
+        report += 'graph LR\n';
+
+        taskGroups.forEach((group, groupName) => {
+          group.calleeGroups.forEach((calleeInfo, calleeName) => {
+            if (calleeInfo.count > 1) { // Only show relationships with multiple calls
+              const relationship = `${groupName} --> ${calleeName}`;
+              if (significantRelationships.has(relationship)) {
+                const shortGroupName = groupName.length > 15 ? groupName.substring(0, 15) + '...' : groupName;
+                const shortCalleeName = calleeName.length > 15 ? calleeName.substring(0, 15) + '...' : calleeName;
+                // Escape special characters in group names for Mermaid
+                const safeGroupName = shortGroupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || 'UnknownGroup';
+                const safeCalleeName = shortCalleeName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || 'UnknownCallee';
+                report += `    "${safeGroupName}" -->|${calleeInfo.count}x| "${safeCalleeName}"\n`;
+                // Remove from set to avoid duplicates
+                significantRelationships.delete(relationship);
+              }
+            }
+          });
+        });
+
+        report += '```\n\n';
+      } else {
+        report += `*No significant call relationships found (showing only relationships with 2+ calls).*\n\n`;
+      }
+
+      // 7. Comprehensive Timeline Analysis
+      report += `## ⏱️ Comprehensive Timeline Analysis\n\n`;
+      const minStartTime = Math.min(...reportTasks.map(t => t.startTime));
+      const maxEndTime = Math.max(...reportTasks.map(t => t.endTime));
+      const executionTimespan = maxEndTime - minStartTime;
+
+      // Calculate timing statistics
+      const allDurations = reportTasks.map(t => t.endTime - t.startTime).sort((a, b) => a - b);
+      const avgDuration = allDurations.reduce((sum, d) => sum + d, 0) / allDurations.length;
+      const medianDuration = allDurations.length % 2 === 0
+        ? (allDurations[allDurations.length / 2 - 1] + allDurations[allDurations.length / 2]) / 2
+        : allDurations[Math.floor(allDurations.length / 2)];
+      const p95Duration = allDurations[Math.floor(allDurations.length * 0.95)];
+      const p99Duration = allDurations[Math.floor(allDurations.length * 0.99)];
+
+      // Calculate concurrency
+      const runningTasks = reportTasks.filter(t => t.isRunning).length;
+      const completedTasks = reportTasks.length - runningTasks;
+
+      report += `### 📈 Execution Timeline\n`;
+      report += `- **Execution Timespan:** ${executionTimespan.toFixed(3)}s\n`;
+      report += `- **Start Time:** ${minStartTime.toFixed(3)}s\n`;
+      report += `- **End Time:** ${maxEndTime.toFixed(3)}s\n`;
+      report += `- **Concurrency Level:** ${(totalDuration / executionTimespan).toFixed(2)}x average parallel execution\n\n`;
+
+      report += `### 📊 Duration Statistics\n`;
+      report += `- **Average Duration:** ${avgDuration.toFixed(3)}s\n`;
+      report += `- **Median Duration:** ${medianDuration.toFixed(3)}s\n`;
+      report += `- **Min Duration:** ${allDurations[0].toFixed(3)}s\n`;
+      report += `- **Max Duration:** ${allDurations[allDurations.length - 1].toFixed(3)}s\n`;
+      report += `- **95th Percentile:** ${p95Duration.toFixed(3)}s\n`;
+      report += `- **99th Percentile:** ${p99Duration.toFixed(3)}s\n\n`;
+
+      report += `### 🔄 Task Status\n`;
+      report += `- **Completed Tasks:** ${completedTasks} (${((completedTasks / reportTasks.length) * 100).toFixed(1)}%)\n`;
+      report += `- **Running Tasks:** ${runningTasks} (${((runningTasks / reportTasks.length) * 100).toFixed(1)}%)\n\n`;
+
+      // 8. Summary
+      report += `## 📋 Analysis Summary\n\n`;
+
+      if (longestGroup) {
+        report += `- **Longest Running Group:** ${longestGroup.groupName} (${longestGroup.totalDuration.toFixed(3)}s, ${((longestGroup.totalDuration / totalDuration) * 100).toFixed(1)}% of total time)\n`;
+      }
+
+      const mostCalled = Array.from(taskGroups.values()).sort((a, b) => b.executionCount - a.executionCount)[0];
+      if (mostCalled) {
+        report += `- **Most Frequently Called:** ${mostCalled.groupName} (${mostCalled.executionCount} executions)\n`;
+      }
+
+      const bottleneckGroups = sortedGroups.filter(g => (g.totalDuration / totalDuration) > 0.1);
+      report += `- **Performance Critical Groups:** ${bottleneckGroups.length} groups consuming >10% of total time\n`;
+
+      const groupDiversities = Array.from(taskGroups.values()).map(g => g.tasks.map(t => t.endTime - t.startTime));
+      const highVariabilityGroups = groupDiversities.filter((durations, index) => {
+        const avg = durations.reduce((sum, d) => sum + d, 0) / durations.length;
+        const variance = durations.reduce((sum, d) => sum + Math.pow(d - avg, 2), 0) / durations.length;
+        const stdDev = Math.sqrt(variance);
+        return stdDev / avg > 0.5; // High coefficient of variation
+      });
+      report += `- **High Variability Groups:** ${highVariabilityGroups.length} groups with inconsistent execution times\n`;
+
+      report += `\n---\n*Report generated by Flow Insight Gantt Analysis*`;
+
+      return report;
+    };
+
+    // Modal component for displaying the report
+    const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+      const [reportContent, setReportContent] = useState<string>('');
+      const [isGenerating, setIsGenerating] = useState(false);
+
+      useEffect(() => {
+        if (isOpen && filteredTasks.length > 0) {
+          setIsGenerating(true);
+          // Generate report with a small delay to show loading state
+          setTimeout(() => {
+            const report = generateMarkdownReport();
+            setReportContent(report);
+            setIsGenerating(false);
+          }, 500);
+        }
+      }, [isOpen, filteredTasks]);
+
+      if (!isOpen) return null;
+
+      const copyToClipboard = () => {
+        navigator.clipboard.writeText(reportContent);
+        alert('Report copied to clipboard!');
+      };
+
+      const downloadReport = () => {
+        const blob = new Blob([reportContent], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `flow-insight-report-${new Date().toISOString().slice(0, 10)}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+
+      return (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+        }}>
+          <div style={{
+            backgroundColor: COLORS.surface,
+            borderRadius: '12px',
+            border: `1px solid ${COLORS.border}`,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+            width: '90%',
+            maxWidth: '1000px',
+            height: '80%',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '20px',
+              borderBottom: `1px solid ${COLORS.border}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <h2 style={{ margin: 0, color: COLORS.text, fontSize: '20px', fontWeight: '600' }}>
+                📊 Gantt Analysis Report
+              </h2>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <button
+                  onClick={copyToClipboard}
+                  disabled={isGenerating}
+                  style={{
+                    padding: '8px 16px',
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: '6px',
+                    backgroundColor: COLORS.background,
+                    color: COLORS.text,
+                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                  }}
+                >
+                  📋 Copy
+                </button>
+                <button
+                  onClick={downloadReport}
+                  disabled={isGenerating}
+                  style={{
+                    padding: '8px 16px',
+                    border: `1px solid ${COLORS.primary}`,
+                    borderRadius: '6px',
+                    backgroundColor: COLORS.primary,
+                    color: 'white',
+                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                  }}
+                >
+                  💾 Download
+                </button>
+                <button
+                  onClick={onClose}
+                  style={{
+                    padding: '8px 12px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    backgroundColor: COLORS.error,
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{
+              flex: 1,
+              overflow: 'auto',
+              padding: '20px',
+            }}>
+              {isGenerating ? (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '200px',
+                  color: COLORS.textLight,
+                }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔄</div>
+                  <h3 style={{ margin: '0 0 8px 0', color: COLORS.text }}>Generating Report</h3>
+                  <p style={{ margin: 0 }}>Analyzing task groups and generating insights...</p>
+                </div>
+              ) : (
+                <div style={{
+                  fontFamily: '"Inter", "Segoe UI", "Roboto", sans-serif',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  color: COLORS.text,
+                  backgroundColor: COLORS.background,
+                  padding: '20px',
+                  borderRadius: '8px',
+                  border: `1px solid ${COLORS.border}`,
+                  overflow: 'auto',
+                  margin: 0,
+                }}>
+                  <div style={{
+                    // Global styles for markdown content
+                    fontFamily: 'inherit',
+                  }}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={MarkdownComponents}
+                    >
+                      {reportContent}
+                    </ReactMarkdown>
+                  </div>
+                  {/* Add CSS for markdown styling */}
+                  <style>{`
+                    .markdown-content h1,
+                    .markdown-content h2,
+                    .markdown-content h3,
+                    .markdown-content h4,
+                    .markdown-content h5,
+                    .markdown-content h6 {
+                      margin-top: 16px;
+                      margin-bottom: 8px;
+                      font-weight: 600;
+                    }
+                    .markdown-content p {
+                      margin: 8px 0;
+                    }
+                    .markdown-content ul,
+                    .markdown-content ol {
+                      padding-left: 24px;
+                    }
+                    .markdown-content li {
+                      margin-bottom: 4px;
+                    }
+                    .markdown-content blockquote {
+                      border-left: 4px solid ${COLORS.primary};
+                      margin: 8px 0;
+                      padding-left: 16px;
+                      padding-top: 4px;
+                      padding-bottom: 4px;
+                      background-color: #f5f5f5;
+                    }
+                    .markdown-content pre {
+                      margin-top: 8px;
+                      margin-bottom: 16px;
+                    }
+                    .mermaid-diagram {
+                      text-align: center;
+                      margin: 16px 0;
+                    }
+                    .mermaid-diagram svg {
+                      max-width: 100%;
+                      height: auto;
+                    }
+                  `}</style>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
 
     // Transform flameData to hierarchical tree tasks using the tree structure directly
     const transformFlameDataToTreeTasks = (data: FlameGraphData): CustomTask[] => {
@@ -915,12 +1718,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         // During search, also check if we would hide current search results
         const wouldHideSearchResults = hasSearchTerm
           ? testVisible.filter(task => {
-              const lowerSearch = (searchTerm || '').toLowerCase();
-              return (
-                task.name.toLowerCase().includes(lowerSearch) ||
-                task.fullName.toLowerCase().includes(lowerSearch)
-              );
-            }).length === 0
+            const lowerSearch = (searchTerm || '').toLowerCase();
+            return (
+              task.name.toLowerCase().includes(lowerSearch) ||
+              task.fullName.toLowerCase().includes(lowerSearch)
+            );
+          }).length === 0
           : false;
 
         wouldHideAllTasks = testVisible.length === 0 || wouldHideSearchResults;
@@ -1373,14 +2176,13 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       );
     }
 
-    // Calculate total height with proper spacing for each task type
+    // Calculate dynamic row heights for all tasks
+    const taskRowHeights = displayTasks.map(task => calculateTextHeight(task));
+
+    // Calculate total height with dynamic row heights
     let totalHeight = timelineHeight + 60;
-    displayTasks.forEach(task => {
-      if (task.type === 'method') {
-        totalHeight += methodRowHeight;
-      } else {
-        totalHeight += rowHeight;
-      }
+    taskRowHeights.forEach(height => {
+      totalHeight += height;
     });
 
     // Safety check for total height
@@ -1599,6 +2401,26 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             >
               Duration: {(maxTime - minTime).toFixed(3)}s
             </div>
+
+            <button
+              onClick={() => setShowReportModal(true)}
+              disabled={filteredTasks.length === 0}
+              style={{
+                padding: '8px 16px',
+                border: `1px solid ${COLORS.primary}`,
+                borderRadius: '8px',
+                backgroundColor: filteredTasks.length === 0 ? COLORS.border : COLORS.primary,
+                color: filteredTasks.length === 0 ? COLORS.textLight : 'white',
+                cursor: filteredTasks.length === 0 ? 'not-allowed' : 'pointer',
+                fontSize: '13px',
+                fontWeight: '600',
+                transition: 'all 0.2s ease',
+                boxShadow: filteredTasks.length > 0 ? '0 2px 4px rgba(99, 102, 241, 0.2)' : 'none',
+              }}
+              title="Generate comprehensive analysis report for visible tasks"
+            >
+              📊 Generate Report
+            </button>
           </div>
 
           {/* Modern Legend */}
@@ -1827,16 +2649,13 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
             {/* Enhanced Task Rows with Tree Structure */}
             {displayTasks.map((task, index) => {
-              // Calculate y position with proper spacing for different row heights
+              // Calculate y position using dynamic row heights
               let y = timelineHeight + 20;
               for (let i = 0; i < index; i++) {
-                const prevTask = displayTasks[i];
-                if (prevTask.type === 'method') {
-                  y += methodRowHeight;
-                } else {
-                  y += rowHeight;
-                }
+                y += taskRowHeights[i];
               }
+
+              const currentRowHeight = taskRowHeights[index];
               // Calculate base bar position
               const baseTaskStartX =
                 labelWidth + timeToX(task.startTime, minTime, pixelsPerUnit, timeScale);
@@ -1955,8 +2774,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               const isSelected = selectedElementId === task.id;
               const isCollapsible = isMethod;
 
-              const currentRowHeight = isMethod ? methodRowHeight : rowHeight;
-              const barHeight = Math.floor(currentRowHeight * 0.75); // 3/4 of container row
+              const barHeight = Math.floor(Math.max(16, currentRowHeight * 0.4)); // Reasonable bar height based on row height
               const barPadding = (currentRowHeight - barHeight) / 2; // Center the bar vertically
               const indent = task.level * indentWidth;
 
@@ -2084,96 +2902,130 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       </g>
                     )}
 
-                    {/* Task name */}
-                    <text
-                      x={
-                        indent +
-                        (() => {
-                          const hasChildren = filteredTasks.some(t => t.parentId === task.id);
-                          // Space calculation:
-                          // - 55px if task has expand button (hasChildren && isCollapsible)
-                          // - 35px if task has flatten button only (hasChildren but not collapsible, or main/method without children)
-                          // - 15px if task has no buttons (no children and not main/method)
-                          if (hasChildren && isCollapsible) return 55; // Has both expand and flatten buttons
-                          if (hasChildren && !isMain) return 35; // Has flatten button only
-                          if (isMain || isMethod) return 35; // Main/method tasks get consistent spacing
-                          return 15; // No buttons, minimal spacing
-                        })()
+                    {/* Task name with adaptive font size */}
+                    {(() => {
+                      const hasChildren = filteredTasks.some(t => t.parentId === task.id);
+                      const textStartX = indent + (() => {
+                        if (hasChildren && isCollapsible) return 55; // Has both expand and flatten buttons
+                        if (hasChildren && !isMain) return 35; // Has flatten button only
+                        if (isMain || isMethod) return 35; // Main/method tasks get consistent spacing
+                        return 15; // No buttons, minimal spacing
+                      })();
+
+                      // Calculate available width for text (leave some padding before timeline)
+                      const availableWidth = labelWidth - textStartX - 10; // 10px padding from timeline
+
+                      // Get the text to display
+                      let displayText = task.name;
+                      if (flattenedGroups.has(task.id)) {
+                        displayText += ' [FLATTENED]';
                       }
-                      y={y + currentRowHeight / 2}
-                      fontSize={isMain ? '14' : isMethod ? '12' : '11'}
-                      fill={isMain ? COLORS.primary : COLORS.text}
-                      textAnchor="start"
-                      dominantBaseline="central"
-                      fontWeight={isMain ? '700' : isMethod ? '600' : '500'}
-                      style={{
-                        userSelect: 'none',
-                        cursor: (() => {
-                          const hasChildren = filteredTasks.some(t => t.parentId === task.id);
-                          return hasChildren && isCollapsible ? 'pointer' : 'default';
-                        })(),
-                      }}
-                      onClick={() => {
-                        const hasChildren = filteredTasks.some(t => t.parentId === task.id);
-                        if (hasChildren && isCollapsible) handleTaskClick(task);
-                      }}
-                    >
-                      {task.name}
-                      {flattenedGroups.has(task.id) && (
-                        <tspan fill={COLORS.accent} fontWeight="bold">
-                          {' '}
-                          [FLATTENED]
-                        </tspan>
-                      )}
-                    </text>
+
+                      // Calculate adaptive font size based on text length and available width
+                      const baseFontSize = isMain ? 14 : isMethod ? 12 : 11;
+                      const estimatedTextWidth = displayText.length * baseFontSize * 0.6; // Rough estimate
+                      const scaleFactor = Math.min(1, availableWidth / estimatedTextWidth);
+                      const adaptiveFontSize = Math.max(8, baseFontSize * scaleFactor); // Minimum 8px font
+
+                      // Position text vertically centered in the row
+                      const textY = y + currentRowHeight / 2;
+
+                      return (
+                        <text
+                          x={textStartX}
+                          y={textY}
+                          fontSize={adaptiveFontSize}
+                          fill={isMain ? COLORS.primary : COLORS.text}
+                          textAnchor="start"
+                          dominantBaseline="central"
+                          fontWeight={isMain ? '700' : isMethod ? '600' : '500'}
+                          style={{
+                            userSelect: 'none',
+                            cursor: hasChildren && isCollapsible ? 'pointer' : 'default',
+                          }}
+                          onClick={() => {
+                            if (hasChildren && isCollapsible) handleTaskClick(task);
+                          }}
+                        >
+                          {displayText.includes('[FLATTENED]') ? (
+                            // Handle [FLATTENED] styling
+                            (() => {
+                              const parts = displayText.split('[FLATTENED]');
+                              return (
+                                <>
+                                  {parts[0]}
+                                  <tspan fill={COLORS.accent} fontWeight="bold">
+                                    [FLATTENED]
+                                  </tspan>
+                                  {parts[1]}
+                                </>
+                              );
+                            })()
+                          ) : (
+                            displayText
+                          )}
+                        </text>
+                      );
+                    })()}
 
                     {/* Call relationship indicators */}
-                    {task.callers.length > 0 && (
-                      <text
-                        x={
-                          indent +
-                          (() => {
-                            const hasChildren = filteredTasks.some(t => t.parentId === task.id);
-                            if (hasChildren && isCollapsible) return 55;
-                            if (hasChildren && !isMain) return 35;
-                            if (isMain || isMethod) return 35;
-                            return 15;
-                          })()
-                        }
-                        y={y + currentRowHeight / 2 + 8}
-                        fontSize="8"
-                        fill={COLORS.textLight}
-                        textAnchor="start"
-                        dominantBaseline="central"
-                        fontWeight="400"
-                      >
-                        Called by: {task.callers.length} • Calls: {task.callees.length}
-                      </text>
-                    )}
+                    {task.callers.length > 0 && (() => {
+                      const hasChildren = filteredTasks.some(t => t.parentId === task.id);
+                      const textStartX = indent + (() => {
+                        if (hasChildren && isCollapsible) return 55;
+                        if (hasChildren && !isMain) return 35;
+                        if (isMain || isMethod) return 35;
+                        return 15;
+                      })();
+
+                      // Position caller info below the main text
+                      const callerInfoY = y + currentRowHeight / 2 + 12; // Below center line
+
+                      return (
+                        <text
+                          x={textStartX}
+                          y={callerInfoY}
+                          fontSize="8"
+                          fill={COLORS.textLight}
+                          textAnchor="start"
+                          dominantBaseline="central"
+                          fontWeight="400"
+                        >
+                          Called by: {task.callers.length} • Calls: {task.callees.length}
+                        </text>
+                      );
+                    })()}
 
                     {/* Duration info */}
-                    {!isMethod && (
-                      <text
-                        x={
-                          indent +
-                          (() => {
-                            const hasChildren = filteredTasks.some(t => t.parentId === task.id);
-                            if (hasChildren && isCollapsible) return 55;
-                            if (hasChildren && !isMain) return 35;
-                            if (isMain || isMethod) return 35;
-                            return 15;
-                          })()
-                        }
-                        y={y + currentRowHeight / 2 + (task.callers.length > 0 ? 14 : 8)}
-                        fontSize="8"
-                        fill={COLORS.textLight}
-                        textAnchor="start"
-                        dominantBaseline="central"
-                        fontWeight="400"
-                      >
-                        ⏱️ {duration.toFixed(3)}s {task.isRunning ? '🔄' : ''}
-                      </text>
-                    )}
+                    {!isMethod && (() => {
+                      const hasChildren = filteredTasks.some(t => t.parentId === task.id);
+                      const textStartX = indent + (() => {
+                        if (hasChildren && isCollapsible) return 55;
+                        if (hasChildren && !isMain) return 35;
+                        if (isMain || isMethod) return 35;
+                        return 15;
+                      })();
+
+                      // Position duration info below caller info (if present) or below main text
+                      let durationY = y + currentRowHeight / 2 + 12; // Below center line
+                      if (task.callers.length > 0) {
+                        durationY += 12; // Below caller info if present
+                      }
+
+                      return (
+                        <text
+                          x={textStartX}
+                          y={durationY}
+                          fontSize="8"
+                          fill={COLORS.textLight}
+                          textAnchor="start"
+                          dominantBaseline="central"
+                          fontWeight="400"
+                        >
+                          ⏱️ {duration.toFixed(3)}s {task.isRunning ? '🔄' : ''}
+                        </text>
+                      );
+                    })()}
                   </g>
 
                   {/* Enhanced Task Bar */}
@@ -2336,6 +3188,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               </div>
             );
           })()}
+
+        {/* Report Modal */}
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+        />
       </div>
     );
   }
