@@ -63,6 +63,59 @@ const MermaidDiagram = ({ chart }: { chart: string }) => {
   return <div ref={ref} className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
 };
 
+// HTML Table Component for better rendering
+const HtmlTable = ({ htmlContent }: { htmlContent: string }) => {
+  return (
+    <div
+      dangerouslySetInnerHTML={{ __html: htmlContent }}
+      style={{
+        margin: '16px 0',
+        overflowX: 'auto',
+        fontSize: '14px',
+        lineHeight: '1.5',
+        borderRadius: '8px',
+        border: '1px solid #e2e8f0',
+        backgroundColor: '#ffffff',
+      }}
+    />
+  );
+};
+
+// Enhanced Report Renderer Component
+const ReportRenderer = ({ content }: { content: string }) => {
+  // Split content by HTML table sections
+  const parts = content.split(/(<div class="hierarchical-table">[\s\S]*?<\/div>)/);
+
+  return (
+    <div>
+      {parts.map((part, index) => {
+        if (part.includes('<div class="hierarchical-table">')) {
+          // Extract the table HTML from the wrapper
+          const tableMatch = part.match(/<table[\s\S]*?<\/table>/);
+          const tableHtml = tableMatch ? tableMatch[0] : part;
+
+          return (
+            <HtmlTable key={index} htmlContent={tableHtml} />
+          );
+        } else if (part.trim()) {
+          // Regular markdown content
+          return (
+            <ReactMarkdown
+              key={index}
+              remarkPlugins={[remarkGfm]}
+              components={MarkdownComponents}
+              skipHtml={false}
+            >
+              {part}
+            </ReactMarkdown>
+          );
+        }
+        return null;
+      })}
+    </div>
+  );
+};
+
 // Custom markdown components for better rendering
 const MarkdownComponents = {
   // eslint-disable-next-line
@@ -482,7 +535,6 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
       let report = `# Flow Insight - Gantt Analysis Report\n\n`;
       report += `**Generated:** ${new Date().toLocaleString()}\n\n`;
-      report += `**Report Scope:** ${searchTerm ? `Direct matches for "${searchTerm}"` : 'All tasks'}\n\n`;
       report += `**Total Tasks Analyzed:** ${reportTasks.length}${tasks.length !== reportTasks.length ? ` (${tasks.length} total)` : ''}\n\n`;
       report += `**Task Groups:** ${taskGroups.size}\n\n`;
       report += `**Total Execution Time:** ${totalDuration.toFixed(3)}s\n\n`;
@@ -510,7 +562,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         report += `| ${group.groupName} | ${group.executionCount} | ${group.totalDuration.toFixed(3)} | ${group.avgDuration.toFixed(3)} | ${minDuration.toFixed(3)} | ${maxDuration.toFixed(3)} | ${medianDuration.toFixed(3)} | ${percentage}% |\n`;
       });
 
-      // 2. Hierarchical Task Breakdown
+      // 2. Hierarchical Task Breakdown with HTML Table
       report += `\n## 📊 Hierarchical Task Breakdown\n\n`;
 
       console.log('🔍 [Report Generation] Starting hierarchical breakdown analysis...');
@@ -526,6 +578,410 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           duration: t.endTime - t.startTime,
         }))
       );
+
+      // Generate HTML table with merged cells for hierarchical groups
+      const generateHierarchicalHtmlTable = (): string => {
+        console.log('🏗️ [HTML Table] Starting hierarchical HTML table generation...');
+
+        // Use the same logic as the working buildHierarchicalTable function
+        const buildHierarchicalTable = () => {
+          const tableRows: Array<{
+            level: number;
+            name: string;
+            total: number;
+            avg: number;
+            min: number;
+            max: number;
+            median: number;
+            p95: number;
+            p99: number;
+            count: number;
+          }> = [];
+
+          // Helper function to extract group name (last part after /)
+          const extractGroupName = (taskName: string): string => {
+            if (!taskName) return 'Unknown';
+            const parts = taskName.split('/');
+            return parts[parts.length - 1].trim() || taskName;
+          };
+
+          // Helper function to calculate percentiles
+          const calculatePercentile = (sortedValues: number[], percentile: number): number => {
+            if (sortedValues.length === 0) return 0;
+            if (sortedValues.length === 1) return sortedValues[0];
+
+            const index = (percentile / 100) * (sortedValues.length - 1);
+            const lower = Math.floor(index);
+            const upper = Math.ceil(index);
+
+            if (lower === upper) {
+              return sortedValues[lower];
+            }
+
+            const weight = index - lower;
+            return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+          };
+
+          // Helper function to calculate median
+          const calculateMedian = (sortedValues: number[]): number => {
+            if (sortedValues.length === 0) return 0;
+            if (sortedValues.length === 1) return sortedValues[0];
+
+            const mid = Math.floor(sortedValues.length / 2);
+            if (sortedValues.length % 2 === 0) {
+              return (sortedValues[mid - 1] + sortedValues[mid]) / 2;
+            }
+            return sortedValues[mid];
+          };
+
+          // Aggregate tasks by group
+          const taskGroups = new Map<
+            string,
+            {
+              tasks: CustomTask[];
+              durations: number[];
+              children: Set<string>;
+              parents: Set<string>;
+            }
+          >();
+
+          console.log('🏗️ [HTML Table] Aggregating tasks by group and analyzing relationships...');
+
+          // Collect all tasks to process
+          const tasksToProcess = reportTasks;
+
+          // First pass: collect tasks by group
+          tasksToProcess.forEach(task => {
+            const groupName = extractGroupName(task.name || task.fullName || 'Unknown');
+            const taskDuration = task.endTime - task.startTime;
+
+            if (!taskGroups.has(groupName)) {
+              taskGroups.set(groupName, {
+                tasks: [],
+                durations: [],
+                children: new Set(),
+                parents: new Set(),
+              });
+            }
+
+            const group = taskGroups.get(groupName)!;
+            group.tasks.push(task);
+            group.durations.push(taskDuration);
+          });
+
+          // Second pass: analyze parent-child relationships between groups
+          tasksToProcess.forEach(task => {
+            const taskGroupName = extractGroupName(task.name || task.fullName || 'Unknown');
+
+            // Find parent tasks and their groups
+            if (task.parentId) {
+              const parentTask = tasksToProcess.find(t => t.id === task.parentId);
+              if (parentTask) {
+                const parentGroupName = extractGroupName(
+                  parentTask.name || parentTask.fullName || 'Unknown'
+                );
+                if (parentGroupName !== taskGroupName) {
+                  // Different groups - establish parent-child relationship
+                  taskGroups.get(taskGroupName)?.parents.add(parentGroupName);
+                  taskGroups.get(parentGroupName)?.children.add(taskGroupName);
+                }
+              }
+            }
+          });
+
+          return { taskGroups, extractGroupName };
+        };
+
+        const { taskGroups, extractGroupName } = buildHierarchicalTable();
+
+        console.log('🏗️ [HTML Table] Task groups created:', taskGroups.size);
+        Array.from(taskGroups.entries()).forEach(([name, group]) => {
+          console.log(`🏗️ [HTML Table] Group "${name}": ${group.tasks.length} tasks, ${group.children.size} children, ${group.parents.size} parents`);
+        });
+
+        // Build table structure using the same group structure as the working markdown table
+        const buildTableStructure = () => {
+          // Calculate statistics for each group
+          const groupStats = new Map<
+            string,
+            {
+              groupName: string;
+              total: number;
+              avg: number;
+              min: number;
+              max: number;
+              median: number;
+              count: number;
+              children: Set<string>;
+              parents: Set<string>;
+            }
+          >();
+
+          // Helper function to calculate median
+          const calculateMedian = (sortedValues: number[]): number => {
+            if (sortedValues.length === 0) return 0;
+            if (sortedValues.length === 1) return sortedValues[0];
+
+            const mid = Math.floor(sortedValues.length / 2);
+            if (sortedValues.length % 2 === 0) {
+              return (sortedValues[mid - 1] + sortedValues[mid]) / 2;
+            }
+            return sortedValues[mid];
+          };
+
+          taskGroups.forEach((groupData, groupName) => {
+            const sortedDurations = [...groupData.durations].sort((a, b) => a - b);
+            const total = groupData.durations.reduce((sum, d) => sum + d, 0);
+            const avg = total / groupData.durations.length;
+            const min = Math.min(...groupData.durations);
+            const max = Math.max(...groupData.durations);
+            const median = calculateMedian(sortedDurations);
+
+            groupStats.set(groupName, {
+              groupName,
+              total,
+              avg,
+              min,
+              max,
+              median,
+              count: groupData.durations.length,
+              children: groupData.children,
+              parents: groupData.parents,
+            });
+          });
+
+          // Find root groups (no parents) and sort by total duration
+          const rootGroups = Array.from(groupStats.values())
+            .filter(group => group.parents.size === 0)
+            .sort((a, b) => b.total - a.total);
+
+          console.log('🏗️ [HTML Table] Root groups found:', rootGroups.length);
+          rootGroups.forEach(group => {
+            console.log(`🏗️ [HTML Table] Root group: "${group.groupName}" (${group.children.size} children)`);
+          });
+
+          if (rootGroups.length === 0) {
+            console.log('⚠️ [HTML Table] No root groups found, using all groups');
+            // Use all groups if no clear hierarchy
+            const allGroups = Array.from(groupStats.values()).sort((a, b) => b.total - a.total);
+            if (allGroups.length === 0) {
+              return null;
+            }
+
+            // Create a simple table for flat structure
+            let tableHtml = `
+<table style="border-collapse: collapse; width: 100%; margin: 16px 0; font-family: 'Inter', sans-serif; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+  <tr>
+`;
+            allGroups.forEach(group => {
+              tableHtml += `    <th style="text-align: center; padding: 12px 8px; border: 1px solid #e2e8f0; background: linear-gradient(135deg, #6366f1, #8b5cf6); font-weight: 700; color: white; font-size: 14px;">
+      ${group.groupName}
+    </th>
+`;
+            });
+            tableHtml += `  </tr>
+  <tr style="background: #f0f9ff;">
+`;
+            allGroups.forEach(group => {
+              tableHtml += `    <td style="text-align: center; padding: 10px 8px; border: 1px solid #e2e8f0; background: #f0f9ff; font-weight: 600; color: #0369a1; font-size: 14px;">
+      ⏱️ ${group.avg.toFixed(3)}s
+    </td>
+`;
+            });
+            tableHtml += `  </tr>
+</table>
+
+`;
+            return tableHtml;
+          }
+
+          // Calculate maximum depth and column spans for hierarchical groups
+          const calculateDepth = (groupName: string, visited = new Set<string>()): number => {
+            if (visited.has(groupName)) return 0; // Prevent infinite recursion
+            visited.add(groupName);
+
+            const group = groupStats.get(groupName);
+            if (!group || group.children.size === 0) return 1;
+
+            return 1 + Math.max(...Array.from(group.children).map(childName => calculateDepth(childName, new Set(visited))));
+          };
+
+          const calculateLeafCount = (groupName: string, visited = new Set<string>()): number => {
+            if (visited.has(groupName)) return 0; // Prevent infinite recursion
+            visited.add(groupName);
+
+            const group = groupStats.get(groupName);
+            if (!group || group.children.size === 0) return 1;
+
+            return Array.from(group.children).reduce((sum: number, childName: string) =>
+              sum + calculateLeafCount(childName, new Set(visited)), 0);
+          };
+
+          const maxDepth = Math.max(...rootGroups.map(group => calculateDepth(group.groupName)));
+          const totalColumns = rootGroups.reduce((sum, group) => sum + calculateLeafCount(group.groupName), 0);
+
+          console.log('🏗️ [HTML Table] Max depth:', maxDepth, 'Total columns:', totalColumns);
+
+          // Generate hierarchical table
+          let tableHtml = `
+<table style="border-collapse: collapse; width: 100%; margin: 16px 0; font-family: 'Inter', sans-serif; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+`;
+
+          // Generate header rows for each level with execution time rows interspersed
+          for (let level = 0; level < maxDepth; level++) {
+            tableHtml += `  <tr>\n`;
+
+            const generateHeaderCells = (groupNames: string[], currentLevel: number) => {
+              groupNames.forEach(groupName => {
+                const group = groupStats.get(groupName);
+                if (!group) return;
+
+                if (currentLevel === level) {
+                  const colspan = calculateLeafCount(groupName);
+                  const isLeaf = group.children.size === 0;
+                  const rowspan = isLeaf ? maxDepth - level : 1;
+
+                  const cellStyle = `
+                     text-align: center;
+                     padding: 12px 8px;
+                     border: 1px solid #e2e8f0;
+                     background: linear-gradient(135deg, ${level === 0 ? '#6366f1, #8b5cf6' : '#f8fafc, #e2e8f0'});
+                     font-weight: ${level === 0 ? '700' : '600'};
+                     color: ${level === 0 ? 'white' : '#1e293b'};
+                     font-size: ${Math.max(10, 16 - level * 2)}px;
+                   `.replace(/\s+/g, ' ').trim();
+
+                  tableHtml += `    <th colspan="${colspan}" rowspan="${rowspan}" style="${cellStyle}">\n`;
+                  tableHtml += `      ${group.groupName}\n`;
+                  tableHtml += `    </th>\n`;
+                } else if (currentLevel < level && group.children.size > 0) {
+                  generateHeaderCells(Array.from(group.children), currentLevel + 1);
+                }
+              });
+            };
+
+            generateHeaderCells(rootGroups.map(g => g.groupName), 0);
+            tableHtml += `  </tr>\n`;
+
+            // Add execution time row for parent groups at this level (if any)
+            let hasParentGroups = false;
+
+            // Check if there are parent groups at this level
+            const checkForParentGroups = (groupNames: string[], currentLevel: number) => {
+              groupNames.forEach(groupName => {
+                const group = groupStats.get(groupName);
+                if (!group) return;
+
+                if (currentLevel === level && group.children.size > 0) {
+                  hasParentGroups = true;
+                } else if (currentLevel < level && group.children.size > 0) {
+                  checkForParentGroups(Array.from(group.children), currentLevel + 1);
+                }
+              });
+            };
+
+            checkForParentGroups(rootGroups.map(g => g.groupName), 0);
+
+            if (hasParentGroups) {
+              tableHtml += `  <tr style="background: #e0f2fe;">\n`;
+
+              const generateParentTimeCells = (groupNames: string[], currentLevel: number) => {
+                groupNames.forEach(groupName => {
+                  const group = groupStats.get(groupName);
+                  if (!group) return;
+
+                  if (currentLevel === level) {
+                    if (group.children.size > 0) {
+                      // Parent group - show execution time with merged cells
+                      const colspan = calculateLeafCount(groupName);
+                      const cellStyle = `
+                         text-align: center;
+                         padding: 8px 4px;
+                         border: 1px solid #e2e8f0;
+                         background: #e0f2fe;
+                         font-weight: 600;
+                         color: #0277bd;
+                         font-size: 12px;
+                       `.replace(/\s+/g, ' ').trim();
+
+                      tableHtml += `    <td colspan="${colspan}" style="${cellStyle}">\n`;
+                      tableHtml += `      ⏱️ ${group.avg.toFixed(3)}s avg\n`;
+                      tableHtml += `    </td>\n`;
+                    } else {
+                      // Leaf group - add empty cell to maintain column alignment
+                      const cellStyle = `
+                         text-align: center;
+                         padding: 8px 4px;
+                         border: 1px solid #e2e8f0;
+                         background: #e0f2fe;
+                         font-weight: 600;
+                         color: #0277bd;
+                         font-size: 12px;
+                       `.replace(/\s+/g, ' ').trim();
+
+                      tableHtml += `    <td style="${cellStyle}">\n`;
+                      tableHtml += `      <!-- leaf group -->\n`;
+                      tableHtml += `    </td>\n`;
+                    }
+                  } else if (currentLevel < level && group.children.size > 0) {
+                    generateParentTimeCells(Array.from(group.children), currentLevel + 1);
+                  }
+                });
+              };
+
+              generateParentTimeCells(rootGroups.map(g => g.groupName), 0);
+              tableHtml += `  </tr>\n`;
+            }
+          }
+
+          // Add average time row
+          tableHtml += `  <tr style="background: #f0f9ff;">\n`;
+          const generateAvgCells = (groupNames: string[]) => {
+            groupNames.forEach(groupName => {
+              const group = groupStats.get(groupName);
+              if (!group) return;
+
+              if (group.children.size === 0) {
+                const cellStyle = `
+                   text-align: center;
+                   padding: 10px 8px;
+                   border: 1px solid #e2e8f0;
+                   background: #f0f9ff;
+                   font-weight: 600;
+                   color: #0369a1;
+                   font-size: 14px;
+                 `.replace(/\s+/g, ' ').trim();
+
+                tableHtml += `    <td style="${cellStyle}">\n`;
+                tableHtml += `      ⏱️ ${group.avg.toFixed(3)}s\n`;
+                tableHtml += `    </td>\n`;
+              } else {
+                generateAvgCells(Array.from(group.children));
+              }
+            });
+          };
+
+          generateAvgCells(rootGroups.map(g => g.groupName));
+          tableHtml += `  </tr>\n`;
+
+
+
+          tableHtml += `</table>\n\n`;
+
+          return tableHtml;
+        };
+
+        const result = buildTableStructure();
+        console.log('🏗️ [HTML Table] Table generation complete:', result ? 'Success' : 'Failed');
+        return result || '<p><em>No hierarchical structure found for HTML table generation.</em></p>';
+      };
+
+      // Add the HTML table to the report with proper separation
+      const htmlTable = generateHierarchicalHtmlTable();
+      if (htmlTable && htmlTable.trim() !== '') {
+        // Wrap the HTML table with a special marker for better rendering
+        report += '\n\n<div class="hierarchical-table">\n' + htmlTable + '\n</div>\n\n';
+      }
 
       // Build hierarchical task tree from reportTasks using parentId
       const buildTaskHierarchy = () => {
@@ -680,296 +1136,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         console.log('📊 [Final Results] topLevelTasks.length:', topLevelTasks.length);
         console.log('📊 [Final Results] topSubTasks.length:', topSubTasks.length);
 
-        report += `**Task Execution Breakdown** (step duration: ${totalDuration.toFixed(1)}s):\n\n`;
 
-        // Generate single hierarchical table
-        console.log('🏁 [Hierarchical Table] Generating single hierarchical table...');
 
-        // Build hierarchical table data aggregated by group with parent-child relationships
-        const buildHierarchicalTable = () => {
-          const tableRows: Array<{
-            level: number;
-            name: string;
-            total: number;
-            avg: number;
-            min: number;
-            max: number;
-            median: number;
-            p95: number;
-            p99: number;
-            count: number;
-          }> = [];
-
-          // Helper function to extract group name (last part after /)
-          const extractGroupName = (taskName: string): string => {
-            if (!taskName) return 'Unknown';
-            const parts = taskName.split('/');
-            return parts[parts.length - 1].trim() || taskName;
-          };
-
-          // Helper function to calculate percentiles
-          const calculatePercentile = (sortedValues: number[], percentile: number): number => {
-            if (sortedValues.length === 0) return 0;
-            if (sortedValues.length === 1) return sortedValues[0];
-
-            const index = (percentile / 100) * (sortedValues.length - 1);
-            const lower = Math.floor(index);
-            const upper = Math.ceil(index);
-
-            if (lower === upper) {
-              return sortedValues[lower];
-            }
-
-            const weight = index - lower;
-            return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
-          };
-
-          // Helper function to calculate median
-          const calculateMedian = (sortedValues: number[]): number => {
-            if (sortedValues.length === 0) return 0;
-            if (sortedValues.length === 1) return sortedValues[0];
-
-            const mid = Math.floor(sortedValues.length / 2);
-            if (sortedValues.length % 2 === 0) {
-              return (sortedValues[mid - 1] + sortedValues[mid]) / 2;
-            }
-            return sortedValues[mid];
-          };
-
-          // Aggregate tasks by group
-          const taskGroups = new Map<
-            string,
-            {
-              tasks: CustomTask[];
-              durations: number[];
-              children: Set<string>;
-              parents: Set<string>;
-            }
-          >();
-
-          console.log(
-            '🏁 [Hierarchical Table] Aggregating tasks by group and analyzing relationships...'
-          );
-
-          // Collect all tasks to process
-          const tasksToProcess = allTasksSorted.length > 0 ? allTasksSorted : reportTasks;
-
-          // First pass: collect tasks by group
-          tasksToProcess.forEach(task => {
-            const groupName = extractGroupName(task.name || task.fullName || 'Unknown');
-            const taskDuration = task.endTime - task.startTime;
-
-            if (!taskGroups.has(groupName)) {
-              taskGroups.set(groupName, {
-                tasks: [],
-                durations: [],
-                children: new Set(),
-                parents: new Set(),
-              });
-            }
-
-            const group = taskGroups.get(groupName)!;
-            group.tasks.push(task);
-            group.durations.push(taskDuration);
-          });
-
-          // Second pass: analyze parent-child relationships between groups
-          tasksToProcess.forEach(task => {
-            const taskGroupName = extractGroupName(task.name || task.fullName || 'Unknown');
-
-            // Find parent tasks and their groups
-            if (task.parentId) {
-              const parentTask = tasksToProcess.find(t => t.id === task.parentId);
-              if (parentTask) {
-                const parentGroupName = extractGroupName(
-                  parentTask.name || parentTask.fullName || 'Unknown'
-                );
-                if (parentGroupName !== taskGroupName) {
-                  // Different groups - establish parent-child relationship
-                  taskGroups.get(taskGroupName)?.parents.add(parentGroupName);
-                  taskGroups.get(parentGroupName)?.children.add(taskGroupName);
-                }
-              }
-            }
-          });
-
-          console.log('🏁 [Hierarchical Table] Group relationships analyzed');
-          console.log(
-            '🏁 [Hierarchical Table] Groups with relationships:',
-            Array.from(taskGroups.entries()).map(([name, data]) => ({
-              name,
-              parents: Array.from(data.parents),
-              children: Array.from(data.children),
-            }))
-          );
-
-          // Calculate statistics for each group
-          const groupStats = new Map<
-            string,
-            {
-              groupName: string;
-              total: number;
-              avg: number;
-              min: number;
-              max: number;
-              median: number;
-              p95: number;
-              p99: number;
-              count: number;
-              children: Set<string>;
-              parents: Set<string>;
-            }
-          >();
-
-          taskGroups.forEach((groupData, groupName) => {
-            const sortedDurations = [...groupData.durations].sort((a, b) => a - b);
-            const total = groupData.durations.reduce((sum, d) => sum + d, 0);
-            const avg = total / groupData.durations.length;
-            const min = Math.min(...groupData.durations);
-            const max = Math.max(...groupData.durations);
-            const median = calculateMedian(sortedDurations);
-            const p95 = calculatePercentile(sortedDurations, 95);
-            const p99 = calculatePercentile(sortedDurations, 99);
-
-            groupStats.set(groupName, {
-              groupName,
-              total,
-              avg,
-              min,
-              max,
-              median,
-              p95,
-              p99,
-              count: groupData.durations.length,
-              children: groupData.children,
-              parents: groupData.parents,
-            });
-          });
-
-          // Build hierarchical structure
-          const addedGroups = new Set<string>();
-
-          // Helper function to add group and its children recursively
-          const addGroupHierarchy = (groupName: string, level: number) => {
-            if (addedGroups.has(groupName)) return;
-
-            const stats = groupStats.get(groupName);
-            if (!stats) return;
-
-            addedGroups.add(groupName);
-
-            // Add current group
-            tableRows.push({
-              level,
-              name: `${stats.groupName} (${stats.count} tasks)`,
-              total: stats.total,
-              avg: stats.avg,
-              min: stats.min,
-              max: stats.max,
-              median: stats.median,
-              p95: stats.p95,
-              p99: stats.p99,
-              count: stats.count,
-            });
-
-            // Add children recursively, sorted by total duration
-            const childrenArray = Array.from(stats.children)
-              .map(childName => groupStats.get(childName))
-              .filter(child => child !== undefined)
-              .sort((a, b) => b!.total - a!.total);
-
-            childrenArray.forEach(child => {
-              addGroupHierarchy(child!.groupName, level + 1);
-            });
-          };
-
-          // Start with root groups (groups with no parents) sorted by total duration
-          const rootGroups = Array.from(groupStats.values())
-            .filter(group => group.parents.size === 0)
-            .sort((a, b) => b.total - a.total);
-
-          console.log(
-            '🏁 [Hierarchical Table] Root groups:',
-            rootGroups.map(g => g.groupName)
-          );
-
-          if (rootGroups.length > 0) {
-            rootGroups.forEach(rootGroup => {
-              addGroupHierarchy(rootGroup.groupName, 0);
-            });
-          } else {
-            // Fallback: if no clear hierarchy, show all groups sorted by total duration
-            console.log('🏁 [Hierarchical Table] No clear hierarchy found, showing flat structure');
-            const allGroups = Array.from(groupStats.values()).sort((a, b) => b.total - a.total);
-            allGroups.forEach(group => {
-              addGroupHierarchy(group.groupName, 0);
-            });
-          }
-
-          // Add any remaining groups that weren't added (orphaned groups)
-          const remainingGroups = Array.from(groupStats.values())
-            .filter(group => !addedGroups.has(group.groupName))
-            .sort((a, b) => b.total - a.total);
-
-          if (remainingGroups.length > 0) {
-            console.log(
-              '🏁 [Hierarchical Table] Adding orphaned groups:',
-              remainingGroups.map(g => g.groupName)
-            );
-            remainingGroups.forEach(group => {
-              addGroupHierarchy(group.groupName, 0);
-            });
-          }
-
-          console.log(
-            '🏁 [Hierarchical Table] Generated hierarchical table with',
-            tableRows.length,
-            'group rows'
-          );
-
-          return tableRows;
-        };
-
-        const hierarchicalRows = buildHierarchicalTable();
-
-        if (hierarchicalRows.length > 0) {
-          console.log('🏁 [Hierarchical Table] Generated', hierarchicalRows.length, 'rows');
-
-          // Generate the hierarchical table
-          report += `**Hierarchical Task Breakdown:**\n\n`;
-          report += `| Task Hierarchy | Total (s) | Avg (s) | Min (s) | Max (s) | Median (s) | 95th % (s) | 99th % (s) |\n`;
-          report += `|----------------|-----------|---------|---------|---------|------------|------------|------------|\n`;
-
-          hierarchicalRows.forEach(row => {
-            // Create indentation for hierarchy levels
-            const indent = '　'.repeat(row.level); // Using full-width space for better alignment
-            const hierarchyMarker = row.level > 0 ? '└─ ' : '';
-            const taskName = indent + hierarchyMarker + row.name;
-
-            // Truncate long names to fit table
-            const displayName = taskName.length > 40 ? taskName.substring(0, 37) + '...' : taskName;
-
-            report += `| ${displayName} | ${row.total.toFixed(3)} | ${row.avg.toFixed(3)} | ${row.min.toFixed(3)} | ${row.max.toFixed(3)} | ${row.median.toFixed(3)} | ${row.p95.toFixed(3)} | ${row.p99.toFixed(3)} |\n`;
-          });
-
-          report += `\n`;
-          console.log('🏁 [Hierarchical Table] Hierarchical table added to report');
-        } else {
-          console.log('❌ [Hierarchical Table] No hierarchical table - no rows generated');
-
-          // Fallback: simple task list
-          console.log('⚠️ [Fallback] Showing simple task list');
-          report += `**Task List (sorted by duration):**\n\n`;
-
-          allTasksSorted.slice(0, 10).forEach((task, index) => {
-            const duration = (task.endTime - task.startTime).toFixed(3);
-            const name = task.name || task.fullName || 'Unknown';
-            report += `${index + 1}. **${name}** - ${duration}s\n`;
-          });
-          report += `\n`;
-        }
-
-        console.log('📋 [Summary] Breakdown summary removed as requested');
+        console.log('📋 [Summary] Task breakdown is shown in the HTML table above');
       } else {
         console.log('❌ [No Tasks] reportTasks.length is 0, showing fallback message');
         report += `*No tasks available for breakdown analysis.*\n\n`;
@@ -1098,17 +1267,246 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
       if (!isOpen) return null;
 
-      const copyToClipboard = () => {
-        navigator.clipboard.writeText(reportContent);
-        alert('Report copied to clipboard!');
-      };
+      const downloadHtmlReport = () => {
+        // Function to convert markdown content to HTML using the same rendering logic
+        const convertMarkdownToHtml = (content: string): string => {
+          // Split content by HTML table sections (same logic as ReportRenderer)
+          const parts = content.split(/(<div class="hierarchical-table">[\s\S]*?<\/div>)/);
 
-      const downloadReport = () => {
-        const blob = new Blob([reportContent], { type: 'text/markdown' });
+          let htmlOutput = '';
+
+          parts.forEach(part => {
+            if (part.includes('<div class="hierarchical-table">')) {
+              // Extract and add the table HTML directly wrapped in scrollable container
+              const tableMatch = part.match(/<table[\s\S]*?<\/table>/);
+              if (tableMatch) {
+                htmlOutput += `<div class="table-container">${tableMatch[0]}</div>`;
+              }
+            } else if (part.trim()) {
+              // Convert markdown to HTML using a simple converter
+              let htmlPart = part
+                // Headers
+                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                // Bold text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                // Lists
+                .replace(/^- (.*$)/gm, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+                // Line breaks and paragraphs
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br/>');
+
+              // Handle markdown tables (if any) and make them scrollable
+              if (htmlPart.includes('|')) {
+                // Simple markdown table detection and conversion
+                htmlPart = htmlPart.replace(
+                  /(\|[^|\n]*\|[\s\S]*?)(?=\n\n|$)/gm,
+                  (match) => {
+                    // Convert basic markdown table to HTML table
+                    const lines = match.trim().split('\n');
+                    if (lines.length >= 2) {
+                      let tableHtml = '<div class="table-container"><table>';
+                      lines.forEach((line, index) => {
+                        if (index === 1 && line.includes('---')) return; // Skip separator line
+                        const cells = line.split('|').filter(cell => cell.trim());
+                        const tag = index === 0 ? 'th' : 'td';
+                        tableHtml += `<tr>${cells.map(cell => `<${tag}>${cell.trim()}</${tag}>`).join('')}</tr>`;
+                      });
+                      tableHtml += '</table></div>';
+                      return tableHtml;
+                    }
+                    return match;
+                  }
+                );
+              }
+
+              // Wrap in paragraph tags if not already wrapped
+              if (htmlPart.trim() && !htmlPart.trim().startsWith('<h') && !htmlPart.trim().startsWith('<ul') && !htmlPart.trim().startsWith('<table') && !htmlPart.trim().startsWith('<div class="table-container">')) {
+                htmlPart = '<p>' + htmlPart + '</p>';
+              }
+
+              htmlOutput += htmlPart;
+            }
+          });
+
+          return htmlOutput;
+        };
+
+        // Clean the report content (remove title and generated line)
+        const cleanedContent = reportContent
+          .replace(/^# Flow Insight - Gantt Analysis Report\n\n/, '')
+          .replace(/\*\*Generated:\*\* [^\n]+\n\n/, '');
+
+        // Convert to HTML
+        const renderedHtmlContent = convertMarkdownToHtml(cleanedContent);
+
+        // Generate a complete HTML page with embedded CSS
+        const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow Insight - Gantt Analysis Report</title>
+    <style>
+        body {
+            font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        .report-container {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 24px;
+            margin-bottom: 12px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        h1 {
+            color: #6366f1;
+            border-bottom: 3px solid #6366f1;
+            padding-bottom: 8px;
+        }
+        h2 {
+            color: #8b5cf6;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 4px;
+        }
+        p {
+            margin: 12px 0;
+        }
+        ul, ol {
+            padding-left: 24px;
+            margin: 12px 0;
+        }
+        li {
+            margin-bottom: 6px;
+        }
+        blockquote {
+            border-left: 4px solid #6366f1;
+            margin: 16px 0;
+            padding: 8px 16px;
+            background-color: #f8fafc;
+            border-radius: 0 8px 8px 0;
+        }
+        pre {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin: 24px 0;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            background: white;
+        }
+        table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            min-width: 800px !important;
+            margin: 0 !important;
+            font-family: 'Inter', sans-serif !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
+        }
+        table th, table td {
+            border: 1px solid #e2e8f0 !important;
+            padding: 12px 8px !important;
+            text-align: center !important;
+            font-size: 13px !important;
+        }
+        table th {
+            font-weight: 700 !important;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+            color: white !important;
+        }
+        table tr:nth-child(odd) td {
+            background: #f0f9ff !important;
+            font-weight: 600 !important;
+            color: #0369a1 !important;
+        }
+        table tr:nth-child(even) td {
+            background: #fefce8 !important;
+            font-weight: 500 !important;
+            color: #a16207 !important;
+        }
+        .report-header {
+            text-align: center;
+            margin-bottom: 32px;
+            padding: 24px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            border-radius: 12px;
+        }
+        .report-footer {
+            text-align: center;
+            margin-top: 32px;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 8px;
+            color: #64748b;
+            font-style: italic;
+        }
+        .section {
+            margin: 32px 0;
+        }
+        strong {
+            color: #6366f1;
+            font-weight: 600;
+        }
+        @media print {
+            body {
+                background: white;
+            }
+            .report-container {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="report-header">
+            <h1 style="margin: 0; border: none; color: white;">📊 Flow Insight - Gantt Analysis Report</h1>
+            <p style="margin: 8px 0 0 0; opacity: 0.9;">Generated on ${new Date().toLocaleString()}</p>
+        </div>
+        
+        <div class="report-content">
+            ${renderedHtmlContent}
+        </div>
+        
+        <div class="report-footer">
+            Generated by Flow Insight Task Analysis System
+        </div>
+    </div>
+</body>
+</html>`;
+
+        const blob = new Blob([htmlContent], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `flow-insight-report-${new Date().toISOString().slice(0, 10)}.md`;
+        a.download = `flow-insight-gantt-report-${new Date().toISOString().slice(0, 10)}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1159,36 +1557,22 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               </h2>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <button
-                  onClick={copyToClipboard}
+                  onClick={downloadHtmlReport}
                   disabled={isGenerating}
                   style={{
-                    padding: '8px 16px',
-                    border: `1px solid ${COLORS.border}`,
-                    borderRadius: '6px',
-                    backgroundColor: COLORS.background,
-                    color: COLORS.text,
-                    cursor: isGenerating ? 'not-allowed' : 'pointer',
-                    fontSize: '12px',
-                    fontWeight: '500',
-                  }}
-                >
-                  📋 Copy
-                </button>
-                <button
-                  onClick={downloadReport}
-                  disabled={isGenerating}
-                  style={{
-                    padding: '8px 16px',
+                    padding: '10px 20px',
                     border: `1px solid ${COLORS.primary}`,
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     backgroundColor: COLORS.primary,
                     color: 'white',
                     cursor: isGenerating ? 'not-allowed' : 'pointer',
-                    fontSize: '12px',
-                    fontWeight: '500',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    boxShadow: isGenerating ? 'none' : '0 2px 4px rgba(99, 102, 241, 0.3)',
+                    transition: 'all 0.2s ease',
                   }}
                 >
-                  💾 Download
+                  🌐 Download HTML Report
                 </button>
                 <button
                   onClick={onClose}
@@ -1252,9 +1636,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       fontFamily: 'inherit',
                     }}
                   >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
-                      {reportContent}
-                    </ReactMarkdown>
+                    <ReportRenderer content={reportContent} />
                   </div>
                   {/* Add CSS for markdown styling */}
                   <style>{`
@@ -1297,6 +1679,30 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                     .mermaid-diagram svg {
                       max-width: 100%;
                       height: auto;
+                    }
+                    /* Enhanced table styling */
+                    table {
+                      border-collapse: collapse !important;
+                      width: 100% !important;
+                      margin: 16px 0 !important;
+                      font-family: 'Inter', sans-serif !important;
+                      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+                    }
+                    table th, table td {
+                      border: 1px solid #e2e8f0 !important;
+                      padding: 8px 12px !important;
+                      text-align: center !important;
+                    }
+                    table th {
+                      font-weight: 600 !important;
+                      background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+                      color: white !important;
+                    }
+                    table tr:nth-child(odd) td {
+                      background: #f0f9ff !important;
+                    }
+                    table tr:nth-child(even) td {
+                      background: #fefce8 !important;
                     }
                   `}</style>
                 </div>
@@ -2057,12 +2463,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         // During search, also check if we would hide current search results
         const wouldHideSearchResults = hasSearchTerm
           ? testVisible.filter(task => {
-              const lowerSearch = (searchTerm || '').toLowerCase();
-              return (
-                task.name.toLowerCase().includes(lowerSearch) ||
-                task.fullName.toLowerCase().includes(lowerSearch)
-              );
-            }).length === 0
+            const lowerSearch = (searchTerm || '').toLowerCase();
+            return (
+              task.name.toLowerCase().includes(lowerSearch) ||
+              task.fullName.toLowerCase().includes(lowerSearch)
+            );
+          }).length === 0
           : false;
 
         wouldHideAllTasks = testVisible.length === 0 || wouldHideSearchResults;
@@ -3278,18 +3684,18 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                         >
                           {displayText.includes('[FLATTENED]')
                             ? // Handle [FLATTENED] styling
-                              (() => {
-                                const parts = displayText.split('[FLATTENED]');
-                                return (
-                                  <>
-                                    {parts[0]}
-                                    <tspan fill={COLORS.accent} fontWeight="bold">
-                                      [FLATTENED]
-                                    </tspan>
-                                    {parts[1]}
-                                  </>
-                                );
-                              })()
+                            (() => {
+                              const parts = displayText.split('[FLATTENED]');
+                              return (
+                                <>
+                                  {parts[0]}
+                                  <tspan fill={COLORS.accent} fontWeight="bold">
+                                    [FLATTENED]
+                                  </tspan>
+                                  {parts[1]}
+                                </>
+                              );
+                            })()
                             : displayText}
                         </text>
                       );
