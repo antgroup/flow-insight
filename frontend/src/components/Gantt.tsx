@@ -471,79 +471,38 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         report += `| ${group.groupName} | ${group.executionCount} | ${group.totalDuration.toFixed(3)} | ${group.avgDuration.toFixed(3)} | ${minDuration.toFixed(3)} | ${maxDuration.toFixed(3)} | ${medianDuration.toFixed(3)} | ${percentage}% |\n`;
       });
 
-      // 2. Execution Coverage Analysis - Parent-Child Relationships
-      report += `\n## 🔗 Execution Coverage Analysis\n\n`;
+      // 2. Simplified Execution Coverage
+      report += `\n## 📊 Hierarchical Execution Coverage\n\n`;
 
-      // Group parent-child relationships by parent
-      const parentGroups = new Map<string, {
-        parentInfo: TaskGroup;
-        children: Map<string, { count: number; totalDuration: number; avgDuration: number }>
-      }>();
+      // Simple parent-child relationship table
+      const parentChildRelations: Array<{ parent: string, child: string, count: number, duration: number, avgDuration: number }> = [];
 
       taskGroups.forEach((group, groupName) => {
-        if (group.calleeGroups.size > 0) {
-          parentGroups.set(groupName, {
-            parentInfo: group,
-            children: group.calleeGroups
+        group.calleeGroups.forEach((calleeInfo, calleeName) => {
+          parentChildRelations.push({
+            parent: groupName,
+            child: calleeName,
+            count: calleeInfo.count,
+            duration: calleeInfo.totalDuration,
+            avgDuration: calleeInfo.avgDuration
           });
-        }
+        });
       });
 
-      // Create a comprehensive coverage table showing parent-child hierarchy
-      report += `### 📊 Hierarchical Execution Coverage\n\n`;
-      report += `| Level | Task Group | Type | Count | Total (s) | Avg (s) | Coverage % | Parent Time % |\n`;
-      report += `|-------|------------|------|-------|-----------|---------|------------|--------------|\n`;
+      if (parentChildRelations.length > 0) {
+        // Sort by total duration descending
+        parentChildRelations.sort((a, b) => b.duration - a.duration);
 
-      // Build hierarchical rows
-      sortedGroups.forEach(group => {
-        if (group.calleeGroups.size > 0) {
-          // Parent row
-          const parentCoverage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
-          report += `| 📁 | **${group.groupName}** | Parent | ${group.executionCount} | ${group.totalDuration.toFixed(3)} | ${group.avgDuration.toFixed(3)} | ${parentCoverage}% | - |\n`;
+        report += `| Parent Group | Child Group | Calls | Total (s) | Avg (s) | % of Total |\n`;
+        report += `|--------------|-------------|-------|-----------|---------|------------|\n`;
 
-          // Children rows (indented)
-          const sortedChildren = Array.from(group.calleeGroups.entries()).sort((a, b) => b[1].totalDuration - a[1].totalDuration);
-
-          let childrenTotalTime = 0;
-          sortedChildren.forEach(([childName, childInfo]) => {
-            childrenTotalTime += childInfo.totalDuration;
-            const childCoverage = ((childInfo.totalDuration / totalDuration) * 100).toFixed(1);
-            const parentPercentage = ((childInfo.totalDuration / group.totalDuration) * 100).toFixed(1);
-            report += `| ├── | ${childName} | Child | ${childInfo.count} | ${childInfo.totalDuration.toFixed(3)} | ${childInfo.avgDuration.toFixed(3)} | ${childCoverage}% | ${parentPercentage}% |\n`;
-          });
-
-          // Show uncovered time in parent if any
-          const uncoveredTime = group.totalDuration - childrenTotalTime;
-          if (uncoveredTime > 0.001) { // Only show if significant
-            const uncoveredPercentage = ((uncoveredTime / group.totalDuration) * 100).toFixed(1);
-            const uncoveredCoverage = ((uncoveredTime / totalDuration) * 100).toFixed(1);
-            report += `| └── | *${group.groupName} (self)* | Self | - | ${uncoveredTime.toFixed(3)} | - | ${uncoveredCoverage}% | ${uncoveredPercentage}% |\n`;
-          }
-
-          report += `| | | | | | | | |\n`; // Empty separator row
-        }
-      });
-
-      // Coverage Summary Statistics
-      report += `\n### 📈 Coverage Summary\n\n`;
-      report += `| Metric | Value |\n`;
-      report += `|--------|-------|\n`;
-
-      const totalParentTime = Array.from(parentGroups.values()).reduce((sum, p) => sum + p.parentInfo.totalDuration, 0);
-      const totalChildTime = Array.from(parentGroups.values()).reduce((sum, parent) => {
-        return sum + Array.from(parent.children.values()).reduce((childSum, child) => childSum + child.totalDuration, 0);
-      }, 0);
-
-      const coverageRatio = totalParentTime > 0 ? (totalChildTime / totalParentTime * 100).toFixed(1) : '0.0';
-      const independentGroups = sortedGroups.filter(g => g.calleeGroups.size === 0).length;
-      const parentGroups_count = parentGroups.size;
-
-      report += `| Total Parent Groups | ${parentGroups_count} |\n`;
-      report += `| Independent Groups | ${independentGroups} |\n`;
-      report += `| Total Parent Time | ${totalParentTime.toFixed(3)}s |\n`;
-      report += `| Total Child Time | ${totalChildTime.toFixed(3)}s |\n`;
-      report += `| Child Coverage Ratio | ${coverageRatio}% |\n`;
-      report += `| Average Children per Parent | ${parentGroups_count > 0 ? (Array.from(parentGroups.values()).reduce((sum, p) => sum + p.children.size, 0) / parentGroups_count).toFixed(1) : '0'} |\n`;
+        parentChildRelations.slice(0, 10).forEach(relation => { // Show top 10
+          const percentage = ((relation.duration / totalDuration) * 100).toFixed(1);
+          report += `| ${relation.parent} | ${relation.child} | ${relation.count} | ${relation.duration.toFixed(3)} | ${relation.avgDuration.toFixed(3)} | ${percentage}% |\n`;
+        });
+      } else {
+        report += `*No parent-child relationships found in the analyzed tasks.*\n`;
+      }
 
       // 3. Performance Insights
       report += `\n## ⚡ Performance Insights\n\n`;
@@ -556,63 +515,376 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
       report += `- **Most Frequently Called:** ${mostCalledGroup?.groupName} (${mostCalledGroup?.executionCount} executions)\n`;
       report += `- **Performance Bottleneck:** Groups taking >10% of total time: ${sortedGroups.filter(g => (g.totalDuration / totalDuration) > 0.1).length}\n\n`;
 
-      // 4. Execution Flow Diagram
+      // 4. Execution Flow Overview
       report += `## 🌊 Execution Flow Overview\n\n`;
 
       if (sortedGroups.length > 0) {
+        // Add flow statistics first
+        report += `### 📊 Flow Statistics\n\n`;
+        report += `| Metric | Value |\n`;
+        report += `|--------|-------|\n`;
+
+        const totalGroups = sortedGroups.length;
+        const groupsWithChildren = sortedGroups.filter(g => g.calleeGroups.size > 0).length;
+        const independentGroups = totalGroups - groupsWithChildren;
+        const avgGroupDuration = totalDuration / totalGroups;
+        const avgGroupExecutions = sortedGroups.reduce((sum, g) => sum + g.executionCount, 0) / totalGroups;
+
+        // Calculate medians for use throughout the report
+        const executionCounts = sortedGroups.map(g => g.executionCount).sort((a, b) => a - b);
+        const execMedian = executionCounts.length % 2 === 0
+          ? (executionCounts[executionCounts.length / 2 - 1] + executionCounts[executionCounts.length / 2]) / 2
+          : executionCounts[Math.floor(executionCounts.length / 2)];
+
+        // Distribution categories
+        const heavyGroups = sortedGroups.filter(g => (g.totalDuration / totalDuration) > 0.1);
+        const mediumGroups = sortedGroups.filter(g => (g.totalDuration / totalDuration) > 0.05 && (g.totalDuration / totalDuration) <= 0.1);
+        const lightGroups = sortedGroups.filter(g => (g.totalDuration / totalDuration) <= 0.05);
+        const frequentGroups = sortedGroups.filter(g => g.executionCount > execMedian);
+        const rareGroups = sortedGroups.filter(g => g.executionCount <= execMedian);
+
+        // Calculate flow depth (max call chain length)
+        const calculateMaxDepth = (): number => {
+          const visited = new Set<string>();
+          const getDepth = (groupName: string, currentDepth: number): number => {
+            if (visited.has(groupName)) return currentDepth; // Avoid cycles
+            visited.add(groupName);
+
+            const group = taskGroups.get(groupName);
+            if (!group || group.calleeGroups.size === 0) return currentDepth;
+
+            let maxChildDepth = currentDepth;
+            group.calleeGroups.forEach((_, childName) => {
+              const childDepth = getDepth(childName, currentDepth + 1);
+              maxChildDepth = Math.max(maxChildDepth, childDepth);
+            });
+
+            visited.delete(groupName);
+            return maxChildDepth;
+          };
+
+          let maxDepth = 0;
+          sortedGroups.forEach(group => {
+            if (group.callerGroups.size === 0) { // Start from root groups
+              maxDepth = Math.max(maxDepth, getDepth(group.groupName, 1));
+            }
+          });
+          return maxDepth;
+        };
+
+        const maxFlowDepth = calculateMaxDepth();
+
+        report += `| Total Task Groups | ${totalGroups} |\n`;
+        report += `| Groups with Children | ${groupsWithChildren} |\n`;
+        report += `| Independent Groups | ${independentGroups} |\n`;
+        report += `| Average Group Duration | ${avgGroupDuration.toFixed(3)}s |\n`;
+        report += `| Average Group Executions | ${avgGroupExecutions.toFixed(1)} |\n`;
+        report += `| Max Flow Depth | ${maxFlowDepth} levels |\n`;
+        report += `| Flow Complexity | ${(groupsWithChildren / totalGroups * 100).toFixed(1)}% interconnected |\n\n`;
+
+        // Enhanced Mermaid diagram with styling and categories
+        report += `### 🔄 Flow Diagram\n\n`;
         report += '```mermaid\n';
         report += 'graph TD\n';
 
-        // Create nodes for top groups
-        const topGroups = sortedGroups.slice(0, Math.min(8, sortedGroups.length));
+        // Create nodes for top groups with detailed info and styling
+        const topGroups = sortedGroups.slice(0, Math.min(12, sortedGroups.length));
+
+        // Categorize groups for styling
+        const heavyGroupsSet = new Set(heavyGroups.map((g: TaskGroup) => g.groupName));
+        const mediumGroupsSet = new Set(mediumGroups.map((g: TaskGroup) => g.groupName));
+        const frequentGroupsSet = new Set(frequentGroups.map((g: TaskGroup) => g.groupName));
+
         topGroups.forEach((group, index) => {
           const nodeId = `G${index}`;
           const duration = group.totalDuration.toFixed(2);
+          const avgDuration = group.avgDuration.toFixed(3);
+          const execCount = group.executionCount;
+          const percentage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
+
           // Escape special characters in group names for Mermaid
           const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `Group${index}`;
-          report += `    ${nodeId}["${safeName}<br/>${duration}s"]\n`;
+
+          // Determine node style based on performance category
+          let nodeStyle = '';
+          let nodeIcon = '';
+          if (heavyGroupsSet.has(group.groupName)) {
+            nodeStyle = 'fill:#ff6b6b,stroke:#d63031,stroke-width:3px,color:#fff';
+            nodeIcon = '🔥';
+          } else if (mediumGroupsSet.has(group.groupName)) {
+            nodeStyle = 'fill:#fdcb6e,stroke:#e17055,stroke-width:2px,color:#2d3436';
+            nodeIcon = '⚡';
+          } else if (frequentGroupsSet.has(group.groupName)) {
+            nodeStyle = 'fill:#74b9ff,stroke:#0984e3,stroke-width:2px,color:#fff';
+            nodeIcon = '🔄';
+          } else {
+            nodeStyle = 'fill:#a29bfe,stroke:#6c5ce7,stroke-width:1px,color:#fff';
+            nodeIcon = '💨';
+          }
+
+          report += `    ${nodeId}["${nodeIcon} ${safeName}<br/>📊 ${percentage}% of total<br/>⏱️ Total: ${duration}s<br/>📈 Avg: ${avgDuration}s<br/>🔢 Calls: ${execCount}"]\n`;
+          report += `    style ${nodeId} ${nodeStyle}\n`;
         });
 
-        // Add relationships between top groups
+        // Add relationships between top groups with enhanced edge information
+        const addedRelationships = new Set<string>();
         topGroups.forEach((group, index) => {
           const nodeId = `G${index}`;
           group.calleeGroups.forEach((calleeInfo, calleeName) => {
             const calleeIndex = topGroups.findIndex(g => g.groupName === calleeName);
             if (calleeIndex !== -1 && calleeIndex !== index) {
               const calleeNodeId = `G${calleeIndex}`;
-              report += `    ${nodeId} --> ${calleeNodeId}\n`;
+              const relationshipKey = `${nodeId}-${calleeNodeId}`;
+
+              if (!addedRelationships.has(relationshipKey)) {
+                addedRelationships.add(relationshipKey);
+
+                const callCount = calleeInfo.count;
+                const avgCallDuration = calleeInfo.avgDuration.toFixed(3);
+                const totalCallTime = calleeInfo.totalDuration.toFixed(2);
+                const callPercentage = ((calleeInfo.totalDuration / totalDuration) * 100).toFixed(1);
+
+                // Determine edge thickness based on call frequency
+                let edgeStyle = '';
+                if (callCount > execMedian * 2) {
+                  edgeStyle = 'stroke:#e17055,stroke-width:4px';
+                } else if (callCount > execMedian) {
+                  edgeStyle = 'stroke:#fdcb6e,stroke-width:3px';
+                } else {
+                  edgeStyle = 'stroke:#74b9ff,stroke-width:2px';
+                }
+
+                report += `    ${nodeId} -->|"📞 ${callCount}x calls<br/>⏱️ ${totalCallTime}s (${callPercentage}%)<br/>📊 avg: ${avgCallDuration}s"| ${calleeNodeId}\n`;
+                report += `    linkStyle ${Array.from(addedRelationships).length - 1} ${edgeStyle}\n`;
+              }
             }
           });
         });
+
+        // Add legend/subgraph for categories
+        report += `\n    subgraph Legend["📋 Performance Categories"]\n`;
+        report += `        L1["🔥 Heavy >10%"]\n`;
+        report += `        L2["⚡ Medium 5-10%"]\n`;
+        report += `        L3["🔄 Frequent >${execMedian.toFixed(0)} calls"]\n`;
+        report += `        L4["💨 Light <5%"]\n`;
+        report += `    end\n`;
+        report += `    style L1 fill:#ff6b6b,stroke:#d63031,stroke-width:2px,color:#fff\n`;
+        report += `    style L2 fill:#fdcb6e,stroke:#e17055,stroke-width:2px,color:#2d3436\n`;
+        report += `    style L3 fill:#74b9ff,stroke:#0984e3,stroke-width:2px,color:#fff\n`;
+        report += `    style L4 fill:#a29bfe,stroke:#6c5ce7,stroke-width:1px,color:#fff\n`;
+
+        // Add summary statistics box
+        report += `\n    subgraph Stats["📈 Flow Summary"]\n`;
+        report += `        S1["📊 ${totalGroups} total groups"]\n`;
+        report += `        S2["🔗 ${groupsWithChildren} with children"]\n`;
+        report += `        S3["📏 ${maxFlowDepth} max depth"]\n`;
+        report += `        S4["🎯 ${(groupsWithChildren / totalGroups * 100).toFixed(0)}% interconnected"]\n`;
+        report += `    end\n`;
+        report += `    style S1 fill:#00b894,stroke:#00a085,stroke-width:1px,color:#fff\n`;
+        report += `    style S2 fill:#00b894,stroke:#00a085,stroke-width:1px,color:#fff\n`;
+        report += `    style S3 fill:#00b894,stroke:#00a085,stroke-width:1px,color:#fff\n`;
+        report += `    style S4 fill:#00b894,stroke:#00a085,stroke-width:1px,color:#fff\n`;
 
         report += '```\n\n';
       } else {
         report += `*No task groups available for flow diagram.*\n\n`;
       }
 
-      // 5. Performance Distribution Chart
-      report += `## 📈 Performance Distribution\n\n`;
+      // 5. Performance Distribution & Analysis
+      report += `## 📈 Performance Distribution & Analysis\n\n`;
 
       if (sortedGroups.length > 0) {
-        report += '```mermaid\n';
-        report += 'pie title Task Group Performance Distribution\n';
+        // Identify parent-child relationships to avoid comparing parents with their children
+        const parentChildMap = new Map<string, Set<string>>(); // parent -> set of children
+        const childParentMap = new Map<string, string>(); // child -> parent
 
-        const topPerformanceGroups = sortedGroups.slice(0, 6);
-        const othersDuration = sortedGroups.slice(6).reduce((sum, group) => sum + group.totalDuration, 0);
+        // Build parent-child relationships based on task hierarchy
+        reportTasks.forEach(task => {
+          const taskGroupName = extractGroupName(task.name) || extractGroupName(task.fullName) || task.name;
+
+          if (task.parentId) {
+            const parentTask = reportTasks.find(t => t.id === task.parentId);
+            if (parentTask) {
+              const parentGroupName = extractGroupName(parentTask.name) || extractGroupName(parentTask.fullName) || parentTask.name;
+
+              if (parentGroupName !== taskGroupName) {
+                if (!parentChildMap.has(parentGroupName)) {
+                  parentChildMap.set(parentGroupName, new Set());
+                }
+                parentChildMap.get(parentGroupName)!.add(taskGroupName);
+                childParentMap.set(taskGroupName, parentGroupName);
+              }
+            }
+          }
+        });
+
+        // Separate groups into independent (leaf) and hierarchical (parent) categories
+        const leafGroups = sortedGroups.filter(g => !parentChildMap.has(g.groupName));
+        const parentGroups = sortedGroups.filter(g => parentChildMap.has(g.groupName));
+
+        // Calculate distribution metrics for leaf groups only (to avoid parent-child comparison issues)
+        const leafDurations = leafGroups.map(g => g.totalDuration).sort((a, b) => a - b);
+        const leafAvgDurations = leafGroups.map(g => g.avgDuration).sort((a, b) => a - b);
+        const leafExecutionCounts = leafGroups.map(g => g.executionCount).sort((a, b) => a - b);
+
+        const leafDurationMedian = leafDurations.length > 0 ? (leafDurations.length % 2 === 0
+          ? (leafDurations[leafDurations.length / 2 - 1] + leafDurations[leafDurations.length / 2]) / 2
+          : leafDurations[Math.floor(leafDurations.length / 2)]) : 0;
+
+        const leafAvgDurationMedian = leafAvgDurations.length > 0 ? (leafAvgDurations.length % 2 === 0
+          ? (leafAvgDurations[leafAvgDurations.length / 2 - 1] + leafAvgDurations[leafAvgDurations.length / 2]) / 2
+          : leafAvgDurations[Math.floor(leafAvgDurations.length / 2)]) : 0;
+
+        const leafExecMedian = leafExecutionCounts.length > 0 ? (leafExecutionCounts.length % 2 === 0
+          ? (leafExecutionCounts[leafExecutionCounts.length / 2 - 1] + leafExecutionCounts[leafExecutionCounts.length / 2]) / 2
+          : leafExecutionCounts[Math.floor(leafExecutionCounts.length / 2)]) : 0;
+
+        // Detailed distribution statistics
+        report += `### 📊 Distribution Statistics\n\n`;
+        report += `**Analysis Note:** Comparing leaf groups only to avoid parent-child timing overlap.\n\n`;
+
+        report += `| Distribution Metric | Leaf Groups | All Groups |\n`;
+        report += `|---------------------|-------------|------------|\n`;
+        report += `| Group Count | ${leafGroups.length} | ${sortedGroups.length} |\n`;
+        report += `| Parent Groups | ${parentGroups.length} | - |\n`;
+        if (leafDurations.length > 0) {
+          report += `| Duration Range | ${leafDurations[0].toFixed(3)}s - ${leafDurations[leafDurations.length - 1].toFixed(3)}s | ${sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[0].toFixed(3)}s - ${sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[sortedGroups.length - 1].toFixed(3)}s |\n`;
+          report += `| Duration Median | ${leafDurationMedian.toFixed(3)}s | ${(sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b).length % 2 === 0 ? (sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2) - 1] + sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]) / 2 : sortedGroups.map(g => g.totalDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]).toFixed(3)}s |\n`;
+        }
+        if (leafExecutionCounts.length > 0) {
+          report += `| Execution Range | ${leafExecutionCounts[0]} - ${leafExecutionCounts[leafExecutionCounts.length - 1]} calls | ${sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[0]} - ${sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[sortedGroups.length - 1]} calls |\n`;
+          report += `| Execution Median | ${leafExecMedian.toFixed(0)} calls | ${(sortedGroups.map(g => g.executionCount).sort((a, b) => a - b).length % 2 === 0 ? (sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2) - 1] + sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]) / 2 : sortedGroups.map(g => g.executionCount).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]).toFixed(0)} calls |\n`;
+        }
+        if (leafAvgDurations.length > 0) {
+          report += `| Avg Duration Range | ${leafAvgDurations[0].toFixed(3)}s - ${leafAvgDurations[leafAvgDurations.length - 1].toFixed(3)}s | ${sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[0].toFixed(3)}s - ${sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[sortedGroups.length - 1].toFixed(3)}s |\n`;
+          report += `| Avg Duration Median | ${leafAvgDurationMedian.toFixed(3)}s | ${(sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b).length % 2 === 0 ? (sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2) - 1] + sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]) / 2 : sortedGroups.map(g => g.avgDuration).sort((a, b) => a - b)[Math.floor(sortedGroups.length / 2)]).toFixed(3)}s |\n`;
+        }
+        report += `\n`;
+
+        // Calculate performance categories based on leaf groups only
+        const leafTotalDuration = leafGroups.reduce((sum, g) => sum + g.totalDuration, 0);
+        const heavyGroups = leafGroups.filter(g => leafTotalDuration > 0 && (g.totalDuration / leafTotalDuration) > 0.1);
+        const mediumGroups = leafGroups.filter(g => leafTotalDuration > 0 && (g.totalDuration / leafTotalDuration) > 0.05 && (g.totalDuration / leafTotalDuration) <= 0.1);
+        const lightGroups = leafGroups.filter(g => leafTotalDuration > 0 && (g.totalDuration / leafTotalDuration) <= 0.05);
+        const frequentGroups = leafGroups.filter(g => g.executionCount > leafExecMedian);
+        const rareGroups = leafGroups.filter(g => g.executionCount <= leafExecMedian);
+
+        report += `### 🎯 Performance Categories (Leaf Groups Only)\n\n`;
+        report += `**Analysis Note:** Categories based on leaf groups (${leafGroups.length} groups) to avoid parent-child timing overlap. Parent groups (${parentGroups.length}) are shown separately.\n\n`;
+
+        report += `| Category | Count | Total Time | Avg Time | Description |\n`;
+        report += `|----------|-------|------------|----------|-------------|\n`;
+        report += `| 🔥 Heavy (>10%) | ${heavyGroups.length} | ${heavyGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${heavyGroups.length > 0 ? (heavyGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / heavyGroups.length).toFixed(3) : '0'}s | Performance critical |\n`;
+        report += `| ⚡ Medium (5-10%) | ${mediumGroups.length} | ${mediumGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${mediumGroups.length > 0 ? (mediumGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / mediumGroups.length).toFixed(3) : '0'}s | Moderate impact |\n`;
+        report += `| 💨 Light (<5%) | ${lightGroups.length} | ${lightGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${lightGroups.length > 0 ? (lightGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / lightGroups.length).toFixed(3) : '0'}s | Low impact |\n`;
+        report += `| 🔄 Frequent (>${leafExecMedian.toFixed(0)} calls) | ${frequentGroups.length} | ${frequentGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${frequentGroups.length > 0 ? (frequentGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / frequentGroups.length).toFixed(3) : '0'}s | High usage |\n`;
+        report += `| 🔹 Rare (≤${leafExecMedian.toFixed(0)} calls) | ${rareGroups.length} | ${rareGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0).toFixed(3)}s | ${rareGroups.length > 0 ? (rareGroups.reduce((sum: number, g: TaskGroup) => sum + g.totalDuration, 0) / rareGroups.length).toFixed(3) : '0'}s | Low usage |\n\n`;
+
+        // Add hierarchical groups summary
+        if (parentGroups.length > 0) {
+          report += `### 🏗️ Hierarchical Groups (Parent Groups)\n\n`;
+          report += `These groups contain child groups and their execution time includes child execution time.\n\n`;
+          report += `| Parent Group | Child Groups | Total Time | Avg Time | Description |\n`;
+          report += `|--------------|--------------|------------|----------|-------------|\n`;
+
+          parentGroups.forEach(group => {
+            const children = parentChildMap.get(group.groupName);
+            const childrenNames = children ? Array.from(children).slice(0, 3).join(', ') + (children.size > 3 ? '...' : '') : 'None';
+            const childCount = children ? children.size : 0;
+
+            report += `| ${group.groupName} | ${childCount > 0 ? `${childCount}: ${childrenNames}` : 'None'} | ${group.totalDuration.toFixed(3)}s | ${group.avgDuration.toFixed(3)}s | Orchestration/coordination |\n`;
+          });
+          report += `\n`;
+        }
+
+        // Enhanced Performance Distribution Pie Chart
+        report += `### 🥧 Time Distribution\n\n`;
+
+        const topPerformanceGroups = leafGroups.slice(0, 8); // Use leaf groups only
+
+        // Add summary before the chart
+        const leafTotalDurationForChart = leafGroups.reduce((sum, g) => sum + g.totalDuration, 0);
+        report += `**Distribution Summary:** ${topPerformanceGroups.length} leaf groups shown (${leafTotalDurationForChart > 0 ? ((topPerformanceGroups.reduce((sum, g) => sum + g.totalDuration, 0) / leafTotalDurationForChart) * 100).toFixed(1) : '0'}% of leaf group time)\n\n`;
+
+        report += '```mermaid\n';
+        report += '%%{init: {"pie": {"textPosition": 0.75}, "themeVariables": {"pieOuterStrokeWidth": "2px"}}}%%\n';
+        report += 'pie title Execution Time Distribution by Leaf Groups\n';
+        const othersDuration = leafGroups.slice(8).reduce((sum, group) => sum + group.totalDuration, 0);
 
         topPerformanceGroups.forEach((group, index) => {
-          const percentage = ((group.totalDuration / totalDuration) * 100).toFixed(1);
+          const percentage = leafTotalDurationForChart > 0 ? ((group.totalDuration / leafTotalDurationForChart) * 100).toFixed(1) : '0';
+          const duration = group.totalDuration.toFixed(2);
           // Escape special characters in group names for Mermaid pie chart
           const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `Group${index}`;
-          report += `    "${safeName}" : ${percentage}\n`;
+          const displayName = safeName.length > 20 ? safeName.substring(0, 17) + '...' : safeName;
+          report += `    "${displayName} (${duration}s)" : ${percentage}\n`;
         });
 
         if (othersDuration > 0) {
-          const othersPercentage = ((othersDuration / totalDuration) * 100).toFixed(1);
-          report += `    "Others" : ${othersPercentage}\n`;
+          const othersPercentage = leafTotalDurationForChart > 0 ? ((othersDuration / leafTotalDurationForChart) * 100).toFixed(1) : '0';
+          const othersCount = leafGroups.length - 8;
+          report += `    "Others (${othersCount} groups)" : ${othersPercentage}\n`;
         }
 
         report += '```\n\n';
+
+        // Enhanced Execution Frequency Distribution
+        report += `### 📊 Execution Frequency Distribution\n\n`;
+
+        const leafTotalExecutions = leafGroups.reduce((sum, g) => sum + g.executionCount, 0);
+        const topExecutionGroups = [...leafGroups].sort((a, b) => b.executionCount - a.executionCount).slice(0, 8);
+        const othersExecutions = [...leafGroups].sort((a, b) => b.executionCount - a.executionCount).slice(8).reduce((sum, group) => sum + group.executionCount, 0);
+
+        // Add summary before the chart
+        report += `**Frequency Summary:** ${topExecutionGroups.length} most active leaf groups (${leafTotalExecutions > 0 ? ((topExecutionGroups.reduce((sum, g) => sum + g.executionCount, 0) / leafTotalExecutions) * 100).toFixed(1) : '0'}% of leaf group calls)\n\n`;
+
+        report += '```mermaid\n';
+        report += '%%{init: {"pie": {"textPosition": 0.75}, "themeVariables": {"pieOuterStrokeWidth": "2px"}}}%%\n';
+        report += 'pie title Call Frequency Distribution by Leaf Groups\n';
+
+        topExecutionGroups.forEach((group, index) => {
+          const percentage = leafTotalExecutions > 0 ? ((group.executionCount / leafTotalExecutions) * 100).toFixed(1) : '0';
+          const execCount = group.executionCount;
+          const avgDuration = group.avgDuration.toFixed(3);
+          const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `Group${index}`;
+          const displayName = safeName.length > 15 ? safeName.substring(0, 12) + '...' : safeName;
+          report += `    "${displayName} (${execCount}x, ${avgDuration}s avg)" : ${percentage}\n`;
+        });
+
+        if (othersExecutions > 0) {
+          const othersPercentage = leafTotalExecutions > 0 ? ((othersExecutions / leafTotalExecutions) * 100).toFixed(1) : '0';
+          const othersCount = leafGroups.length - 8;
+          report += `    "Others (${othersCount} groups)" : ${othersPercentage}\n`;
+        }
+
+        report += '```\n\n';
+
+        // Add Performance vs Frequency Scatter Analysis for leaf groups
+        report += `### 🎯 Performance vs Frequency Analysis (Leaf Groups)\n\n`;
+        report += '```mermaid\n';
+        report += 'quadrantChart\n';
+        report += '    title Performance vs Frequency Matrix (Leaf Groups Only)\n';
+        report += '    x-axis Low_Frequency --> High_Frequency\n';
+        report += '    y-axis Low_Impact --> High_Impact\n';
+        report += '    quadrant-1 High Impact, High Frequency (Critical)\n';
+        report += '    quadrant-2 High Impact, Low Frequency (Optimize)\n';
+        report += '    quadrant-3 Low Impact, Low Frequency (Monitor)\n';
+        report += '    quadrant-4 Low Impact, High Frequency (Review)\n';
+
+        // Plot top leaf groups on the quadrant
+        const maxLeafExecCount = leafGroups.length > 0 ? Math.max(...leafGroups.map(g => g.executionCount)) : 1;
+        const maxLeafDuration = leafGroups.length > 0 ? Math.max(...leafGroups.map(g => g.totalDuration)) : 1;
+
+        leafGroups.slice(0, 10).forEach((group, index) => {
+          const xPos = (group.executionCount / maxLeafExecCount * 0.8 + 0.1).toFixed(2); // 0.1 to 0.9
+          const yPos = (group.totalDuration / maxLeafDuration * 0.8 + 0.1).toFixed(2); // 0.1 to 0.9
+          const safeName = group.groupName.replace(/["\[\]]/g, '').replace(/[<>]/g, '').trim() || `G${index}`;
+          const shortName = safeName.length > 10 ? safeName.substring(0, 8) + '..' : safeName;
+          report += `    ${shortName}: [${xPos}, ${yPos}]\n`;
+        });
+
+        report += '```\n\n';
+
       } else {
         report += `*No task groups available for performance distribution.*\n\n`;
       }
@@ -663,8 +935,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         report += `*No significant call relationships found (showing only relationships with 2+ calls).*\n\n`;
       }
 
-      // 7. Comprehensive Timeline Analysis
-      report += `## ⏱️ Comprehensive Timeline Analysis\n\n`;
+      // 7. Timeline Analysis
+      report += `## ⏱️ Timeline Analysis\n\n`;
       const minStartTime = Math.min(...reportTasks.map(t => t.startTime));
       const maxEndTime = Math.max(...reportTasks.map(t => t.endTime));
       const executionTimespan = maxEndTime - minStartTime;
