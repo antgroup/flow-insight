@@ -1,11 +1,18 @@
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
+import { Close, Download, ExpandMore, ChevronRight, Minimize } from '@mui/icons-material';
+import { Box, Modal, Button, Chip, Tooltip, IconButton } from '@mui/material';
+import mermaid from 'mermaid';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  forwardRef,
+  useImperativeHandle,
+  useMemo,
+} from 'react';
+
 import { FlameGraphData, FlameTreeNode, GraphData } from '../types';
 
-import { Box, Modal, Button, Chip, Tooltip, IconButton } from '@mui/material';
-import { Close, Download, ExpandMore, ChevronRight, Minimize } from '@mui/icons-material';
-
 // Import Mermaid
-import mermaid from 'mermaid';
 
 // Initialize mermaid
 mermaid.initialize({
@@ -64,7 +71,7 @@ const ReportRenderer = ({ content }: { content: string }) => {
       style={{
         width: '100%',
         maxWidth: '100%',
-        overflow: 'auto'
+        overflow: 'auto',
       }}
       dangerouslySetInnerHTML={{ __html: content }}
     />
@@ -525,7 +532,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               tasks: [],
               children: new Map(),
               level: 0,
-              stats: { avg: 0, min: 0, max: 0, count: 0 }
+              stats: { avg: 0, min: 0, max: 0, count: 0 },
             };
           }
 
@@ -575,7 +582,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           console.log('📊 [Tree Build] Task relationships:', {
             totalTasks: reportTasks.length,
             tasksWithParents: Array.from(parentMap.keys()).length,
-            parentsWithChildren: childrenMap.size
+            parentsWithChildren: childrenMap.size,
           });
 
           // Build hierarchical tree structure using existing task relationships
@@ -598,7 +605,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 avg: totalDuration / existingNode.tasks.length,
                 min: Math.min(...durations),
                 max: Math.max(...durations),
-                count: existingNode.tasks.length
+                count: existingNode.tasks.length,
               };
               return existingNode;
             }
@@ -615,8 +622,8 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 avg: duration,
                 min: duration,
                 max: duration,
-                count: 1
-              }
+                count: 1,
+              },
             };
 
             nodeMap.set(nodeId, node);
@@ -630,7 +637,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             tasks: [],
             children: new Map(),
             level: 0,
-            stats: { avg: 0, min: 0, max: 0, count: 0 }
+            stats: { avg: 0, min: 0, max: 0, count: 0 },
           };
 
           // Process tasks level by level to maintain hierarchy
@@ -643,9 +650,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
           });
 
           const sortedLevels = Array.from(tasksByLevel.keys()).sort((a, b) => a - b);
-          console.log('📊 [Tree Build] Tasks by level:', Object.fromEntries(
-            sortedLevels.map(level => [level, tasksByLevel.get(level)!.length])
-          ));
+          console.log(
+            '📊 [Tree Build] Tasks by level:',
+            Object.fromEntries(sortedLevels.map(level => [level, tasksByLevel.get(level)!.length]))
+          );
 
           // Track parent-child relationships between nodes
           const nodeParentMap = new Map<string, TreeNode>();
@@ -681,14 +689,18 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                       node.parent = parentNode;
                     } else {
                       // Parent node not found, attach to root as fallback
-                      console.warn(`🚨 [Tree Build] Parent node not found for task ${task.name}, attaching to root`);
+                      console.warn(
+                        `🚨 [Tree Build] Parent node not found for task ${task.name}, attaching to root`
+                      );
                       root.children.set(node.name, node);
                       nodeParentMap.set(node.id, root);
                       node.parent = root;
                     }
                   } else {
                     // Parent task not found, attach to root
-                    console.warn(`🚨 [Tree Build] Parent task not found for ${task.name}, attaching to root`);
+                    console.warn(
+                      `🚨 [Tree Build] Parent task not found for ${task.name}, attaching to root`
+                    );
                     root.children.set(node.name, node);
                     nodeParentMap.set(node.id, root);
                     node.parent = root;
@@ -703,7 +715,10 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             }
           }
 
-          console.log('🎯 [Tree Build] Built tree with root children:', Array.from(root.children.keys()));
+          console.log(
+            '🎯 [Tree Build] Built tree with root children:',
+            Array.from(root.children.keys())
+          );
           console.log('🎯 [Tree Build] Total nodes created:', nodeMap.size);
 
           return root;
@@ -765,7 +780,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 node,
                 colspan: 1,
                 rowspan: maxDepth - level,
-                rendered: false
+                rendered: false,
               };
               matrix[level][startCol] = cell;
               return 1;
@@ -775,8 +790,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               let totalCols = 0;
 
               // Sort children by average time for consistent ordering
-              const sortedChildren = Array.from(node.children.values())
-                .sort((a, b) => b.stats.avg - a.stats.avg);
+              const sortedChildren = Array.from(node.children.values()).sort(
+                (a, b) => b.stats.avg - a.stats.avg
+              );
 
               sortedChildren.forEach(child => {
                 const childCols = fillMatrix(child, currentCol);
@@ -788,7 +804,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 node,
                 colspan: totalCols,
                 rowspan: 1,
-                rendered: false
+                rendered: false,
               };
               matrix[level][startCol] = cell;
               return totalCols;
@@ -797,8 +813,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
           // Fill matrix starting from root children
           let currentCol = 0;
-          const sortedRootChildren = Array.from(root.children.values())
-            .sort((a, b) => b.stats.avg - a.stats.avg);
+          const sortedRootChildren = Array.from(root.children.values()).sort(
+            (a, b) => b.stats.avg - a.stats.avg
+          );
 
           sortedRootChildren.forEach(child => {
             const cols = fillMatrix(child, currentCol);
@@ -833,7 +850,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
        white-space: normal; 
        word-wrap: break-word; 
        word-break: break-word;
-       vertical-align: middle;
+       vertical-align: top;
        min-width: 120px;
      ">
        <div style="margin-bottom: 4px; line-height: 1.2; word-wrap: break-word;">${cell.node.name}</div>
@@ -931,7 +948,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             padding: 20px;
         }
         
-        /* Ensure tables don't auto-resize */
+        /* Ensure tables are properly scrollable */
         table {
             border-collapse: separate !important;
             border-spacing: 0 !important;
@@ -941,8 +958,15 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             font-family: 'Inter', sans-serif !important;
             border-radius: 8px !important;
             overflow: hidden !important;
-            table-layout: fixed !important;
+            table-layout: auto !important;
             position: relative !important;
+        }
+        
+        /* Specific styling for hierarchical tables */
+        .hierarchical-table table {
+            table-layout: auto !important;
+            width: max-content !important;
+            min-width: 100% !important;
         }
         table colgroup col {
             box-sizing: border-box !important;
@@ -973,11 +997,18 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         
         .hierarchical-table {
             overflow-x: auto !important;
+            overflow-y: visible !important;
             width: 100% !important;
             position: relative !important;
             margin: 24px 0 !important;
             border-radius: 8px !important;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+            max-width: 100% !important;
+        }
+        
+        .hierarchical-table table {
+            min-width: 100% !important;
+            width: max-content !important;
         }
         
         h1, h2, h3 {
@@ -1968,12 +1999,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         // During search, also check if we would hide current search results
         const wouldHideSearchResults = hasSearchTerm
           ? testVisible.filter(task => {
-            const lowerSearch = (searchTerm || '').toLowerCase();
-            return (
-              task.name.toLowerCase().includes(lowerSearch) ||
-              task.fullName.toLowerCase().includes(lowerSearch)
-            );
-          }).length === 0
+              const lowerSearch = (searchTerm || '').toLowerCase();
+              return (
+                task.name.toLowerCase().includes(lowerSearch) ||
+                task.fullName.toLowerCase().includes(lowerSearch)
+              );
+            }).length === 0
           : false;
 
         wouldHideAllTasks = testVisible.length === 0 || wouldHideSearchResults;
@@ -2932,7 +2963,9 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                 if (hasSearchTerm) {
                   // Find the minimum level among filtered search results
                   const minSearchLevel =
-                    displayTasks.length > 0 ? Math.min(...displayTasks.map((t: CustomTask) => t.level)) : 0;
+                    displayTasks.length > 0
+                      ? Math.min(...displayTasks.map((t: CustomTask) => t.level))
+                      : 0;
 
                   if (task.level === minSearchLevel) {
                     const originalDuration = baseTaskEndX - baseTaskStartX;
@@ -3189,18 +3222,18 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                         >
                           {displayText.includes('[FLATTENED]')
                             ? // Handle [FLATTENED] styling
-                            (() => {
-                              const parts = displayText.split('[FLATTENED]');
-                              return (
-                                <>
-                                  {parts[0]}
-                                  <tspan fill={COLORS.accent} fontWeight="bold">
-                                    [FLATTENED]
-                                  </tspan>
-                                  {parts[1]}
-                                </>
-                              );
-                            })()
+                              (() => {
+                                const parts = displayText.split('[FLATTENED]');
+                                return (
+                                  <>
+                                    {parts[0]}
+                                    <tspan fill={COLORS.accent} fontWeight="bold">
+                                      [FLATTENED]
+                                    </tspan>
+                                    {parts[1]}
+                                  </>
+                                );
+                              })()
                             : displayText}
                         </text>
                       );
