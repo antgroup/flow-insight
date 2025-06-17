@@ -796,7 +796,7 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
 
           // Generate header rows
           for (let row = 0; row < maxDepth; row++) {
-            const levelColor = row === 0 ? '#f8fafc' : '#f1f5f9';
+            const levelColor = row === 0 ? '#f8fafc' : '#f1f5f94';
             const levelColor2 = row === 0 ? '#f1f5f9' : '#e2e8f0';
 
             tableHtml += `
