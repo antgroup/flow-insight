@@ -730,10 +730,23 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
               let currentCol = startCol;
               let totalCols = 0;
 
-              // Sort children by average time for consistent ordering
-              const sortedChildren = Array.from(node.children.values()).sort(
-                (a, b) => b.stats.avg - a.stats.avg
-              );
+              // Sort children by earliest start time for consistent left-to-right ordering
+              const sortedChildren = Array.from(node.children.values()).sort((a, b) => {
+                // Find the earliest start time in each child group
+                const getEarliestStartTime = (childNode: TreeNode): number => {
+                  let earliest = Math.min(...childNode.tasks.map(t => t.startTime));
+                  // Also check children for even earlier times
+                  childNode.children.forEach(grandchild => {
+                    const grandchildEarliest = getEarliestStartTime(grandchild);
+                    earliest = Math.min(earliest, grandchildEarliest);
+                  });
+                  return earliest;
+                };
+
+                const aEarliest = getEarliestStartTime(a);
+                const bEarliest = getEarliestStartTime(b);
+                return aEarliest - bEarliest; // Sort by ascending start time (left to right)
+              });
 
               sortedChildren.forEach(child => {
                 const childCols = fillMatrix(child, currentCol);
@@ -752,11 +765,24 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
             }
           };
 
-          // Fill matrix starting from root children
+          // Fill matrix starting from root children, sorted by earliest start time
           let currentCol = 0;
-          const sortedRootChildren = Array.from(root.children.values()).sort(
-            (a, b) => b.stats.avg - a.stats.avg
-          );
+          const sortedRootChildren = Array.from(root.children.values()).sort((a, b) => {
+            // Find the earliest start time in each group
+            const getEarliestStartTime = (node: TreeNode): number => {
+              let earliest = Math.min(...node.tasks.map(t => t.startTime));
+              // Also check children for even earlier times
+              node.children.forEach(child => {
+                const childEarliest = getEarliestStartTime(child);
+                earliest = Math.min(earliest, childEarliest);
+              });
+              return earliest;
+            };
+
+            const aEarliest = getEarliestStartTime(a);
+            const bEarliest = getEarliestStartTime(b);
+            return aEarliest - bEarliest; // Sort by ascending start time (left to right)
+          });
 
           sortedRootChildren.forEach(child => {
             const cols = fillMatrix(child, currentCol);
@@ -1999,12 +2025,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         // During search, also check if we would hide current search results
         const wouldHideSearchResults = hasSearchTerm
           ? testVisible.filter(task => {
-              const lowerSearch = (searchTerm || '').toLowerCase();
-              return (
-                task.name.toLowerCase().includes(lowerSearch) ||
-                task.fullName.toLowerCase().includes(lowerSearch)
-              );
-            }).length === 0
+            const lowerSearch = (searchTerm || '').toLowerCase();
+            return (
+              task.name.toLowerCase().includes(lowerSearch) ||
+              task.fullName.toLowerCase().includes(lowerSearch)
+            );
+          }).length === 0
           : false;
 
         wouldHideAllTasks = testVisible.length === 0 || wouldHideSearchResults;
@@ -3222,18 +3248,18 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                         >
                           {displayText.includes('[FLATTENED]')
                             ? // Handle [FLATTENED] styling
-                              (() => {
-                                const parts = displayText.split('[FLATTENED]');
-                                return (
-                                  <>
-                                    {parts[0]}
-                                    <tspan fill={COLORS.accent} fontWeight="bold">
-                                      [FLATTENED]
-                                    </tspan>
-                                    {parts[1]}
-                                  </>
-                                );
-                              })()
+                            (() => {
+                              const parts = displayText.split('[FLATTENED]');
+                              return (
+                                <>
+                                  {parts[0]}
+                                  <tspan fill={COLORS.accent} fontWeight="bold">
+                                    [FLATTENED]
+                                  </tspan>
+                                  {parts[1]}
+                                </>
+                              );
+                            })()
                             : displayText}
                         </text>
                       );
