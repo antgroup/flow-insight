@@ -22,7 +22,6 @@ Flow Insight is an advanced visualization and debugging tool for distributed sys
 - [SDK](#-sdk)
 - [Integrations](#-integrations)
 - [Documentation](#-documentation)
-- [Contributing](#-contributing)
 
 ## 📥 Installation
 
