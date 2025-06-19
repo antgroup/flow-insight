@@ -2025,12 +2025,12 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
         // During search, also check if we would hide current search results
         const wouldHideSearchResults = hasSearchTerm
           ? testVisible.filter(task => {
-            const lowerSearch = (searchTerm || '').toLowerCase();
-            return (
-              task.name.toLowerCase().includes(lowerSearch) ||
-              task.fullName.toLowerCase().includes(lowerSearch)
-            );
-          }).length === 0
+              const lowerSearch = (searchTerm || '').toLowerCase();
+              return (
+                task.name.toLowerCase().includes(lowerSearch) ||
+                task.fullName.toLowerCase().includes(lowerSearch)
+              );
+            }).length === 0
           : false;
 
         wouldHideAllTasks = testVisible.length === 0 || wouldHideSearchResults;
@@ -3248,18 +3248,18 @@ const GanttVisualization = forwardRef<GanttVisualizationHandle, GanttVisualizati
                         >
                           {displayText.includes('[FLATTENED]')
                             ? // Handle [FLATTENED] styling
-                            (() => {
-                              const parts = displayText.split('[FLATTENED]');
-                              return (
-                                <>
-                                  {parts[0]}
-                                  <tspan fill={COLORS.accent} fontWeight="bold">
-                                    [FLATTENED]
-                                  </tspan>
-                                  {parts[1]}
-                                </>
-                              );
-                            })()
+                              (() => {
+                                const parts = displayText.split('[FLATTENED]');
+                                return (
+                                  <>
+                                    {parts[0]}
+                                    <tspan fill={COLORS.accent} fontWeight="bold">
+                                      [FLATTENED]
+                                    </tspan>
+                                    {parts[1]}
+                                  </>
+                                );
+                              })()
                             : displayText}
                         </text>
                       );
