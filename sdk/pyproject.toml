@@ -33,8 +33,6 @@ dependencies = [
     "pydantic>=2.0.0",
     "python-multipart>=0.0.6",
     "dill",
-    "duckdb>=0.8.0",
-    "opentsdb-py",
 ]
 
 [project.urls]
