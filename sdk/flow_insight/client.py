@@ -16,8 +16,9 @@ from flow_insight.storage_client.http_client import HTTPStorageClient
 
 
 class InsightClient:
-    def __init__(self, server_url: str):
+    def __init__(self, server_url: str, flow_id: str = None):
         self._storage_client = HTTPStorageClient(server_url)
+        self._flow_id = flow_id
 
     async def async_ping(self):
         return await self._storage_client.async_ping()
@@ -92,3 +93,8 @@ class InsightClient:
 
     def close(self):
         self._storage_client.close()
+
+    @property
+    def flow_id(self) -> str:
+        """Get the configured flow ID."""
+        return self._flow_id

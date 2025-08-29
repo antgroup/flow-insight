@@ -38,8 +38,15 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/antgroup/flow-insight"
 
+[project.scripts]
+flowinsight = "flow_insight.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["flow_insight*"]
+
+# ===== Frontend Packaging =====
+[tool.setuptools.package-data]
+"flow_insight" = ["frontend/dist/**/*"]
 
 # ===== Linting Configuration =====
 [project.optional-dependencies]
