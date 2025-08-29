@@ -1,4 +1,4 @@
-# 🚀 Flow Insight
+# Flow Insight
 
 [![Python](https://img.shields.io/badge/python-3.7+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -7,8 +7,6 @@
 **Flow Insight** is a observability platform for distributed Python applications, providing interactive debugging, and beautiful visualizations for complex distributed systems.
 
 > **🎯 Note**: Flow Insight is **integrated into [Ant-Ray](https://github.com/antgroup/ant-ray)** - Ant Group's enhanced distribution of Ray, providing native observability for Ray applications.
-
-![Flow Insight Demo](https://img.shields.io/badge/demo-live-brightgreen)
 
 ## 🎯 Core Features
 
