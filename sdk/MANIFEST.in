@@ -1,0 +1,5 @@
+include README.md
+include LICENSE
+recursive-include flow_insight/frontend/dist *
+global-exclude flow_insight/frontend/*
+global-include flow_insight/frontend/dist/*
