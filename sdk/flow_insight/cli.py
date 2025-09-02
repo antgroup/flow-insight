@@ -5,8 +5,8 @@ Provides a simple way to start the Flow Insight server from the command line.
 """
 
 import argparse
+import os
 import sys
-from typing import Optional
 
 from .api.fastapi_api import create_app
 
@@ -34,6 +34,8 @@ def main():
     )
 
     args = parser.parse_args()
+
+    os.environ["RAY_FLOW_INSIGHT_FRONTEND"] = "1"
 
     if args.command in ["run", "serve", "start"]:
         try:

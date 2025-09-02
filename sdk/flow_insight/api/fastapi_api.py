@@ -96,8 +96,8 @@ class FastAPIInsightServer(APIInterface):
         # Ping route
         self.app.get("/ping")(self.ping)
 
-        # Frontend serving
-        self._setup_frontend_routes()
+        if os.getenv("RAY_FLOW_INSIGHT_FRONTEND", "0") == 1:
+            self._setup_frontend_routes()
 
     async def run(self, host: str, port: int):
         """Run the HTTP server."""
