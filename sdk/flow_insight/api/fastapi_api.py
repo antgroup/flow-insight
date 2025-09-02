@@ -55,7 +55,7 @@ class FastAPIInsightServer(APIInterface):
     def __init__(
         self,
         snapshot_storage_type: StorageType = StorageType.MEMORY,
-        snapshot_duration_s: int = 60,
+        snapshot_duration_s: int = 600,
         storage_dir: str = "/tmp/flow_insight_snapshots",
     ):
         super().__init__()
@@ -65,6 +65,7 @@ class FastAPIInsightServer(APIInterface):
             storage_dir=storage_dir,
         )
         self.app = FastAPI(title="Flow Insight API")
+        self.record_queue = asyncio.Queue()
         self._setup_routes()
 
     def _setup_routes(self):
@@ -99,6 +100,15 @@ class FastAPIInsightServer(APIInterface):
         if os.getenv("RAY_FLOW_INSIGHT_FRONTEND", "0") == "1":
             self._setup_frontend_routes()
 
+    async def _process_record_queue(self):
+        """Process records from the async queue."""
+        while True:
+            try:
+                record = await self.record_queue.get()
+                await self.engine.record_event(record)
+            except Exception as e:
+                logger.error(f"Error processing record from queue: {str(e)}")
+
     async def run(self, host: str, port: int):
         """Run the HTTP server."""
         config = uvicorn.Config(self.app, host=host, port=port, access_log=False)
@@ -106,6 +116,8 @@ class FastAPIInsightServer(APIInterface):
         logger.info(f"Insight FastAPI server running at http://{host}:{port}")
         # Start periodic snapshot task
         asyncio.create_task(self.engine.periodic_snapshot())
+        # Start record queue processing task
+        asyncio.create_task(self._process_record_queue())
         await server.serve()
 
     async def _parse_request(self, request: Request) -> Dict[str, Any]:
@@ -147,7 +159,7 @@ class FastAPIInsightServer(APIInterface):
             record = MetaInfoRegisterEvent(**record)
         else:
             raise ValueError(f"Invalid record type: {record_type}")
-        await self.engine.record_event(record)
+        await self.record_queue.put(record)
         return JSONResponse(rest_response(result=True, msg="Record emitted successfully."))
 
     async def get_debug_sessions(self, request: Request) -> JSONResponse:
