@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flow-insight"
-version = "1.1.0"
+version = "1.1.1"
 description = "A monitoring and visualization tool for distributed applications"
 authors = [
     {name = "Ant Ray Team"}
