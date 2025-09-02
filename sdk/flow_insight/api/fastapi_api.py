@@ -1,9 +1,9 @@
 import asyncio
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
-import os
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -95,7 +95,7 @@ class FastAPIInsightServer(APIInterface):
 
         # Ping route
         self.app.get("/ping")(self.ping)
-        
+
         # Frontend serving
         self._setup_frontend_routes()
 
@@ -107,7 +107,6 @@ class FastAPIInsightServer(APIInterface):
         # Start periodic snapshot task
         asyncio.create_task(self.engine.periodic_snapshot())
         await server.serve()
-
 
     async def _parse_request(self, request: Request) -> Dict[str, Any]:
         """Parse request data from either query parameters or JSON body."""
@@ -560,14 +559,16 @@ class FastAPIInsightServer(APIInterface):
     def _setup_frontend_routes(self):
         """Setup routes for serving the frontend."""
         import os
+
         import flow_insight
+
         # Get the directory where flow_insight package is installed
         package_dir = os.path.dirname(flow_insight.__file__)
         frontend_dir = os.path.join(package_dir, "frontend", "dist")
         self.app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
+
 def create_app():
     """Create a FastAPI application instance."""
     server = FastAPIInsightServer()
     return server.app
-
