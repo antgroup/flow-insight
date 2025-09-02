@@ -370,6 +370,10 @@ class InsightEngine:
                             continue
 
                 total_size_mb = flow_stats.size / (1024 * 1024)
+                if (target_service, target_method) not in method_id_map:
+                    await snapshot.add_methods(flow_id, target_service, target_method)
+                if (source_service, source_method) not in method_id_map:
+                    await snapshot.add_methods(flow_id, source_service, source_method)
                 graph_data.dataFlows.append(
                     DataFlow(
                         argpos=argpos,
