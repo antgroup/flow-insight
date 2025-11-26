@@ -673,10 +673,8 @@ class InsightEngine:
             snapshot = self._snapshots["latest"]
         flame_tree = await snapshot.get_flame_tree(flow_id)
         if flame_tree is None:
-            return FlameTree(
-                root=FlameTreeNode(
-                    span_id="_main", id="_main", start_time=0, end_time=-1, children=[]
-                )
+            return FlameTreeNode(
+                span_id="_main", id="_main", start_time=0, end_time=-1, children=[]
             )
         root_node = flame_tree
 
