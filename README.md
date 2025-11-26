@@ -55,7 +55,7 @@ flowinsight run
 python demo/local_visualize.py
 ```
 
-Open **http://localhost:8080** for live visualization.
+Open **http://localhost:8000** for live visualization.
 
 
 ## 📄 License

@@ -584,3 +584,8 @@ def create_app():
     """Create a FastAPI application instance."""
     server = FastAPIInsightServer()
     return server.app
+
+def run_server(host: str = "localhost", port: int = 8000):
+    """Run the FastAPI Insight server."""
+    server = FastAPIInsightServer()
+    asyncio.run(server.run(host, port))

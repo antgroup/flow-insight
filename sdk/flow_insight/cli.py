@@ -8,7 +8,7 @@ import argparse
 import os
 import sys
 
-from .api.fastapi_api import create_app
+from .api.fastapi_api import run_server
 
 
 def main():
@@ -39,21 +39,11 @@ def main():
 
     if args.command in ["run", "serve", "start"]:
         try:
-            import uvicorn
-
-            app = create_app()
+            run_server(host=args.host, port=args.port)
 
             print(f"Starting Flow Insight server on {args.host}:{args.port}")
             print(f"Access the dashboard at: http://{args.host}:{args.port}")
             print("Press Ctrl+C to stop the server")
-
-            uvicorn.run(
-                app,
-                host=args.host,
-                port=args.port,
-                reload=args.reload,
-                workers=args.workers if not args.reload else 1,
-            )
 
         except ImportError:
             print("Error: uvicorn is required to run the server.")
