@@ -2,6 +2,7 @@
 
 import inspect
 import sys
+import threading
 import time
 import uuid
 from functools import wraps
@@ -56,8 +57,6 @@ class CallContext:
 
 
 # Thread-local storage for call context
-import threading
-
 _call_context = threading.local()
 
 
@@ -161,7 +160,7 @@ def create_instrumented_method(original_method, service_name: str, method_name: 
 
             return result
 
-        except Exception as e:
+        except Exception:
             # Pop the current span from context
             context.pop_span()
 

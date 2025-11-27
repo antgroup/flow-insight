@@ -109,9 +109,11 @@ class FastAPIInsightServer(APIInterface):
             except Exception as e:
                 logger.error(f"Error processing record from queue: {str(e)}")
 
-    async def run(self, host: str, port: int):
+    async def run(self, host: str, port: int, reload: bool = False, workers: int = 1):
         """Run the HTTP server."""
-        config = uvicorn.Config(self.app, host=host, port=port, access_log=False)
+        config = uvicorn.Config(
+            self.app, host=host, port=port, access_log=False, reload=reload, workers=workers
+        )
         server = uvicorn.Server(config)
         logger.info(f"Insight FastAPI server running at http://{host}:{port}")
         # Start periodic snapshot task
@@ -584,3 +586,14 @@ def create_app():
     """Create a FastAPI application instance."""
     server = FastAPIInsightServer()
     return server.app
+
+
+def run_server(
+    host: str = "localhost",
+    port: int = 8000,
+    reload: bool = False,
+    workers: int = 1,
+):
+    """Run the FastAPI Insight server."""
+    server = FastAPIInsightServer()
+    asyncio.run(server.run(host, port, reload=reload, workers=workers))
