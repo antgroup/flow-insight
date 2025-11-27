@@ -43,7 +43,7 @@ def main():
             print(f"Starting Flow Insight server on {args.host}:{args.port}")
             print(f"Access the dashboard at: http://{args.host}:{args.port}")
             print("Press Ctrl+C to stop the server")
-            
+
             workers = args.workers if not args.reload else 1
             run_server(
                 host=args.host,

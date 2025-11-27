@@ -22,7 +22,6 @@ from flow_insight.storage.snapshot.model import (
     DebuggerInfo,
     DebuggerInfoEvent,
     DebugSession,
-    FlameTree,
     FlameTreeNode,
     MetaInfoRegisterEvent,
     Method,
